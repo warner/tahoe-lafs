@@ -353,7 +353,14 @@ class IStorageBucketReader(Interface):
 
 class IStorageBroker(Interface):
     def get_servers_for_index(peer_selection_index):
-        """
+        """Return a list of (peerid, versioned-rref) tuples, sorted in
+        preferred query order. If the broker is supposed to permute the
+        serverlist, this will return a permuted list. Uploads should ask each
+        instance to hold a share, in turn, looping around if necessary, thus
+        trying to place shares on the first [:N] servers. Downloads should
+        ask for shares starting with the first servers; under ideal
+        conditions, the first [:N] servers will all have shares.
+
         @return: list of (peerid, versioned-rref) tuples
         """
     def get_all_servers():

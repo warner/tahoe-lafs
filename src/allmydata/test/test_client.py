@@ -14,15 +14,6 @@ from allmydata.interfaces import IFilesystemNode, IFileNode, \
 from foolscap.api import flushEventualQueue
 import allmydata.test.common_util as testutil
 
-class FakeIntroducerClient(IntroducerClient):
-    def __init__(self):
-        self._connections = set()
-    def add_peer(self, nodeid):
-        entry = (nodeid, "storage", "rref")
-        self._connections.add(entry)
-    def remove_all_peers(self):
-        self._connections.clear()
-
 BASECONFIG = ("[client]\n"
               "introducer.furl = \n"
               )
