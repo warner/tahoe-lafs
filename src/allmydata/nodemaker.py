@@ -4,7 +4,7 @@ from allmydata.util.assertutil import precondition
 from allmydata.interfaces import INodeMaker, NotDeepImmutableError
 from allmydata.immutable.filenode import ImmutableFileNode, LiteralFileNode
 from allmydata.immutable.upload import Data
-from allmydata.mutable.filenode import MutableFileNode
+from allmydata.mutable.filenode import MutableFileNode, MutableVerifierNode
 from allmydata.dirnode import DirectoryNode, pack_children
 from allmydata.unknown import UnknownNode
 from allmydata import uri
@@ -40,6 +40,10 @@ class NodeMaker:
         n = MutableFileNode(self.storage_broker, self.secret_holder,
                             self.default_encoding_parameters,
                             self.history)
+        return n.init_from_cap(cap)
+    def _create_mutable_verifier(self, cap):
+        n = MutableVerifierNode(self.storage_broker, self.secret_holder,
+                                self.history)
         return n.init_from_cap(cap)
     def _create_dirnode(self, filenode):
         return DirectoryNode(filenode, self, self.uploader)
@@ -78,6 +82,8 @@ class NodeMaker:
                             uri.LiteralDirectoryURI)):
             filenode = self._create_from_cap(cap.get_filenode_cap())
             return self._create_dirnode(filenode)
+        if isinstance(cap, uri.SSKVerifierURI):
+            return self._create_mutable_verifier(cap)
         return None
 
     def create_mutable_file(self, contents=None, keysize=None):
