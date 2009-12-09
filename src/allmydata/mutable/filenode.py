@@ -10,7 +10,8 @@ from allmydata.interfaces import IMutableFileNode, ICheckable, ICheckResults, \
 from allmydata.util import hashutil, log, consumer, deferredutil, mathutil
 from allmydata.util.assertutil import precondition
 from allmydata.uri import WriteableSSKFileURI, ReadonlySSKFileURI, \
-                          WriteableMDMFFileURI, ReadonlyMDMFFileURI
+                          WriteableMDMFFileURI, ReadonlyMDMFFileURI, \
+                          SSKVerifierURI
 from allmydata.monitor import Monitor
 from pycryptopp.cipher.aes import AES
 
@@ -46,9 +47,71 @@ class BackoffAgent:
         reactor.callLater(self._delay, d.callback, None)
         return d
 
+class _MutableBase:
+    def _populate_pubkey(self, pubkey):
+        self._pubkey = pubkey
+    def _populate_required_shares(self, required_shares):
+        self._required_shares = required_shares
+    def _populate_total_shares(self, total_shares):
+        self._total_shares = total_shares
+    def get_renewal_secret(self, server):
+        crs = self._secret_holder.get_renewal_secret()
+        frs = hashutil.file_renewal_secret_hash(crs, self._storage_index)
+        lease_seed = server.get_lease_seed()
+        assert len(lease_seed) == 20
+        return hashutil.bucket_renewal_secret_hash(frs, lease_seed)
+    def get_cancel_secret(self, server):
+        ccs = self._secret_holder.get_cancel_secret()
+        fcs = hashutil.file_cancel_secret_hash(ccs, self._storage_index)
+        lease_seed = server.get_lease_seed()
+        assert len(lease_seed) == 20
+        return hashutil.bucket_cancel_secret_hash(fcs, lease_seed)
+    def get_storage_index(self):
+        return self._storage_index
+    def get_fingerprint(self):
+        return self._fingerprint
+    def get_pubkey(self):
+        return self._pubkey
+
+    def _add_to_cache(self, verinfo, shnum, offset, data, timestamp):
+        self._cache.add(verinfo, shnum, offset, data, timestamp)
+    def _read_from_cache(self, verinfo, shnum, offset, length):
+        return self._cache.read(verinfo, shnum, offset, length)
+
+    def get_required_shares(self):
+        return self._required_shares
+    def get_total_shares(self):
+        return self._total_shares
+
+    def get_size(self):
+        return self._most_recent_size
+    def get_current_size(self):
+        d = self.get_size_of_best_version()
+        d.addCallback(self._stash_size)
+        return d
+    def _stash_size(self, size):
+        self._most_recent_size = size
+        return size
+    def get_uri(self):
+        return self._uri.to_string()
+
+    def is_mutable(self):
+        return self._uri.is_mutable()
+    def is_readonly(self):
+        return self._uri.is_readonly()
+
+    def __hash__(self):
+        return hash((self.__class__, self._uri))
+    def __cmp__(self, them):
+        if cmp(type(self), type(them)):
+            return cmp(type(self), type(them))
+        if cmp(self.__class__, them.__class__):
+            return cmp(self.__class__, them.__class__)
+        return cmp(self._uri, them._uri)
+
 # use nodemaker.create_mutable_file() to make one of these
 
-class MutableFileNode:
+class MutableFileNode(_MutableBase):
     implements(IMutableFileNode, ICheckable)
 
     def __init__(self, storage_broker, secret_holder,
@@ -168,13 +231,6 @@ class MutableFileNode:
         privkey = enc.process(enc_privkey)
         return privkey
 
-    def _populate_pubkey(self, pubkey):
-        self._pubkey = pubkey
-    def _populate_required_shares(self, required_shares):
-        self._required_shares = required_shares
-    def _populate_total_shares(self, total_shares):
-        self._total_shares = total_shares
-
     def _populate_privkey(self, privkey):
         self._privkey = privkey
     def _populate_encprivkey(self, encprivkey):
@@ -184,53 +240,18 @@ class MutableFileNode:
         seed = server.get_foolscap_write_enabler_seed()
         assert len(seed) == 20
         return hashutil.ssk_write_enabler_hash(self._writekey, seed)
-    def get_renewal_secret(self, server):
-        crs = self._secret_holder.get_renewal_secret()
-        frs = hashutil.file_renewal_secret_hash(crs, self._storage_index)
-        lease_seed = server.get_lease_seed()
-        assert len(lease_seed) == 20
-        return hashutil.bucket_renewal_secret_hash(frs, lease_seed)
-    def get_cancel_secret(self, server):
-        ccs = self._secret_holder.get_cancel_secret()
-        fcs = hashutil.file_cancel_secret_hash(ccs, self._storage_index)
-        lease_seed = server.get_lease_seed()
-        assert len(lease_seed) == 20
-        return hashutil.bucket_cancel_secret_hash(fcs, lease_seed)
 
     def get_writekey(self):
         return self._writekey
     def get_readkey(self):
         return self._readkey
-    def get_storage_index(self):
-        return self._storage_index
-    def get_fingerprint(self):
-        return self._fingerprint
     def get_privkey(self):
         return self._privkey
     def get_encprivkey(self):
         return self._encprivkey
-    def get_pubkey(self):
-        return self._pubkey
-
-    def get_required_shares(self):
-        return self._required_shares
-    def get_total_shares(self):
-        return self._total_shares
 
     ####################################
     # IFilesystemNode
-
-    def get_size(self):
-        return self._most_recent_size
-
-    def get_current_size(self):
-        d = self.get_size_of_best_version()
-        d.addCallback(self._stash_size)
-        return d
-
-    def _stash_size(self, size):
-        self._most_recent_size = size
-        return size
 
     def get_cap(self):
         return self._uri
@@ -242,9 +263,6 @@ class MutableFileNode:
         if self._uri.is_readonly():
             return None
         return self._uri
-
-    def get_uri(self):
-        return self._uri.to_string()
 
     def get_write_uri(self):
         if self.is_readonly():
@@ -262,12 +280,6 @@ class MutableFileNode:
         ro.init_from_cap(self._uri.get_readonly())
         return ro
 
-    def is_mutable(self):
-        return self._uri.is_mutable()
-
-    def is_readonly(self):
-        return self._uri.is_readonly()
-
     def is_unknown(self):
         return False
 
@@ -277,15 +289,23 @@ class MutableFileNode:
     def raise_error(self):
         pass
 
-    def __hash__(self):
-        return hash((self.__class__, self._uri))
-    def __cmp__(self, them):
-        if cmp(type(self), type(them)):
-            return cmp(type(self), type(them))
-        if cmp(self.__class__, them.__class__):
-            return cmp(self.__class__, them.__class__)
-        return cmp(self._uri, them._uri)
-
+    def _do_serialized(self, cb, *args, **kwargs):
+        # note: to avoid deadlock, this callable is *not* allowed to invoke
+        # other serialized methods within this (or any other)
+        # MutableFileNode. The callable should be a bound method of this same
+        # MFN instance.
+        d = defer.Deferred()
+        self._serializer.addCallback(lambda ignore: cb(*args, **kwargs))
+        # we need to put off d.callback until this Deferred is finished being
+        # processed. Otherwise the caller's subsequent activities (like,
+        # doing other things with this node) can cause reentrancy problems in
+        # the Deferred code itself
+        self._serializer.addBoth(lambda res: eventually(d.callback, res))
+        # add a log.err just in case something really weird happens, because
+        # self._serializer stays around forever, therefore we won't see the
+        # usual Unhandled Error in Deferred that would give us a hint.
+        self._serializer.addErrback(log.err)
+        return d
 
     #################################
     # ICheckable
@@ -1189,3 +1209,30 @@ class MutableFileVersion:
                                  self._servermap,
                                  mode=mode)
         return u.update()
+
+class MutableVerifierNode(_MutableBase):
+    implements(ICheckable)
+
+    def __init__(self, storage_broker, secret_holder, history):
+        self._storage_broker = storage_broker
+        self._secret_holder = secret_holder
+        self._history = history
+        self._pubkey = None
+        self._cache = ResponseCache()
+
+    def init_from_cap(self, filecap):
+        assert isinstance(filecap, SSKVerifierURI)
+        self._uri = filecap
+        self._storage_index = filecap.storage_index
+        self._fingerprint = self._uri.fingerprint
+        return self
+
+    def check(self, monitor, verify=False, add_lease=False):
+        checker = MutableChecker(self, self._storage_broker,
+                                 self._history, monitor)
+        return checker.check(verify, add_lease)
+
+    def check_and_repair(self, monitor, verify=False, add_lease=False):
+        raise NotImplementedError("need writecap for mutable repair: #625")
+    def is_readonly(self):
+        return True

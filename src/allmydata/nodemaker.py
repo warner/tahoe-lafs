@@ -5,7 +5,7 @@ from allmydata.interfaces import INodeMaker
 from allmydata.immutable.literal import LiteralFileNode
 from allmydata.immutable.filenode import ImmutableFileNode, CiphertextFileNode
 from allmydata.immutable.upload import Data
-from allmydata.mutable.filenode import MutableFileNode
+from allmydata.mutable.filenode import MutableFileNode, MutableVerifierNode
 from allmydata.mutable.publish import MutableData
 from allmydata.dirnode import DirectoryNode, pack_children
 from allmydata.unknown import UnknownNode
@@ -44,6 +44,10 @@ class NodeMaker:
         n = MutableFileNode(self.storage_broker, self.secret_holder,
                             self.default_encoding_parameters,
                             self.history)
+        return n.init_from_cap(cap)
+    def _create_mutable_verifier(self, cap):
+        n = MutableVerifierNode(self.storage_broker, self.secret_holder,
+                                self.history)
         return n.init_from_cap(cap)
     def _create_dirnode(self, filenode):
         return DirectoryNode(filenode, self, self.uploader)
@@ -112,6 +116,8 @@ class NodeMaker:
                             uri.ReadonlyMDMFDirectoryURI)):
             filenode = self._create_from_single_cap(cap.get_filenode_cap())
             return self._create_dirnode(filenode)
+        if isinstance(cap, uri.SSKVerifierURI):
+            return self._create_mutable_verifier(cap)
         return None
 
     def create_mutable_file(self, contents=None, keysize=None, version=None):
