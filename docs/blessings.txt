@@ -1,0 +1,65 @@
+= "Blessed Servers": Controlling Which Tahoe Servers Are Used =
+
+The Tahoe "Introducer" is responsible for making sure that all clients know
+about all servers. Tahoe clients, by default, will use any storage server
+that they can. For each upload, they will ask all the reachable storage
+servers (in a specific order), and will place shares on any who will accept
+them. For download, they will again ask all the reachable servers, and will
+download shares from as many servers as necessary.
+
+But you might want to limit your uploads to certain servers, those which meet
+some minimum standards of quality. Given a finite amount of upload bandwidth,
+you probably want to put your shares just on "good" servers: those that you
+believe will provide good service. This means servers which will be around
+again later, and which will return shares quickly (low-latency,
+high-bandwidth) and uncorrupted.
+
+Obviously, you cannot predict these properties in advance, and Tahoe does not
+yet provide a reputation-based mechanism of recording server behavior and
+using it to influence future peer-selection decisions. But for many use cases
+(especially the "commercial grid" and the small friendnet scenarios), it is
+sufficient to use a "closed grid", in which clients will only use specific
+servers. To make this flexible and controllable, Tahoe offers a feature
+called "server blessing", in which each client can be configured to only
+upload to servers which have been "blessed" by some central authority.
+
+This "blessing" is expressed by a public-key signature. The server announces
+its service (such as storage) with a signed announcement message. Each client
+is configured with a public key for the "storage" service: the client will
+then only use servers whose announcements were signed with the corresponding
+private key.
+
+(in a future version, we intend to extend this mechanism to use a certificate
+chain, rather than a single certificate)
+
+This mechanism allows the Introducer to be oblivious to the client's
+requirements, enabling the use of more distributed Introducer technology in
+the future (such as peer-to-peer gossip).
+
+== Servers: How To Get Blessed ==
+
+Since Tahoe does not yet support certificate chains, blessing is simple: you
+give each of the authorized servers a copy of the private key that should be
+used to sign the announcements. This key should be copied into the
+[storage]blesser.privkey entry in the BASEDIR/tahoe.cfg file (note that you
+may want to make this file world-unreadable to protect the confidentiality of
+this key):
+
+ [storage]
+ blesser.privkey = priv-v0-hlqtcy22l65jse4hxg2f
+
+The public/private keypair is created by running "tahoe admin
+generate-keypair", which will emit two lines:
+
+ private: priv-v0-hlqtcy22l65jse4hxg2f
+ public: pub-v0-2phrriw55ktlsm5o3z5je4fvlgorxen
+
+== Clients: How To Require Blessing ==
+
+Clients are configured by adding the blesser's pubkey to the tahoe.cfg
+[client]storage.blesser entry:
+
+ [client]
+ storage.blesser = pub-v0-2phrriw55ktlsm5o3z5je4fvlgorxen
+
+An announcement which matches any of the listed keys will be accepted.
