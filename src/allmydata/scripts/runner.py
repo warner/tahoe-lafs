@@ -9,7 +9,7 @@ from twisted.python import usage
 import allmydata
 pkg_resources.require(allmydata.__appname__)
 from allmydata.scripts.common import BaseOptions
-from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer
+from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer, admin
 from allmydata.util.encodingutil import quote_output, get_argv_encoding
 
 def GROUP(s):
@@ -25,6 +25,7 @@ class Options(BaseOptions, usage.Options):
                     +   create_node.subCommands
                     +   keygen.subCommands
                     +   stats_gatherer.subCommands
+                    +   admin.subCommands
                     + GROUP("Controlling a node")
                     +   startstop_node.subCommands
                     + GROUP("Debugging")
@@ -100,6 +101,8 @@ def runner(argv,
         rc = startstop_node.dispatch[command](so, stdout, stderr)
     elif command in debug.dispatch:
         rc = debug.dispatch[command](so)
+    elif command in admin.dispatch:
+        rc = admin.dispatch[command](so)
     elif command in cli.dispatch:
         rc = cli.dispatch[command](so)
     elif command in ac_dispatch:

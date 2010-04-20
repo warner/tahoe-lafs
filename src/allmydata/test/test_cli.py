@@ -9,6 +9,7 @@ from allmydata.util import fileutil, hashutil, base32
 from allmydata import uri
 from allmydata.immutable import upload
 from allmydata.dirnode import normalize
+from allmydata.util import ecdsa
 
 # Test that the scripts can be imported -- although the actual tests of their
 # functionality are done by invoking them in a subprocess.
@@ -23,7 +24,7 @@ from allmydata.scripts import common
 from allmydata.scripts.common import DEFAULT_ALIAS, get_aliases, get_alias, \
      DefaultAliasMarker
 
-from allmydata.scripts import cli, debug, runner, backupdb
+from allmydata.scripts import cli, debug, runner, backupdb, admin
 from allmydata.test.common_util import StallMixin, ReallyEqualMixin
 from allmydata.test.no_network import GridTestMixin
 from twisted.internet import threads # CLI tests use deferToThread
@@ -993,6 +994,55 @@ class Put(GridTestMixin, CLITestMixin, unittest.TestCase):
                       self.failUnlessReallyEqual(out, DATA))
 
         return d
+
+class Admin(unittest.TestCase):
+    def do_cli(self, *args, **kwargs):
+        argv = list(args)
+        stdin = kwargs.get("stdin", "")
+        stdout, stderr = StringIO(), StringIO()
+        d = threads.deferToThread(runner.runner, argv, run_by_human=False,
+                                  stdin=StringIO(stdin),
+                                  stdout=stdout, stderr=stderr)
+        def _done(res):
+            return stdout.getvalue(), stderr.getvalue()
+        d.addCallback(_done)
+        return d
+
+    def test_generate_keypair(self):
+        d = self.do_cli("admin", "generate-keypair")
+        def _done( (stdout, stderr) ):
+            lines = stdout.split("\n")
+            privkey_line = lines[0].strip()
+            pubkey_line = lines[1].strip()
+            sk_header = "private: priv-v0-"
+            vk_header = "public: pub-v0-"
+            self.failUnless(privkey_line.startswith(sk_header), privkey_line)
+            self.failUnless(pubkey_line.startswith(vk_header), pubkey_line)
+            privkey_b = base32.a2b(privkey_line[len(sk_header):])
+            pubkey_b = base32.a2b(pubkey_line[len(vk_header):])
+            sk = ecdsa.SigningKey.from_string(privkey_b)
+            vk = ecdsa.VerifyingKey.from_string(pubkey_b)
+            self.failUnlessEqual(sk.get_verifying_key().to_string(),
+                                 vk.to_string())
+        d.addCallback(_done)
+        return d
+
+    def test_derive_pubkey(self):
+        priv1,pub1 = admin.make_keypair()
+        d = self.do_cli("admin", "derive-pubkey", priv1)
+        def _done( (stdout, stderr) ):
+            lines = stdout.split("\n")
+            privkey_line = lines[0].strip()
+            pubkey_line = lines[1].strip()
+            sk_header = "private: priv-v0-"
+            vk_header = "public: pub-v0-"
+            self.failUnless(privkey_line.startswith(sk_header), privkey_line)
+            self.failUnless(pubkey_line.startswith(vk_header), pubkey_line)
+            pub2 = pubkey_line[len(vk_header):]
+            self.failUnlessEqual("pub-v0-"+pub2, pub1)
+        d.addCallback(_done)
+        return d
+
 
 class List(GridTestMixin, CLITestMixin, unittest.TestCase):
     def test_list(self):
