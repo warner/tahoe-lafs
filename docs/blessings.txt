@@ -30,9 +30,6 @@ is configured with a public key for the "storage" service: the client will
 then only use servers whose announcements were signed with the corresponding
 private key.
 
-(in a future version, we intend to extend this mechanism to use a certificate
-chain, rather than a single certificate)
-
 This mechanism allows the Introducer to be oblivious to the client's
 requirements, enabling the use of more distributed Introducer technology in
 the future (such as peer-to-peer gossip).
@@ -65,3 +62,148 @@ Clients are configured by adding the blesser's pubkey to the tahoe.cfg
 
 An announcement which matches any of the listed keys will be accepted. All
 other storage announcements will be ignored.
+
+== Future Work: Multiple Blessers, Certificate Chains ==
+
+Simple Tahoe deployments will use a single private key on each server, and a
+single public key on each client, rather than using a certificate chain (as
+described below). This imposes certain restrictions: all servers must be
+given the same private key. In a homogenous commercial grid, this may be
+fairly straightforward: the storage provider runs all of the servers, and
+clients only use the provider's servers. But in a heterogenous friendnet,
+this may be untenable.
+
+The first necessary improvement is to allow clients to be configured with a
+set of public keys, with instructions that they should accept servers blessed
+with any of them. Each server would create and use their own private key. The
+client's tahoe.cfg would be configured as follows:
+
+ [client]
+ storage.blesser.0 = pub-v0-r2laie72havc6ytcpe5cgifw5ccjsoj5ejr6r34yhfftr3txdrb6nlpboeebib5qvtzwugrdsc6ju
+ storage.blesser.1 = pub-v0-sy6k5kyibvk2sontvgknct6xyo7tw455rkzbsohexyeckztm4xbxwypzjnd5meblrqtiaytz6k4us
+
+However, even with multiple pubkeys, the client's tahoe.cfg must be updated
+each time a new server is added to the grid (to be specific, each time a new
+private key comes into use: servers which can share keys...
+
+The blessing might also be expressed by a "certificate chain": a sequence of
+signed messages, instead of a single one. Each cert in the chain (e.g.
+[c1,c2,c3]) is signed by a separate key (e.g. k1,k2,k3). The first cert c1
+contains a note that says "You should accept certs signed by k2". Likewise,
+c2 tells the recipient to accept certs signed by k3. The final cert c3,
+created by a storage server, provides the actual announcement details, and is
+signed by k3.
+
+When using a certchain, the client is still configured with a single public
+key (k1), but they will receive the whole [c1,c2,c3] chain. The server is
+configured with the partial chain [c1,c2] that grants them authority, and
+with the private k3 that they'll use to produce their own signed
+announcements.
+
+Each cert in a chain may limit the authority of the subsequent key. Instead
+of a note saying "You should accept certs signed by k2", the note effectively
+says "accept certs signed by k2, but don't allow them to do X or Y". This has
+more relevance for user-oriented Accounting certchains, but the same
+technology is used for both.
+
+TBD: how to create a certchain header?
+
+ tahoe admin generate-certchain storage-server --prefix "" --privkey X --LIMITATIONS --delegate-to-pubkey Y
+
+  root cert doesn't use --prefix, creates one-long chain, with
+  restriction-dict {LIMITATIONS} signed by X, delegating limited authority to
+  Y. The "storage-server" arg defines the type of certchain, which controls
+  what LIMITATIONS are parsed.
+
+  2nd cert uses --prefix equal to the output of the previous invocation.
+
+
+To configure a server to announce its storage server with a certchain
+prefixed to its own announcement, paste the certchain-prefix into tahoe.cfg
+next to the private key:
+
+ [storage]
+ blesser.certchain_prefix = ach0:....
+ blesser.privkey = priv-v0-2dgp74wabvuphf2munakwkxhj5io3f4ynczisti
+
+The server will then sign its own announcement with blesser.privkey, append
+it to the blesser.certchain_prefix, and send the resulting certchain to the
+Introducer.
+
+== Irrevocable vs Insta-revocable ==
+
+Tahoe has several places where authority of some sort is delegated from one
+party to another. The right to control which storage servers will be used by
+a given client is first granted by the client itself (by a pubkey in
+tahoe.cfg) to the holder of some privkey, then possibly from that privkey
+holder (by a cert chain) to the holder of some different privkey. Likewise,
+the authority to store data on a given server (the Accounting authority) is
+first granted by the storage server (again by a pubkey in tahoe.cfg), through
+some series of intermediaries, finally ending up on a client.
+
+For this example, we'll treat Alice as the party who holds the original
+authority. She delegates this authority to Bob, who in turn delegates it to
+Carol.
+
+These authorities can ultimately be revoked by modifying the tahoe.cfg on the
+granting end, but this may be too coarse (i.e. having delegated authority to
+both A and B, you might want to revoke A but allow B to keep working, and the
+tahoe.cfg value might not let you revoke the two delegates independently).
+And note that authorities that operate against a distributed /
+highly-available backend (like Tahoe filecaps) are generally irrevocable.
+
+When deciding upon a delegation scheme, there are a couple different options
+to pick from. They vary along the axes of:
+
+ * revocability: how easy is it to take back the authority you've granted?
+ * efficiency: how many messages are passed?
+ * availability: what happens if you can't pass messages?
+ * complexity: how many moving parts does the system have?
+
+The simplest approach is irrevocable delegation: this is also the most
+efficient, most available, and least complex. The basic irrevocable
+delegation pattern is for Bob to give a pubkey to Alice, and Alice stores it
+in her tahoe.cfg. Then Carol gives a pubkey to Bob, and Bob signs a certchain
+that delegates his authority to Carol's privkey. Whenever Carol wants to do
+an operation on Alice, she sends the certchain and her own signed request
+message. Once Carol has received the certchain, she need not communicate with
+anyone else but Alice.
+
+The "Insta-Revocable" pattern is on the other end of many of these axes. In
+this pattern, Carol gets a certificate that says "I, Bob, allow Carol to have
+my authority, but every single time she tries to exercise it, you Alice must
+call me at the following number and see if I've changed my mind, and if you
+can't get through then deny her request". This provides maximal revocability,
+but minimal efficiency (it requires a round trip with Bob for every message
+from Carol), and minimal availability (if Bob is unreachable, Carol loses).
+It is fail-stop: a DoS attack hurts Carol instead of Bob (by preventing her
+from working: they cannot prevent Bob from expressing his revocation
+decision).
+
+In fact, the Insta-Revocable pattern is a complicated variant of an even
+simpler pattern: Carol doesn't talk to Alice at all, she just tells Bob about
+the request that she wants to make, and Bob forwards it on to Alice if he
+sees fit. Alice doesn't even know about Carol.
+
+In between these points lies the usual certificate/revocation/OCSP -type
+schemes. Carol is given a certificate (signed by Bob) that says "I, Bob,
+allow Carol to have my authority for X hours, unless the server at Y says
+I've changed my mind, and if you can't get to the server then do Z". This
+improves efficiency over the instarevocable pattern (fewer messages, no more
+than one every X hours), with a known upper bound on how quickly Bob's change
+of heart can be implemented (X hours, or less if Y is available), and with
+specific fail-stop/fail-go behaviors (i.e. what happens if you can't get to
+Y). It is an attempt to optimize the system for certain expected behaviors.
+
+Having a cert that lasts a few minutes looks just like the instarevocable
+pattern: Carol must have near-continuous access to new certs (i.e. access to
+Bob). A cert that lasts forever but requires an up-to-date OCSP check is also
+like the instarevocable case: the cert doesn't really empower Carol to do
+very much, because Alice has to ask Bob (playing the OCSP) every single time.
+
+
+
+Zooko and I once identified 5 separate delegation patterns: I'll try to dig
+up the notes. Each one had a pubkey being passed around, or a cert chain,
+etc. Some required more messages than others, some required that
+communication take place *after* a key was generated, etc.
