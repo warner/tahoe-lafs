@@ -17,18 +17,30 @@ high-bandwidth) and uncorrupted.
 Obviously, you cannot predict these properties in advance, and Tahoe does not
 yet provide a reputation-based mechanism of recording server behavior and
 using it to influence future peer-selection decisions. But for many use cases
-(especially the "commercial grid" and the small friendnet scenarios), it is
+(especially the "commercial grid" and the "small friendnet" scenarios), it is
 sufficient to use a "closed grid", in which clients will only use specific
-servers. To make this flexible and controllable, Tahoe offers a feature
-called "server blessing", in which each client can be configured to only
-upload to servers which have been "blessed" by some conigurable (perhaps
-centralized) authority.
+servers, chosen by the user. To explicitly list the servers that your Tahoe
+client node will use, see the "Choosing Servers" section of
+docs/configuration.txt .
 
-This "blessing" is expressed by a public-key signature. The server announces
-its service (such as storage) with a signed announcement message. Each client
-is configured with a public key for the "storage" service: the client will
-then only use servers whose announcements were signed with the corresponding
-private key.
+The disadvantage of this mode is inflexibility in the face of grids which
+grow over time: each time a new server is added, all clients must be updated
+to use it.
+
+Alternatively, the user can delegate this choice to an external (perhaps
+centralized) party. In this mode, each client is configured to only use
+servers which have been "blessed" by a specific authority. By choosing which
+authority's blessings are accepted, the user delegates their choice of
+servers to this authority. When adding a new server, the server operator must
+obtain a blessing, but clients do not need to be updated: they will
+automatically use the new blessed storage node.
+
+Tahoe expresses these "blessings" with a public-key signature. The server
+announces its service (such as storage) with a signed announcement message.
+Each client is configured with a public key for the "storage" service: the
+client will then only use servers whose announcements were signed with the
+corresponding private key. The party or parties who hold the private key will
+have the authority to add servers to the blessed set.
 
 This mechanism allows the Introducer to be oblivious to the client's
 requirements, enabling the use of more distributed Introducer technology in
