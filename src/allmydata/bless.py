@@ -2,9 +2,10 @@
 from zope.interface import Interface, implements
 import simplejson
 from twisted.internet import defer
-from pycryptopp.publickey import ecdsa
 from allmydata.util import base32, log, netstring
 from allmydata.util.assertutil import precondition
+from allmydata.util.ecdsa import SigningKey, VerifyingKey, NIST192p, \
+     BadSignatureError
 
 class IBlesser(Interface):
     def bless(what):
@@ -18,15 +19,16 @@ class IBlesser(Interface):
         """
 
 # When handling public/private keys, we use four different types here:
-#  key object: an instance of a class from pycryptopp.publickey.ecdsa,
-#              created with ecdsa.generate(), or privkey.get_verifying_key(),
-#              or ecdsa.create_signing_key_from_string(), or
-#              ecdsa.create_verifying_key_from_string()
+#  key object: an instance of a class from python-ecdsa,
+#              created with ecdsa.SigningKey(), or privkey.get_verifying_key(),
+#              or ecdsa.SigningKey.from_string(), or
+#              ecdsa.VerifyingKey.from_string()
 #  key string: the raw pycryptopp-serialized form of a key object, created
-#              with key.serialize(), and fed to create_*_key_from_string()
+#              with key.to_string(), and fed to create_*_key_from_string()
 #  versioned keystring: the base32-encoded key string, prepended with a
 #                       version identifier like "priv-v0-" or "pub-v0-",
-#                       that indicates ECDSA192 and the serialization scheme.
+#                       that indicates EC-DSA, the NIST192p curve and the
+#                       serialization scheme.
 # We use variables that end in no suffix, "_s", and "_vs" (respectively) to
 # hold these various types. We also use variables ending in _b32 to hold the
 # base32-encoded keystring (without version information), for display to
@@ -67,15 +69,15 @@ class IBlesser(Interface):
 #
 #  cert = c0:NS(ann_j)NS(sig_b32)NS(pubkey_b32)\n
 #    unsigned certs use empty strings for sig/pubkey. NS('') is '0:,'
-#    (this will look like c0:432{...},78:nox..,78:cwi..,\n)
-#    the 'c0' means ('c' for chain):
+#    (this will look like c0:124{...},77:nox..,77:cwi..,\n)
+#    the 'c0' means ('c' for cert):
 #     certificate (not certchain)
-#     ECDSA192, pycryptopp-style sig, post-#331 non-fluffy pubkey serialization
+#     ECDSA192, python-ecdsa-style sig
 #     message is JSON-encoded dictionary, recipient ignores unknown keys
 #  certchain = ach0:NUMCERTS:NS(cert)..NS(leafcert)\n
 #    (this will look like
-#      ach0:2:596:c0:432{...},78:nox..,78:cwi..,
-#      ,596:c0:432{...},78:nox..,78:cwi..,
+#      ach0:2:596:c0:432{...},77:nox..,77:cwi..,
+#      ,596:c0:432{...},77:nox..,77:cwi..,
 #      ,
 #    )
 #   the 'ach0' means ('a' for announcement, 'ch' for chain):
@@ -87,22 +89,24 @@ class IBlesser(Interface):
 # src/allmydata/introducer/interfaces.py . The earlier certs (which delegate
 # authority to the key that signs the leaf) will have keys defined there too.
 
+def strip_prefix(s, prefix):
+    assert s.startswith(prefix)
+    return s[len(prefix):]
+
 def parse_pubkey_vs(pubkey_vs):
     pubkey_vs = pubkey_vs.strip()
-    assert pubkey_vs.startswith("pub-v0-")
-    pubkey_b32 = pubkey_vs[len("pub-v0-"):] # strip the verinfo
+    pubkey_b32 = strip_prefix(pubkey_vs, "pub-v0-") # strip the verinfo
     pubkey_s = base32.a2b(pubkey_b32)
-    pubkey = ecdsa.create_verifying_key_from_string(pubkey_s)
+    pubkey = VerifyingKey.from_string(pubkey_s, curve=NIST192p)
     return pubkey
 
 def parse_privkey_vs(privkey_vs):
     privkey_vs = privkey_vs.strip()
-    assert privkey_vs.startswith("priv-v0-")
-    privkey_b32 = privkey_vs[len("priv-v0-"):] # strip the verinfo
+    privkey_b32 = strip_prefix(privkey_vs, "priv-v0-") # strip the verinfo
     privkey_s = base32.a2b(privkey_b32)
-    privkey = ecdsa.create_signing_key_from_string(privkey_s)
+    privkey = SigningKey.from_string(privkey_s, curve=NIST192p)
     pubkey = privkey.get_verifying_key()
-    pubkey_s = pubkey.serialize()
+    pubkey_s = pubkey.to_string()
     return (privkey, pubkey, pubkey_s)
 
 class NonBlesser:
@@ -166,9 +170,6 @@ class PrivateKeyBlesser:
         chain = "".join(pieces)
         return chain
 
-class BadSignatureError(Exception):
-    pass
-
 
 class CertChainBlessing:
     def __init__(self, chain, leaf_pubkey):
@@ -176,30 +177,26 @@ class CertChainBlessing:
         # starting with the root, which provide the unpacked delegation chain
         # to the leaf.
         self.chain = list(chain)
-        assert isinstance(leaf_pubkey, ecdsa.VerifyingKey)
+        assert isinstance(leaf_pubkey, VerifyingKey)
         self.leaf_pubkey = leaf_pubkey
 
     def get_short_display(self):
         """Return a short printable string summarizing the pubkey"""
-        # I'd prefer to use the first e.g. 8 chars of the base32
-        # representation of the key, but the pre-#331 pubkeys all have the
-        # same 316 chars of boilerplate at the start (followed by 78 chars of
-        # actual key), so to make these strings unique, I need to use the
-        # *last* 8 chars. When #331 is fixed, I'll change this.
+        # use the first 8 chars of the base32 representation of the key
 
         # TODO: show the chain
-        pubkey_b32 = base32.b2a(self.leaf_pubkey.serialize())
-        return pubkey_b32[-8:]
+        pubkey_b32 = base32.b2a(self.leaf_pubkey.to_string())
+        return pubkey_b32[:8]
 
     def get_leaf_pubkey(self):
         return self.leaf_pubkey
 
     def pubkey_in_chain(self, query_pubkey):
-        query_pubkey_s = query_pubkey.serialize()
-        if self.leaf_pubkey.serialize() == query_pubkey_s:
+        query_pubkey_s = query_pubkey.to_string()
+        if self.leaf_pubkey.to_string() == query_pubkey_s:
             return True
         for (d,pubkey) in self.chain:
-            if pubkey.serialize() == query_pubkey_s:
+            if pubkey.to_string() == query_pubkey_s:
                 return True
         return False
 
@@ -247,12 +244,13 @@ class BlessedObject:
             (cert_j, cert_sig_s, cert_pubkey_s) = bo.parse_cert(c)
             precondition(cert_sig_s != "", "cert chains must be signed")
             precondition(cert_pubkey_s != "", "cert chains must be signed")
-            cert_pubkey = ecdsa.create_verifying_key_from_string(cert_pubkey_s)
-            if not cert_pubkey.verify(cert_j, cert_sig_s):
+            cert_pubkey = VerifyingKey.from_string(cert_pubkey_s)
+            try:
+                cert_pubkey.verify(cert_sig_s, cert_j)
+            except BadSignatureError:
                 log.msg("bad signature in certchain on %s" % cert_j,
                         level=log.WEIRD, umid="cMc10w")
-                raise BadSignatureError("bad signature in certchain on %s"
-                                        % (cert_j,))
+                raise
             cert_d = simplejson.loads(cert_j)
             validated_chain.append( (cert_d, cert_pubkey) )
 
@@ -263,11 +261,13 @@ class BlessedObject:
             precondition(pubkey_s != "", "cert chains require a leaf signature")
         leaf_pubkey = None
         if sig_s and pubkey_s:
-            pubkey = ecdsa.create_verifying_key_from_string(pubkey_s)
-            if not pubkey.verify(msg_j, sig_s):
+            pubkey = VerifyingKey.from_string(pubkey_s)
+            try:
+                pubkey.verify(sig_s, msg_j)
+            except BadSignatureError:
                 log.msg("bad signature on %s" % msg_j,
                         level=log.WEIRD, umid="5FYtFw")
-                raise BadSignatureError("bad signature on %s" % (msg_j,))
+                raise
             leaf_pubkey = pubkey
         leaf_d = simplejson.loads(msg_j)
         validated_chain.append( (leaf_d, leaf_pubkey) )
@@ -299,7 +299,7 @@ class BlessedObject:
         num_certs = int(data[:colon])
         data = data[colon+1:]
         certs = netstring.split_netstring(data, num_certs,
-                                          required_trailer="\n")
+                                          required_trailer="\n")[0]
         return certs
 
     def parse_cert(self, data):
@@ -307,7 +307,8 @@ class BlessedObject:
         data = data[len("c0:"):]
         (ann_j,
          sig_b32,
-         pubkey_b32) = netstring.split_netstring(data, 3, required_trailer="\n")
+         pubkey_b32) = netstring.split_netstring(data, 3,
+                                                 required_trailer="\n")[0]
         return ann_j, base32.a2b(sig_b32), base32.a2b(pubkey_b32)
 
     def process_delegation(self, parent_d, child_d, child_pubkey, state=None):
@@ -347,10 +348,10 @@ class BlessedObject:
                    " want pub-v0-[base32..], got %s" % delg_pubkey_vs)
             raise UnknownDelegationFormatError(msg)
         delg_pubkey = parse_pubkey_vs(delg_pubkey_vs)
-        if delg_pubkey.serialize() != child_pubkey.serialize():
+        if delg_pubkey.to_string() != child_pubkey.to_string():
             msg = ("chain delegates to wrong key: %s, but next cert is %s"
-                   % (base32.b2a(delg_pubkey.serialize()),
-                      base32.b2a(child_pubkey.serialize())))
+                   % (base32.b2a(delg_pubkey.to_string()),
+                      base32.b2a(child_pubkey.to_string())))
             raise BadDelegationError(msg)
         return None
 
@@ -394,8 +395,8 @@ class PublicKeyBlessingChecker:
                     facility="tahoe.bless", parent=lp, level=log.NOISY)
             return True
 
-        my_s = self.pubkey.serialize()
-        blessing_s = blessing.get_leaf_pubkey().serialize()
+        my_s = self.pubkey.to_string()
+        blessing_s = blessing.get_leaf_pubkey().to_string()
         log.msg("wrong blessing: want %s, got %s" % (base32.b2a(my_s),
                                                      base32.b2a(blessing_s)),
                 facility="tahoe.bless", parent=lp, level=log.NOISY)

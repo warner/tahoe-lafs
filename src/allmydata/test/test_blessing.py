@@ -4,7 +4,7 @@ from twisted.trial import unittest
 import simplejson
 from allmydata import bless
 from allmydata.scripts.admin import make_keypair
-from allmydata.util.testutil import flip_bit
+from allmydata.test.common_util import flip_bit
 from allmydata.util import base32, netstring
 
 class Blessing(unittest.TestCase):
@@ -12,9 +12,9 @@ class Blessing(unittest.TestCase):
         priv_vs, pub_vs = make_keypair()
         pub = bless.parse_pubkey_vs(pub_vs)
         priv,pub2,pub2_s = bless.parse_privkey_vs(priv_vs)
-        self.failUnlessEqual(pub.serialize(), pub2_s)
-        self.failUnlessEqual(pub2.serialize(), pub2_s)
-        self.failUnlessEqual(priv.get_verifying_key().serialize(), pub2_s)
+        self.failUnlessEqual(pub.to_string(), pub2_s)
+        self.failUnlessEqual(pub2.to_string(), pub2_s)
+        self.failUnlessEqual(priv.get_verifying_key().to_string(), pub2_s)
 
     def test_non_blesser(self):
         b = bless.NonBlesser()
@@ -43,7 +43,7 @@ class Blessing(unittest.TestCase):
         self.failUnlessEqual(bo.get_leaf(), msg) # modulo unicodeness
         b2 = bo.get_blessing()
         self.failUnless(isinstance(b2, bless.CertChainBlessing))
-        self.failUnlessEqual(b2.get_leaf_pubkey().serialize(), pub.serialize())
+        self.failUnlessEqual(b2.get_leaf_pubkey().to_string(), pub.to_string())
         self.failUnless(b2.pubkey_in_chain(pub))
         self.failIf(b2.pubkey_in_chain(wrong_pub))
         short = b2.get_short_display()
@@ -73,7 +73,7 @@ class Blessing(unittest.TestCase):
         self.failUnlessEqual(bo.get_leaf(), msg) # modulo unicodeness
         b2 = bo.get_blessing()
         self.failUnless(isinstance(b2, bless.CertChainBlessing))
-        self.failUnlessEqual(b2.get_leaf_pubkey().serialize(), pub.serialize())
+        self.failUnlessEqual(b2.get_leaf_pubkey().to_string(), pub.to_string())
         self.failUnless(b2.pubkey_in_chain(pub))
         self.failUnless(b2.pubkey_in_chain(pub2))
         self.failIf(b2.pubkey_in_chain(wrong_pub))
