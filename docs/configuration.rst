@@ -317,6 +317,30 @@ Client Configuration
     (Mutable files use a different share placement algorithm that does not
     consider this parameter.)
 
+  servers.serverid_file = (filename string, optional)
+
+    This filename, if specified, limits the servers which your client will
+    use for uploads and downloads, by accepting only servers with one of the
+    given serverids. It should contain a list of base32 serverids, one per
+    line. Comments (starting with '#') can be included, either after the
+    serverid or on lines by themselves. Non-absolute filenames will be
+    interpreted relative to the node's BASEDIR. The Introducer will be used
+    to learn about available servers (and their contact information:
+    ipaddr/port), but the node will ignore announcements for servers that are
+    not on the serverid list.
+
+    The default behavior is to use every server that the Introducer tells us
+    about.
+
+  servers.blesser = (pubkey string, optional)
+
+    This string, if provided, limits the servers which your client will use
+    for uploads and downloads, by accepting only servers whose Announcements
+    have been "blessed" by a specific private key. It should contain a pubkey
+    string in the form "pub-v0-...", which corresponds to the private key
+    held by whoever is deciding which servers you should use. See
+    docs/blessings.txt for more details.
+
 
 Storage Server Configuration
 ============================
@@ -366,6 +390,30 @@ Storage Server Configuration
     These settings control garbage-collection, in which the server will
     delete shares that no longer have an up-to-date lease on them. Please see
     the neighboring "garbage-collection.rst" document for full details.
+
+
+  blesser.privkey = (privkey string, optional)
+
+    This string, if provided, indicates that all outgoing Introducer
+    announcements should be signed by the given private key. Clients may
+    restrict themselves to using only servers that are "blessed" in this
+    fashion. If not provided, announcements will not be signed.
+
+  superblesser.furl = (furl string, optional)
+  superblesser.url = (URL string, optional)
+
+    When provided, this string provides access to a "superblesser", which
+    provides signed certificate-chain prefixes that delegate authority to
+    this server's private key (as specified in blesser.privkey). This server
+    will periodically fetch an updated prefix from the superblesser. The
+    announcements it sends will include this prefix, concatenated with our
+    own signed message.
+
+    The FURL form uses a Foolscap connection to fetch the prefix. The URL
+    form uses regular HTTP to fetch it. To set up a superblesser, see
+    docs/blessings.txt.
+
+  superblesser.renew = (time string, optional)
 
 
 Running A Helper
