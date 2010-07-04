@@ -1,0 +1,159 @@
+New idea: iterspans(mingap=1), take inverse of existing set, delete all
+negaspans with length<mingap, invert again. Needs help with right edge.
+
+diff --git a/src/allmydata/test/test_util.py b/src/allmydata/test/test_util.py
+index b7537d7..7d26329 100644
+--- a/src/allmydata/test/test_util.py
++++ b/src/allmydata/test/test_util.py
+@@ -1557,6 +1557,43 @@ class SimpleSpans:
+         if prevstart is not None:
+             yield (prevstart, prevend-prevstart+1)
+ 
++    def iterspans(self, minsize=1, debug=False):
++        if debug: print "iterspans", minsize
++        if minsize == 1:
++            return self.__iter__()
++        if not self:
++            return iter([])
++        s_end = max(self._have)+1
++        def min_nonfinal_span_length(s):
++            pieces = list(s)
++            if len(pieces) <= 1:
++                return None
++            return min([length for (start,length) in pieces[:-1]])
++        s = self.__class__(self)
++        counter = 1000
++        while True:
++            counter -= 1
++            if not counter:
++                raise RuntimeError
++            m = min_nonfinal_span_length(s)
++            if debug: print "min", m, minsize, sorted(s._have)
++            if not m:
++                break
++            if m >= minsize:
++                break
++            s2 = self.__class__(s)
++            for (start,length) in list(s)[:-1]:
++                if debug: print " ",start,length,minsize,s_end
++                if length < minsize:
++                    # grow this span, but don't overrun s_end
++                    end = min(start+minsize, s_end)
++                    if debug: print "  grow", end, end-start
++                    s2.add(start, end-start)
++                    break
++            if debug: print "here", sorted(s2._have)
++            s = s2
++        return s.__iter__()
++
+     def __len__(self):
+         # this also gets us bool(s)
+         return len(self._have)
+@@ -1589,18 +1626,43 @@ class SimpleSpans:
+                 return False
+         return True
+ 
++class SimpleSpans2(SimpleSpans):
++    def iterspans(self, minsize=1, debug=False):
++        if not self:
++            #return iter([])
++            #raise StopIteration
++            return
++        s_start = min(self._have)
++        s_end = max(self._have)+1
++        prevstart = None
++        for i in range(s_start, s_end):
++            if i in self._have:
++                if prevstart is None:
++                    prevstart = i
++                if i == s_end-1:
++                    yield (prevstart, i-prevstart)
++                    break
++                continue
++            if prevstart is None:
++                continue
++            if i-prevstart < minsize:
++                continue
++            yield (prevstart, i-prevstart)
++            prevstart = None
++
+ class ByteSpans(unittest.TestCase):
+     def test_basic(self):
+-        s = Spans()
++        S = SimpleSpans2
++        s = S()
+         self.failUnlessEqual(list(s), [])
+         self.failIf(s)
+         self.failIf((0,1) in s)
+         self.failUnlessEqual(len(s), 0)
+ 
+-        s1 = Spans(3, 4) # 3,4,5,6
++        s1 = S(3, 4) # 3,4,5,6
+         self._check1(s1)
+ 
+-        s2 = Spans(s1)
++        s2 = S(s1)
+         self._check1(s2)
+ 
+         s2.add(10,2) # 10,11
+@@ -1608,6 +1670,21 @@ class ByteSpans(unittest.TestCase):
+         self.failUnless((10,1) in s2)
+         self.failIf((10,1) in s1)
+         self.failUnlessEqual(list(s2.each()), [3,4,5,6,10,11])
++        self.failUnlessEqual(list(s2), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans()), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(1)), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(2)), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(3)), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(4)), [(3,4), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(5)), [(3,5), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(6)), [(3,6), (10,2)])
++        self.failUnlessEqual(list(s2.iterspans(7)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(8)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(9)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(10)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(12)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(13)), [(3,9)])
++        self.failUnlessEqual(list(s2.iterspans(14)), [(3,9)])
+         self.failUnlessEqual(len(s2), 6)
+ 
+         s2.add(15,2).add(20,2)
+@@ -1676,7 +1753,7 @@ class ByteSpans(unittest.TestCase):
+         # complex-but-fast actual implementation, in a large number of random
+         # operations
+         S1 = SimpleSpans
+-        S2 = Spans
++        S2 = SimpleSpans2
+         s1 = S1(); s2 = S2()
+         seed = ""
+         def _create(subseed):
+@@ -1732,6 +1809,10 @@ class ByteSpans(unittest.TestCase):
+             self.failUnlessEqual(bool(s1), bool(s2))
+             self.failUnlessEqual(list(s1), list(s2))
+             for j in range(10):
++                #print j
++                debug = False#j==1
++                self.failUnlessEqual(list(s1.iterspans(minsize=j+1, debug=debug)),
++                                     list(s2.iterspans(minsize=j+1)))
+                 what = md5(what[12:14]+str(j)).hexdigest()
+                 start = int(what[2:4], 16)
+                 length = max(1, int(what[5:6], 16))
+diff --git a/src/allmydata/util/spans.py b/src/allmydata/util/spans.py
+index 336fddf..8233a3d 100755
+--- a/src/allmydata/util/spans.py
++++ b/src/allmydata/util/spans.py
+@@ -153,6 +153,14 @@ class Spans:
+         for s in self._spans:
+             yield s
+ 
++    def iterspans(self, minsize=1):
++        # this yields (start, length) tuples, which cover at least all of our
++        # spans, but "round up" the pieces so we can fetch (a fewer number
++        # of) larger chunks. This means that, except for the last tuple, each
++        # "length" will be >= minsize. We guarantee that the last span will
++        # remain unchanged: rounding up won't cause overruns.
++        raise NotImplementedError
++
+     def __len__(self):
+         # this also gets us bool(s)
+         return sum([length for start,length in self._spans])

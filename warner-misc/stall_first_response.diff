@@ -1,0 +1,95 @@
+diff --git a/src/allmydata/immutable/download2.py b/src/allmydata/immutable/download2.py
+index ec284b3..22dd406 100644
+--- a/src/allmydata/immutable/download2.py
++++ b/src/allmydata/immutable/download2.py
+@@ -7,7 +7,7 @@ import itertools
+ now = time.time
+ from zope.interface import implements
+ from twisted.python.failure import Failure
+-from twisted.internet import defer
++from twisted.internet import defer, reactor
+ from twisted.internet.interfaces import IPushProducer, IConsumer
+ 
+ from foolscap.api import eventually
+@@ -824,13 +824,16 @@ class CommonShare:
+         # the number of segments. But we want to ask for block hashes early.
+         # So if we're asked for which block hashes are needed before we know
+         # numsegs for sure, we return a guess.
++        log.msg("(sh%d) init numsegs=%d" % (self.shnum, guessed_numsegs))
+         self._block_hash_tree = IncompleteHashTree(guessed_numsegs)
+         self._know_numsegs = False
+         self._logparent = logparent
+ 
+     def set_numsegs(self, numsegs):
++        log.msg("(sh%d) set_numsegs=%d" % (self.shnum, numsegs))
+         if self._know_numsegs:
+             return
++        log.msg("set_numsegs2")
+         self._block_hash_tree = IncompleteHashTree(numsegs)
+         self._know_numsegs = True
+ 
+@@ -848,6 +851,7 @@ class CommonShare:
+         # too, or wait to set the block hashes until we've also received the
+         # block itself, so we can hash it too, and set the chain+leaf all at
+         # the same time.
++        log.msg("(sh%d) get_needed_block_hashes(%d)" % (self.shnum, segnum))
+         return self._block_hash_tree.needed_hashes(segnum, include_leaf=True)
+ 
+     def process_block_hashes(self, block_hashes):
+@@ -1029,6 +1033,34 @@ class SegmentFetcher:
+         # can never get here, caller has assert in case of code bug
+ 
+     def _send_new_request(self):
++        # if the number of known shares is small enough, build up all k-item
++        # combinations, remove ones that fail to provide k distinct shares,
++        # assign a value to each combination (prefer diversity, fast servers,
++        # serendipity), sort, go with best. If shares are PENDING, remove or
++        # de-weight combinations that don't include the PENDING ones. If
++        # shares are OVERDUE, remove combinations that do include the OVERDUE
++        # ones. If the number of shares is too large to handle (Ns-choose-k),
++        # do something simpler and less optimal. 10-choose-3 (combinations)
++        # is 120. 20-choose-3 is 1140. 100-choose-25 is over 10^21, so don't
++        # do that.
++        ## f = math.factorial
++        ## num = f(Ns) / (f(k) * f(Ns-k))
++        ## if num < 2000:
++        ##     for candidate in itertools.combinations(shares):
++        ##         score = test(candidate)
++        ##         if score is not None: # None means <k distinct shares
++        ##             solutions.append( (score, candidate) )
++        ##     solutions.sort()
++        ## else:
++        ##     be_simple()
++
++        # ask each share how many bytes and/or RTT it would need to provide
++        # block[i], and use that to compute the score. Shares can cache that
++        # value until they get more responses (or send more requests: data
++        # that's already in flight should be cheaper than data that hasn't
++        # been requested yet). (some day, score will be influenced by server
++        # prices, muahaha).
++
+         for shnum,shares in sorted(self._shnums.iteritems()):
+             states = [self._shares[s] for s in shares]
+             if COMPLETE in states or PENDING in states:
+@@ -1107,6 +1139,7 @@ class ShareFinder:
+         self._commonshares = {} # shnum to CommonShare instance
+         self.undelivered_shares = []
+         self.pending_requests = set()
++        self._stall_first_response = True
+ 
+         self._storage_index = verifycap.storage_index
+         self._si_prefix = base32.b2a_l(self._storage_index[:8], 60)
+@@ -1160,6 +1193,13 @@ class ShareFinder:
+         if not self._hungry:
+             return
+         if self.undelivered_shares:
++            if False and self._stall_first_response:
++                self._stall_first_response = False
++                # XXX: hey, this is brilliant. Better yet, only if we have
++                # multiple shares from the same (only) server. Make sure the
++                # timer gets shut down when we stop (for tests/dirtyreactor).
++                reactor.callLater(0.5, self.loop)
++                return
+             sh = self.undelivered_shares.pop(0)
+             # they will call hungry() again if they want more
+             self._hungry = False

@@ -1,0 +1,25 @@
+diff --git a/src/allmydata/test/no_network.py b/src/allmydata/test/no_network.py
+index 1487576..0fc7881 100644
+--- a/src/allmydata/test/no_network.py
++++ b/src/allmydata/test/no_network.py
+@@ -39,6 +39,7 @@ class LocalWrapper:
+         self.original = original
+         self.broken = False
+         self.hung_until = None
++        self.stall_by = None
+         self.post_call_notifier = None
+         self.disconnectors = {}
+ 
+@@ -75,6 +76,12 @@ class LocalWrapper:
+                     return res
+                 self.hung_until.addErrback(_err)
+                 return d2
++            if self.stall_by:
++                d2 = defer.Deferred()
++                reactor.callLater(self.stall_by, d2.callback, None)
++                d2.addCallback(lambda ign: _really_call())
++                # this frequently causes a dirty reactor error
++                return d2
+             return _really_call()
+ 
+         d = fireEventually()

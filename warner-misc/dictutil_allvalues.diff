@@ -1,0 +1,18 @@
+diff --git a/src/allmydata/util/dictutil.py b/src/allmydata/util/dictutil.py
+index 8de136f..5809639 100644
+--- a/src/allmydata/util/dictutil.py
++++ b/src/allmydata/util/dictutil.py
+@@ -57,6 +57,13 @@ class DictOfSets(dict):
+         if not self[key]:
+             del self[key]
+ 
++    def allvalues(self):
++        # return a set that merges all value sets
++        r = set()
++        for key in self:
++            r.update(self[key])
++        return r
++
+ class UtilDict:
+     def __init__(self, initialdata={}):
+         self.d = {}

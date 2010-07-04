@@ -1,0 +1,1086 @@
+commit 0e2fb6db39c6d3d54d350572dc626450a80cc319
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Jun 28 09:25:29 2010 -0700
+
+    fix Makefile for misc/coding_tools/*
+
+ Makefile |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+commit a798a588d2444e946adb6b9cc2b544e4f6fd5f32
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Jun 28 09:25:11 2010 -0700
+
+    move check-umids.py into new location
+
+ Makefile                         |    2 +-
+ misc/check-umids.py              |   30 ------------------------------
+ misc/coding_tools/check-umids.py |   30 ++++++++++++++++++++++++++++++
+ 3 files changed, 31 insertions(+), 31 deletions(-)
+
+commit 0c104f2bbb199da54663bb0ae7208e7cf53ce1c5
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Jun 28 08:25:25 2010 -0700
+
+    test_upload: add some TODO notes
+
+ src/allmydata/test/test_upload.py |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+commit 24a57ae55aebd59b0336bc46280654811bf6eb28
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jun 23 17:55:20 2010 -0700
+
+    Share: add note about defending against empty sharehash response
+
+ src/allmydata/immutable/downloader/share.py |    8 ++++++++
+ 1 files changed, 8 insertions(+), 0 deletions(-)
+
+commit 73a051ffc84d676a7f7db937d4840ec0d261c9b9
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jun 23 17:54:03 2010 -0700
+
+    test_download: exercise failover from server disconnect during a download
+
+ src/allmydata/test/test_download.py |   65 +++++++++++++++++++++++++++++++++++
+ 1 files changed, 65 insertions(+), 0 deletions(-)
+
+commit b75c8f0b18f7d2278cc79aa9c1fe4fb4c2e4d917
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jun 23 17:21:18 2010 -0700
+
+    test_encode: remove obsolete tests
+
+ src/allmydata/test/test_encode.py |  611 ++++---------------------------------
+ 1 files changed, 52 insertions(+), 559 deletions(-)
+
+commit c0a499aacccf59b0dee21f8c27dae94cef8e9737
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jun 23 17:20:36 2010 -0700
+
+    segmentation: errback with DownloadStopped if consumer calls stopProducing()
+    test_download: add pause/stop tests, add corruption-causes-failure tests
+
+ src/allmydata/immutable/downloader/common.py       |    2 +
+ src/allmydata/immutable/downloader/segmentation.py |    5 +-
+ src/allmydata/test/no_network.py                   |   16 ++
+ src/allmydata/test/test_download.py                |  165 ++++++++++++++++----
+ 4 files changed, 154 insertions(+), 34 deletions(-)
+
+commit 4b449e209b6fb90448d89002f5c9683fbb6a639f
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jun 16 09:25:15 2010 -0700
+
+    WIP removing download.py (rewriting test_encode, refactoring ShareFinder),
+    still horribly broken
+
+ src/allmydata/immutable/checker.py           |  450 +++++++++-
+ src/allmydata/immutable/download.py          | 1321 --------------------------
+ src/allmydata/immutable/downloader/finder.py |   51 +-
+ src/allmydata/test/test_encode.py            |  223 ++++--
+ src/allmydata/test/test_web.py               |    5 +-
+ 5 files changed, 637 insertions(+), 1413 deletions(-)
+
+commit deb72375fcff3e3d1a602acf3ee30cd5551742f8
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 26 12:00:34 2010 -0700
+
+    remove unused import
+
+ src/allmydata/test/test_repairer.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit 739dece4d177bb459b67b206073b7dfa31208de9
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 26 11:56:48 2010 -0700
+
+    rewrite Repairer with new downloader
+    
+    Added CiphertextFileNode.get_segment_size() so repairer can get it before
+    upload starts. Not very efficient yet (downloads all of seg0 when it really
+    only needs a copy of the UEB). Still working on removing (or at least
+    shrinking) download.py .
+
+ src/allmydata/immutable/downloader/node.py |   20 +++-
+ src/allmydata/immutable/filenode.py        |   15 ++-
+ src/allmydata/immutable/repairer.py        |  211 ++++-----------------------
+ src/allmydata/test/test_repairer.py        |   93 ------------
+ 4 files changed, 64 insertions(+), 275 deletions(-)
+
+commit eef581cde21a70680f6e617c4ae1b87e2759f559
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 26 09:37:39 2010 -0700
+
+    move check/repair out of downloader/node.py into filenode.py
+
+ src/allmydata/immutable/downloader/node.py |   77 +--------------------------
+ src/allmydata/immutable/filenode.py        |   79 ++++++++++++++++++++++++++-
+ 2 files changed, 77 insertions(+), 79 deletions(-)
+
+commit a0570ac7c033ad52aeb5cee759494f4ed395f698
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 22 12:23:24 2010 -0700
+
+    finally move download2.py into its rightful place: filenode.py
+
+ src/allmydata/immutable/download2.py |  188 ----------------------------------
+ src/allmydata/immutable/filenode.py  |  188 ++++++++++++++++++++++++++++++++++
+ src/allmydata/nodemaker.py           |    2 +-
+ src/allmydata/test/bench_dirnode.py  |    2 +-
+ src/allmydata/test/test_filenode.py  |    2 +-
+ src/allmydata/test/test_system.py    |    2 +-
+ 6 files changed, 192 insertions(+), 192 deletions(-)
+
+commit 7a3e6ef94f2bf3a01e01134e51567b19d17181df
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 22 12:20:46 2010 -0700
+
+    move notes out of download2.py and into notes.txt
+
+ src/allmydata/immutable/download2.py |   70 ----
+ src/allmydata/immutable/notes.txt    |  708 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 708 insertions(+), 70 deletions(-)
+
+commit 8ae03448551164c0906f64cb9c6520457d1bc8c9
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 20:51:20 2010 -0700
+
+    move immutable/filenode.py to literal.py, since that's all that remains in it
+
+ src/allmydata/immutable/filenode.py |  104 -----------------------------------
+ src/allmydata/immutable/literal.py  |  104 +++++++++++++++++++++++++++++++++++
+ src/allmydata/nodemaker.py          |    3 +-
+ src/allmydata/test/bench_dirnode.py |    2 +-
+ src/allmydata/test/test_filenode.py |    2 +-
+ src/allmydata/test/test_system.py   |    2 +-
+ 6 files changed, 109 insertions(+), 108 deletions(-)
+
+commit db840c98079f158f0249c4dfd0580fc732462d2b
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 20:40:34 2010 -0700
+
+    oops, moving Terminator to downloader.util needs updating client.py
+
+ src/allmydata/client.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit 2c40602fd8456242370124498660b8f5b9c1b4b0
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:10:01 2010 -0700
+
+    storage-overhead: try to fix, probably still broken
+
+ misc/simulators/storage-overhead.py |   10 ++++++----
+ 1 files changed, 6 insertions(+), 4 deletions(-)
+
+commit 6a4e15520d6ea0284155ba61613aa778bee2f200
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:09:43 2010 -0700
+
+    test_immutable comments: NEEDS WORK
+
+ src/allmydata/test/test_immutable.py |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+commit 82163900e63089121583a0d272495427a8548c50
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:09:21 2010 -0700
+
+    disable test_hung_server, NEEDS WORK
+
+ src/allmydata/test/test_hung_server.py |    7 +++++--
+ 1 files changed, 5 insertions(+), 2 deletions(-)
+
+commit d937f3964fdf18f5379bb207b9a953889d941847
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:07:00 2010 -0700
+
+    move old stuff out of the tree
+
+ src/allmydata/immutable/download2_off.pyOFF |  634 ---------------------------
+ 1 files changed, 0 insertions(+), 634 deletions(-)
+
+commit 118fe48bbb136b891fde1ed7b24a99a3153ccaf7
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:02:34 2010 -0700
+
+    old immutable/filenode.py: remove old ImmutableFileNode, support classes
+
+ src/allmydata/immutable/filenode.py |  275 +----------------------------------
+ src/allmydata/test/test_filenode.py |    2 +-
+ 2 files changed, 3 insertions(+), 274 deletions(-)
+
+commit 6618dc4166f220c28cd97fded19caf077318786d
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 19:00:43 2010 -0700
+
+    split most of download2.py out into downloader/*.py
+
+ src/allmydata/immutable/download2.py               | 2074 +-------------------
+ src/allmydata/immutable/download2_util.py          |   73 -
+ src/allmydata/immutable/downloader/common.py       |   11 +
+ src/allmydata/immutable/downloader/fetcher.py      |  228 +++
+ src/allmydata/immutable/downloader/finder.py       |  185 ++
+ src/allmydata/immutable/downloader/node.py         |  528 +++++
+ src/allmydata/immutable/downloader/segmentation.py |  157 ++
+ src/allmydata/immutable/downloader/share.py        |  840 ++++++++
+ src/allmydata/immutable/downloader/status.py       |  170 ++
+ src/allmydata/immutable/downloader/util.py         |   73 +
+ src/allmydata/test/test_download.py                |    4 +-
+ 11 files changed, 2201 insertions(+), 2142 deletions(-)
+
+commit 2f4352e590298183d13f09c3434fd7288a56b9c5
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 09:54:22 2010 -0700
+
+    add __eq__ and friends to ImmutableFileNode. Not sure I want them there.
+
+ src/allmydata/immutable/download2.py |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+commit a83e85c5b4ee7ef63338ba7a9776d018bc1842ff
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 09:25:29 2010 -0700
+
+    fix remote call to advise_corrupt_share: the signature is different for
+    immutable buckets
+
+ src/allmydata/test/test_filenode.py |    8 ++++----
+ 1 files changed, 4 insertions(+), 4 deletions(-)
+
+commit 480349915caa9897cc35064736601be1fa3cf26a
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri May 21 09:20:07 2010 -0700
+
+    fix remote call to advise_corrupt_share: the signature is different for
+    immutable buckets
+
+ src/allmydata/immutable/download2.py |    3 +--
+ 1 files changed, 1 insertions(+), 2 deletions(-)
+
+commit d9f19630cc3b195cef2112cfc141a51725476e60
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 15 17:56:53 2010 -0700
+
+    add CiphertextFileNode to nodemaker, read() gets you ciphertext, duh
+
+ src/allmydata/nodemaker.py          |    7 ++++++-
+ src/allmydata/test/test_download.py |   16 ++++++++++++++++
+ 2 files changed, 22 insertions(+), 1 deletions(-)
+
+commit 0e0c7870109e448907d9debb380b55731ddc1359
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:42:13 2010 -0700
+
+    misc/sizes.py: update, we now use SHA256 (not SHA1), large-file overhead
+    grows to 0.5%
+
+ misc/simulators/sizes.py |   16 ++++++++--------
+ 1 files changed, 8 insertions(+), 8 deletions(-)
+
+commit 6dafe7e1600a4893ab9f6c9f96e8977bc06f5983
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:40:17 2010 -0700
+
+    ShareFinder: loop until we have max_outstanding_requests in flight, to
+    parallelize DHYB queries instead of running them sequentially.
+
+ src/allmydata/immutable/download2.py |    4 ++++
+ 1 files changed, 4 insertions(+), 0 deletions(-)
+
+commit bae06a7fa9b00408da858dfd5629a971b62d0045
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:38:53 2010 -0700
+
+    cosmetic improvements around ciphertext_hash_tree
+
+ src/allmydata/immutable/download2.py |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+commit bba608651ba04b95ef01c5c2ad2ea19da9f1b922
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:38:28 2010 -0700
+
+    tolerate history=None, which occurs in some unit tests
+
+ src/allmydata/immutable/download2.py |   13 ++++++++-----
+ 1 files changed, 8 insertions(+), 5 deletions(-)
+
+commit d9a4e1ee5dd54459313a5f1f6edfd20f9809b596
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:38:02 2010 -0700
+
+    don't ask for bytes that we already have. This removes a read from the case
+    where we receive the 1024B offset-table overread and then need some hashes
+    from within that range.
+
+ src/allmydata/immutable/download2.py |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+commit 717f2f2e2d8131d36d28144570cbe9d31b43df6d
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:06:57 2010 -0700
+
+    test_immutable: wrap to 80cols. No code changes.
+
+ src/allmydata/test/test_immutable.py |   44 ++++++++++++++++++++--------------
+ 1 files changed, 26 insertions(+), 18 deletions(-)
+
+commit 9625bf14f3c84f43f6e0a2f5773ca8f3016d314b
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 18:05:59 2010 -0700
+
+    test_immutable: remove number-of-reads assertion from
+    test_download_abort_if_too_many_corrupted_shares, since the new downloader
+    pipelines reads to speed up the overall download.
+
+ src/allmydata/test/test_immutable.py |   37 ++++++++-------------------------
+ 1 files changed, 9 insertions(+), 28 deletions(-)
+
+commit ae7ec2b4686fe6fcd729e592e5c63bb013d4bfb1
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 09:52:32 2010 -0700
+
+    test_web: make it work
+
+ src/allmydata/test/test_web.py |   11 +++++++----
+ 1 files changed, 7 insertions(+), 4 deletions(-)
+
+commit f3587c9c31c4bb6cdb4a99443c279d0aa42b7ef5
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu May 13 09:49:28 2010 -0700
+
+    re-enable test_system's checking of downloadstatus, don't make web/status
+    display event tables for LITs
+
+ src/allmydata/test/test_system.py |    2 +-
+ src/allmydata/web/status.py       |    2 ++
+ 2 files changed, 3 insertions(+), 1 deletions(-)
+
+commit 89001e7b54c7546a86be7a2d2f6ad991a5dac46f
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 12 10:33:55 2010 -0700
+
+    simplify retry-when-segnum-is-wrong handling: instead of switching on
+    were-we-guessing afterwards, conditionally addErrback the retry code up
+    front. Removes some code and removes some tests of that code.
+
+ src/allmydata/immutable/download2.py |   53 +++++++-----------
+ src/allmydata/test/test_download.py  |   96 +---------------------------------
+ 2 files changed, 22 insertions(+), 127 deletions(-)
+
+commit e471a6e02dfa7ee944e3db562de6ecbbb347cb36
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 12 08:50:42 2010 -0700
+
+    add download-status data (event timestamps), basic web renderer
+
+ src/allmydata/immutable/download2.py    |  292 +++++++++++++++++++++++++++----
+ src/allmydata/test/test_download.py     |    2 +-
+ src/allmydata/web/download-status.xhtml |    1 +
+ src/allmydata/web/status.py             |  141 +++++++++++++++-
+ src/allmydata/web/tahoe.css             |   12 ++-
+ 5 files changed, 412 insertions(+), 36 deletions(-)
+
+commit 9d507f297fe1499ca1a31c8d4bca2f846c13514a
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 22:36:33 2010 -0700
+
+    remove some comments about work that's now been finished
+
+ src/allmydata/immutable/download2.py |   18 ++----------------
+ 1 files changed, 2 insertions(+), 16 deletions(-)
+
+commit 8fbe659f9d669e7bb374cd350bc8491aed1b0519
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 20:42:49 2010 -0700
+
+    stop parsing the flat crypttext_hash: we don't use it anyways
+
+ src/allmydata/immutable/download2.py |   12 ------------
+ 1 files changed, 0 insertions(+), 12 deletions(-)
+
+commit beb53bd2bbea9922ff5de63f0e76997903ffbc9f
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 20:12:08 2010 -0700
+
+    more tests: bad ciphertext hash tree. Remove some unreachable lines.
+
+ src/allmydata/immutable/download2.py |    3 +-
+ src/allmydata/test/test_download.py  |   69 +++++++++++++++++++++++++++++++++-
+ 2 files changed, 70 insertions(+), 2 deletions(-)
+
+commit c56706aa47dcbf477a84ec4135a23032063aba41
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 19:26:46 2010 -0700
+
+    clean up asserts, adding tests, slowly converging on complete coverage
+
+ src/allmydata/immutable/download2.py |   17 ++-
+ src/allmydata/immutable/layout.py    |    4 +
+ src/allmydata/test/test_download.py  |  221 +++++++++++++++++++++++++++++++++-
+ 3 files changed, 230 insertions(+), 12 deletions(-)
+
+commit b9558f87f9a0fa1fbd3f04dd0e11ac3a1803e090
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 13:36:20 2010 -0700
+
+    test_download.py: big batch of download2-covering tests
+
+ src/allmydata/test/test_download.py |  505 +++++++++++++++++++++++++++++++++--
+ 1 files changed, 485 insertions(+), 20 deletions(-)
+
+commit f95809cc42c452e5cf79462b2c9d9d016524cfe7
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 13:34:38 2010 -0700
+
+    fix error log
+
+ src/allmydata/immutable/download2.py |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+commit e6225230c3c0a2c3b24efd0a4cf94d52ff4c5f5f
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 13:34:26 2010 -0700
+
+    set Share.actual_segment_size from the Node whenever possible: non-initial
+    shares won't set the UEB and need a way to get the right value. Don't call
+    _desire_block_hashes unless there's an active segment.
+
+ src/allmydata/immutable/download2.py |   23 ++++++++++++++++-------
+ 1 files changed, 16 insertions(+), 7 deletions(-)
+
+commit e31fa8ec0b01f37e49a134210b137bac70ffa43d
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 13:32:05 2010 -0700
+
+    add had_corruption flag for benefit of unit tests
+
+ src/allmydata/immutable/download2.py |   15 +++++++++++++--
+ 1 files changed, 13 insertions(+), 2 deletions(-)
+
+commit 9aa4d209e6d9df9e0e878011b8c85e3db19cc4be
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun May 9 13:30:58 2010 -0700
+
+    change data-tracking approach again: now pending/received/unavailable. Remove
+    wanted/needed/requested. Build up wanted/needed/gottahaveit lists each loop,
+    then discard them once requests are sent.
+    
+    This fixes response-to-corruption when the offset table is broken and causes
+    sections to overlap. The first consumer (i.e. share hash tree) will eat the
+    data, then the second consumer (i.e. block hash tree) will re-fetch that
+    span. One of the two will spot the corrupt (i.e. wrong) data.
+    
+    Rearrange _desire code into more submethods.
+    
+    Don't call hashtree.needed_hashes() for obviously bad segnums.
+    
+    Don't treat shver>2 as the same as shver=2.
+
+ src/allmydata/immutable/download2.py |  263 +++++++++++++++++-----------------
+ 1 files changed, 134 insertions(+), 129 deletions(-)
+
+commit 260d813acafb8293894a491f1e0bc466fa4a70a8
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 8 13:13:43 2010 -0700
+
+    tweak logging a little bit
+
+ src/allmydata/immutable/download2.py |    6 +++---
+ 1 files changed, 3 insertions(+), 3 deletions(-)
+
+commit e7735e384d17db687b3591d3aa081275a0d05d50
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 8 13:12:39 2010 -0700
+
+    treat version >=3 shares as corrupt, not as v2 shares
+
+ src/allmydata/immutable/download2.py |    5 ++++-
+ 1 files changed, 4 insertions(+), 1 deletions(-)
+
+commit 70ac54b4cd9ce4f33e8f38fff47031abd0e1299c
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 8 13:12:02 2010 -0700
+
+    track "wanted" and "needed" separately, and abandon the share when we can't
+    get needed data
+    
+    This fixes a lost-progress hang when offset-table corruption makes us think
+    that the data block lives beyond the real end of the share.
+
+ src/allmydata/immutable/download2.py |  131 ++++++++++++++++++++++++++++------
+ 1 files changed, 109 insertions(+), 22 deletions(-)
+
+commit da7a276fcbc7d2358365a3d7f878b5e99b268f81
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat May 8 13:10:22 2010 -0700
+
+    spans: add '&' operator for intersection of two span objects
+
+ src/allmydata/test/test_util.py |   34 +++++++++++++++++++++++++++++++++-
+ src/allmydata/util/spans.py     |    8 ++++++++
+ 2 files changed, 41 insertions(+), 1 deletions(-)
+
+commit 539ff0c92fdb43453f0bffce921101b164c4dfc1
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 11:17:44 2010 -0700
+
+    fix _desire_data for tail segments, make umids unique
+
+ src/allmydata/immutable/download2.py |   10 ++--------
+ 1 files changed, 2 insertions(+), 8 deletions(-)
+
+commit 78a567c2d27d13ba501c6f82c9a452191a784442
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 11:17:18 2010 -0700
+
+    move download2_off slightly more out of the way
+
+ src/allmydata/immutable/download2_off.py    |  634 ---------------------------
+ src/allmydata/immutable/download2_off.pyOFF |  634 +++++++++++++++++++++++++++
+ 2 files changed, 634 insertions(+), 634 deletions(-)
+
+commit eaf3f28dd07e7799c88e1fd06cf9761fb118efde
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 11:17:03 2010 -0700
+
+    new tool to check uniqueness of umids
+
+ Makefile            |    2 ++
+ misc/check-umids.py |   30 ++++++++++++++++++++++++++++++
+ 2 files changed, 32 insertions(+), 0 deletions(-)
+
+commit 9cddde4f40375fcfd08b0c22c23fa40784ee1a5e
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 11:16:44 2010 -0700
+
+    checker: give it a unique umid
+
+ src/allmydata/immutable/checker.py |    4 +++-
+ 1 files changed, 3 insertions(+), 1 deletions(-)
+
+commit 9b633d6b7720ff4cfa2c7e926024ca523b0693b5
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 10:05:42 2010 -0700
+
+    notes on more tests to write
+
+ src/allmydata/immutable/download2.py |   17 ++++++++++-------
+ 1 files changed, 10 insertions(+), 7 deletions(-)
+
+commit fa84ed02293eccac1fadb15415740a1bae00da57
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 10:05:37 2010 -0700
+
+    handle wrong-guess correctly, instead of bailing
+
+ src/allmydata/immutable/download2.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit e5062159ea61f409573b2c6e4bd573b9d1df65ee
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 10:05:14 2010 -0700
+
+    make it possible to override maxsegsize to influence the guess, for unit tests.
+
+ src/allmydata/immutable/download2.py |   27 ++++++++++++++++-----------
+ src/allmydata/immutable/upload.py    |    6 ++++--
+ src/allmydata/interfaces.py          |    3 +++
+ 3 files changed, 23 insertions(+), 13 deletions(-)
+
+commit 45f4898e4ddece43f089ab4407ab5603a324ad4d
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 10:02:08 2010 -0700
+
+    improve log messages
+
+ src/allmydata/immutable/download2.py |   14 ++++++++------
+ 1 files changed, 8 insertions(+), 6 deletions(-)
+
+commit a870b048c4ca24d9cc8afc6b7ce75696ad1e00ca
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 10:01:37 2010 -0700
+
+    remove unused _active_segnum method
+
+ src/allmydata/immutable/download2.py |    5 -----
+ 1 files changed, 0 insertions(+), 5 deletions(-)
+
+commit 2ffde79b165c8becaa268c8743d33afa7fae51a3
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 07:49:09 2010 -0700
+
+    fix Observer2.cancel weakref handling, it was broken and never got called
+
+ src/allmydata/immutable/download2.py      |    2 +-
+ src/allmydata/immutable/download2_util.py |   20 ++++++++++++++------
+ 2 files changed, 15 insertions(+), 7 deletions(-)
+
+commit 19cbafaa632b93ce396a9e6781d967c6579ce016
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 07:48:06 2010 -0700
+
+    clean up corruption-detecting handling and logging
+    
+    rename Share._not_dead to Share._alive, ignore responses when dead
+
+ src/allmydata/immutable/download2.py |  218 +++++++++++++++++++++++-----------
+ 1 files changed, 148 insertions(+), 70 deletions(-)
+
+commit 608872de0a57b29edd8e93bdbf4f53bf96d53af8
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed May 5 07:45:01 2010 -0700
+
+    coverage tools: ignore errors, display lines-uncovered in elisp mode
+
+ Makefile                         |    2 +-
+ misc/coding_tools/coverage.el    |    3 ++-
+ misc/coding_tools/coverage2el.py |    7 +++++--
+ 3 files changed, 8 insertions(+), 4 deletions(-)
+
+commit e1fe342932677ff26c30a5da26e262a3d559e957
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 19:25:14 2010 -0700
+
+    update NodeMaker() calls to new signature
+
+ src/allmydata/test/test_dirnode.py |   10 ++++------
+ src/allmydata/test/test_mutable.py |    2 +-
+ src/allmydata/test/test_web.py     |    2 +-
+ 3 files changed, 6 insertions(+), 8 deletions(-)
+
+commit 3814edd20c154a7df9feee171fce4fe07c42a844
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 19:24:38 2010 -0700
+
+    Don't find servers until someone calls read().
+    
+    This helps unit tests which create FileNodes (with fake resources) but don't
+    ever try to download them. Also tolerate terminator=None.
+
+ src/allmydata/immutable/download2.py |   18 +++++++++++++++---
+ 1 files changed, 15 insertions(+), 3 deletions(-)
+
+commit bc2fba7957c92861bf8aa69ad5b1e8a7e765eee9
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:18:43 2010 -0700
+
+    enhance tests, tolerate new error messages
+
+ src/allmydata/test/test_cli.py      |   12 ++++++++++--
+ src/allmydata/test/test_download.py |   34 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 44 insertions(+), 2 deletions(-)
+
+commit 597c70f1d219213d8b4f619d0144adc03e31d526
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:17:52 2010 -0700
+
+    _share_observers might be empty, tolerate it
+
+ src/allmydata/immutable/download2.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit e7b48bbe03c7c2901c9afd5c87f0a2108f64291a
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:17:40 2010 -0700
+
+    comment on bug that got fixed
+
+ src/allmydata/immutable/download2.py |   17 +++++++++++++++--
+ 1 files changed, 15 insertions(+), 2 deletions(-)
+
+commit ff9edaea0120ec3ebc0a2094b6b3215d6af8d473
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:03:43 2010 -0700
+
+    fix minor typo in log message
+
+ src/allmydata/immutable/download2.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit 8c215c912a2f7e565507d2b4c4f6d10edd71da1d
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:03:32 2010 -0700
+
+    clarify what satisfy/desire means when there is no active segnum
+
+ src/allmydata/immutable/download2.py |   10 +++++++---
+ 1 files changed, 7 insertions(+), 3 deletions(-)
+
+commit fe8a52fd4eb61ac0a9556521e6e88a68e0b49527
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 30 02:01:38 2010 -0700
+
+    Fix fetch-data-block-twice problem by cleaning up _wanted/_requested/_received
+    
+    * merge Share._wanted_blocks into Share._wanted: don't differentiate between
+      data and metadata when ordering fetches. This might be a mistake. I'm not
+      currently convinced that we can save RAM-footprint * time by fetching
+      hashes first, but I must think about it more.
+    * add Share.__repr__ and use it in logging
+    * clean up _wanted/_requested/_received handling: remove received data from
+      _wanted. This fixed a fetch-data-block-twice problem.
+
+ src/allmydata/immutable/download2.py |  101 ++++++++++++++++++++++------------
+ 1 files changed, 66 insertions(+), 35 deletions(-)
+
+commit 6e4c029f22bd6f2edbea14d9d749fd238cefb582
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 21:46:28 2010 -0700
+
+    update test_cli.Error to match new NotEnoughSharesError message
+
+ src/allmydata/test/test_cli.py |    4 ++--
+ 1 files changed, 2 insertions(+), 2 deletions(-)
+
+commit a2accbebf8656e1d4b82f49c962acbef04c33af9
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 21:46:04 2010 -0700
+
+    SegmentFetcher: handle stop() better, fix 1<=numsh<k error message, add logging
+
+ src/allmydata/immutable/download2.py |   26 +++++++++++++++++++-------
+ 1 files changed, 19 insertions(+), 7 deletions(-)
+
+commit beea1b81abdaaedad6f92ab5d893acb05bc7ee79
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 21:40:52 2010 -0700
+
+    cosmetic: stop using 'rdata=self._received' abbreviation
+
+ src/allmydata/immutable/download2.py |   27 +++++++++++----------------
+ 1 files changed, 11 insertions(+), 16 deletions(-)
+
+commit 9c2e558908ef7bf33ec0db89b94b4990b7168352
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 21:40:08 2010 -0700
+
+    when removing block data from self._received, also remove range from
+    self._requested
+    
+    This allows a second download to re-fetch block data, otherwise we ask for
+    zero bytes forever.
+
+ src/allmydata/immutable/download2.py |   11 ++++++++---
+ 1 files changed, 8 insertions(+), 3 deletions(-)
+
+commit 8fb5b859ebb741f6fa9dd6c5782662d158035380
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 11:47:22 2010 -0700
+
+    client.py: remove now-unused cachedir
+
+ src/allmydata/client.py |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+commit f90912c12a24fdae4c6658abd072d5fb9faaad1c
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 11:46:38 2010 -0700
+
+    make test_system.SystemTest pass:
+    
+     * don't track self._received and self._received_data separately. This broke
+       the second read (with a shared Node) because we removed the data block
+       from one but not the other, preventing us from asking for it again.
+     * report NoSharesError separately from NotEnoughSharesError
+     * tolerate read() with size= too large (by clipping it)
+
+ src/allmydata/immutable/download2.py |   93 ++++++++++++++++++++--------------
+ 1 files changed, 55 insertions(+), 38 deletions(-)
+
+commit 2ee69e0d0b07fd6775595d4b50b574841346ed89
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 11:44:36 2010 -0700
+
+    DataSpans: rename get_spans to get_chunks, change get_spans() to return Spans
+
+ src/allmydata/test/test_util.py |   24 +++++++++++++++---------
+ src/allmydata/util/spans.py     |   13 +++++++++++--
+ 2 files changed, 26 insertions(+), 11 deletions(-)
+
+commit 4992dc30102909607da5bb984e8569793eb5fd53
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Apr 29 10:55:20 2010 -0700
+
+    add a reasonable (perhaps large) set of log.msg calls
+
+ src/allmydata/immutable/download2.py |  156 +++++++++++++++++++++++-----------
+ 1 files changed, 105 insertions(+), 51 deletions(-)
+
+commit 6e133fa6bbcb24fad4fe428165938c8eead4767b
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Apr 28 08:44:11 2010 -0700
+
+    added Checker, temporarily disabled status/history test.
+    
+    SystemTest.test_filesystem now passes. test_upload_and_download_convergent
+    hangs.
+
+ src/allmydata/immutable/download2.py |  104 +++++++++++++++++++++++++++++++---
+ src/allmydata/test/test_system.py    |    5 +-
+ 2 files changed, 99 insertions(+), 10 deletions(-)
+
+commit 093593c9c4a5a06eebc882bc8235174207fdb913
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Apr 26 03:07:18 2010 -0700
+
+    get the first part of test_system to work: now it fails for lack of
+    status/history
+
+ src/allmydata/immutable/download2.py |   64 +++++++++++++++++++++++++++++++++-
+ 1 files changed, 63 insertions(+), 1 deletions(-)
+
+commit 7e4cdb5bf05008c47fce57af4463b75d3e9e74fa
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Apr 26 02:39:20 2010 -0700
+
+    lurching towards functionality: add IImmutableFileNode cruft, work on
+    multi-segment hash trees
+
+ src/allmydata/immutable/download2.py |   91 +++++++++++++++++++++++++++++----
+ 1 files changed, 80 insertions(+), 11 deletions(-)
+
+commit 68a36b888921753825be6552072ba4163cc51fdf
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Apr 26 02:01:19 2010 -0700
+
+    start of downloader2 integration
+
+ src/allmydata/client.py    |   12 ++++--------
+ src/allmydata/nodemaker.py |   14 ++++++--------
+ 2 files changed, 10 insertions(+), 16 deletions(-)
+
+commit 71f4fd2e06ea4c6bc0cbe522f058313ae3820ab7
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Apr 26 01:59:59 2010 -0700
+
+    make it work! first integration steps are in a separate patch
+    
+    ripped out some complexity surrounding guessing numsegs
+
+ src/allmydata/immutable/download2.py |  242 ++++++++++++++++++++--------------
+ 1 files changed, 144 insertions(+), 98 deletions(-)
+
+commit f33bc9d6526ddbb00e93cb329f9b7996f27d991d
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Apr 26 00:15:24 2010 -0700
+
+    several test-driven fixes. Still broken.
+
+ src/allmydata/immutable/download2.py      |  129 ++++++++++++++++++-----------
+ src/allmydata/immutable/download2_util.py |    3 +-
+ 2 files changed, 80 insertions(+), 52 deletions(-)
+
+commit 5554eb075e56ba752924da946b541a69c4996b99
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun Apr 25 21:01:24 2010 -0700
+
+    add DictOfSets.allvalues(), which returns one big set. Not sure it's used.
+
+ src/allmydata/util/dictutil.py |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+commit 9d35abb05936ede5ebd2570bdcdff89f950d3801
+Author: Brian Warner <warner@lothar.com>
+Date:   Sun Apr 25 21:01:04 2010 -0700
+
+    fix all XXX omissions, add maybe half the ideal logging, pyflakes-clean
+
+ src/allmydata/immutable/download2.py      |  205 ++++++++++++++++++-----------
+ src/allmydata/immutable/download2_util.py |   13 +--
+ 2 files changed, 134 insertions(+), 84 deletions(-)
+
+commit 0628afbf829a708ce879e3a699db0a74c8e9c691
+Author: Brian Warner <warner@lothar.com>
+Date:   Fri Apr 23 16:17:55 2010 -0700
+
+    cleanups, add a bit of logging, fix attribute access in _Node
+
+ src/allmydata/immutable/download2.py      |  320 ++++++++++++++++++++---------
+ src/allmydata/immutable/download2_util.py |    2 +-
+ 2 files changed, 226 insertions(+), 96 deletions(-)
+
+commit da0faec64c7ad424e4344550fa4cbfbeaf0d91dd
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Apr 14 12:12:34 2010 -0700
+
+    more
+
+ src/allmydata/immutable/download2.py |   26 ++++++++++++++++++--------
+ 1 files changed, 18 insertions(+), 8 deletions(-)
+
+commit 08fb07e61dee4d9420813e65d4f33f9f46088bde
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Mar 10 10:59:07 2010 -0800
+
+    notes
+
+ src/allmydata/immutable/download2.py |    5 +++++
+ 1 files changed, 5 insertions(+), 0 deletions(-)
+
+commit ec53ca28691e938ce5c1f47e1d6521ad6a5d5597
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Mar 3 11:54:09 2010 -0800
+
+    add comments to address Nathan+Zooko's concerns
+
+ src/allmydata/immutable/download2.py |   15 +++++++++++++++
+ 1 files changed, 15 insertions(+), 0 deletions(-)
+
+commit 1b5bd98ce6dc8b38bc4696f54103011c7f77470e
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Feb 15 22:06:37 2010 -0800
+
+    more work
+
+ src/allmydata/immutable/download2.py |    7 +++++++
+ 1 files changed, 7 insertions(+), 0 deletions(-)
+
+commit c589da57cf6170d3d5a72793cae8f5c758172601
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Feb 11 22:51:54 2010 -0800
+
+    small cleanups, start adding logging
+
+ src/allmydata/immutable/download2.py |   38 +++++++++++++++++++++++++++------
+ 1 files changed, 31 insertions(+), 7 deletions(-)
+
+commit 53c827bf10f44249b08d007dd18e31877fe8e894
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Feb 11 22:51:28 2010 -0800
+
+    move Terminator into download2_util.py
+
+ src/allmydata/immutable/download2.py      |   16 ++--------------
+ src/allmydata/immutable/download2_util.py |   13 +++++++++++++
+ 2 files changed, 15 insertions(+), 14 deletions(-)
+
+commit b3408d6a1a001734efafbe804816d08a4ebd5992
+Author: Brian Warner <warner@lothar.com>
+Date:   Thu Feb 11 22:21:55 2010 -0800
+
+    spans: implement DataSpans and extensive tests
+
+ src/allmydata/test/test_util.py |  267 +++++++++++++++++++++++++++++++++++++--
+ src/allmydata/util/spans.py     |  199 +++++++++++++++++++++++++++--
+ 2 files changed, 446 insertions(+), 20 deletions(-)
+
+commit 6285e17234984461c681c9098fe8215e909e35c2
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat Feb 6 17:01:54 2010 -0800
+
+    more work
+
+ src/allmydata/immutable/download2.py      |  432 ++++++++++++++++++-----------
+ src/allmydata/immutable/download2_off.py  |   13 -
+ src/allmydata/immutable/download2_util.py |   29 ++-
+ 3 files changed, 301 insertions(+), 173 deletions(-)
+
+commit ab766fc9d63ed7b6296b2423b3341ae6915bc08a
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Feb 3 10:25:13 2010 -0800
+
+    more WIP, pass BadSegmentNumberError sensibly
+
+ src/allmydata/immutable/download2.py |  183 +++++++++++++++++++++-------------
+ 1 files changed, 115 insertions(+), 68 deletions(-)
+
+commit 20c1bd066a396ec7ce132205724bae12fc97869a
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Feb 3 08:45:26 2010 -0800
+
+    more WIP
+
+ src/allmydata/immutable/download2.py |  206 ++++++++++++++++++++++------------
+ 1 files changed, 133 insertions(+), 73 deletions(-)
+
+commit c651be349c44a0451cff24821abe3755ef4d4f80
+Author: Brian Warner <warner@lothar.com>
+Date:   Tue Feb 2 18:21:06 2010 -0800
+
+    util.spans: move overlap/adjacent out to top-level functions
+
+ src/allmydata/test/test_util.py |    4 +-
+ src/allmydata/util/spans.py     |   48 +++++++++++++++++++-------------------
+ 2 files changed, 26 insertions(+), 26 deletions(-)
+
+commit 55d9fa3ec085c0f26811ec1249cf01fe18563e2c
+Author: Brian Warner <warner@lothar.com>
+Date:   Tue Feb 2 08:32:57 2010 -0800
+
+    more
+
+ src/allmydata/immutable/download2.py |   96 ++++++++++++++++------------------
+ 1 files changed, 45 insertions(+), 51 deletions(-)
+
+commit e1561d11f4443f24067694dae766a9ba51933433
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Feb 1 22:09:57 2010 -0800
+
+    more WIP
+
+ src/allmydata/immutable/download2.py |  243 ++++++++++++++++++++++------------
+ 1 files changed, 158 insertions(+), 85 deletions(-)
+
+commit 9b0b7aefb7711bb58c0d4d5935853b8097f67b62
+Author: Brian Warner <warner@lothar.com>
+Date:   Mon Feb 1 16:14:38 2010 -0800
+
+    split out probably-unhelpful code from probably-helpful code
+
+ src/allmydata/immutable/download2.py      | 1435 +++++++++++------------------
+ src/allmydata/immutable/download2_off.py  |  647 +++++++++++++
+ src/allmydata/immutable/download2_util.py |   33 +
+ 3 files changed, 1241 insertions(+), 874 deletions(-)
+
+commit b08c4b8d048a925ac0f699aedc3c61fd9522ccee
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat Jan 30 23:42:11 2010 -0800
+
+    WIP, split out satisfy() and desire() methods
+
+ src/allmydata/immutable/download2.py |  231 ++++++++++++++++++++++------------
+ 1 files changed, 149 insertions(+), 82 deletions(-)
+
+commit b601ead3036ccca16646ed3d89a4d5fb92d86012
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat Jan 30 22:59:27 2010 -0800
+
+    spans.py: update docs
+
+ src/allmydata/util/spans.py |   27 +++++++++++++++++----------
+ 1 files changed, 17 insertions(+), 10 deletions(-)
+
+commit 2d5467bbe4db36f1e573d7e44b83a1bd02746fcd
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat Jan 30 22:59:20 2010 -0800
+
+    download2.py: WIP
+
+ src/allmydata/immutable/download2.py | 1192 ++++++++++++++++++++++++++++++++++
+ 1 files changed, 1192 insertions(+), 0 deletions(-)
+
+commit 54028e5596a4eb3a3815ecc74595ea49f9b255fe
+Author: Brian Warner <warner@lothar.com>
+Date:   Sat Jan 30 22:49:43 2010 -0800
+
+    implement fast version of bytespans, update tests, move reference into test
+    file
+
+ src/allmydata/test/test_util.py |  189 +++++++++++++++++++++++++++-------
+ src/allmydata/util/spans.py     |  217 ++++++++++++++++++++++++++++++++++-----
+ 2 files changed, 342 insertions(+), 64 deletions(-)
+
+commit 023e134feac1c607af8ab215e3df2028888d7ed2
+Author: Brian Warner <warner@lothar.com>
+Date:   Wed Jan 27 12:04:49 2010 -0800
+
+    add a byte-spans utility class, like perl's Set::IntSpan for .newsrc files.
+    
+    The new downloader will use it to keep track of which bytes we've requested
+    or received already.
+
+ src/allmydata/test/test_util.py |  159 +++++++++++++++++++++++++++++++++++++++
+ src/allmydata/util/spans.py     |   71 +++++++++++++++++
+ 2 files changed, 230 insertions(+), 0 deletions(-)

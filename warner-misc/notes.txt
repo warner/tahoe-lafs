@@ -1,0 +1,708 @@
+
+# TODO: if server1 has all shares, and server2-10 have one each, make the
+# loop stall slightly before requesting all shares from the first server, to
+# give it a chance to learn about the other shares and get some diversity.
+# Or, don't bother, let the first block all come from one server, and take
+# comfort in the fact that we'll learn about the other servers by the time we
+# fetch the second block.
+#
+# davidsarah points out that we could use sequential (instead of parallel)
+# fetching of multiple block from a single server: by the time the first
+# block arrives, we'll hopefully have heard about other shares. This would
+# induce some RTT delays (i.e. lose pipelining) in the case that this server
+# has the only shares, but that seems tolerable. We could rig it to only use
+# sequential requests on the first segment.
+
+# as a query gets later, we're more willing to duplicate work.
+
+# should change server read protocol to allow small shares to be fetched in a
+# single RTT. Instead of get_buckets-then-read, just use read(shnums, readv),
+# where shnums=[] means all shares, and the return value is a dict of
+# # shnum->ta (like with mutable files). The DYHB query should also fetch the
+# offset table, since everything else can be located once we have that.
+
+
+# ImmutableFileNode
+#    DecryptingConsumer
+#  CiphertextFileNode
+#    Segmentation
+#   ShareFinder
+#   SegmentFetcher[segnum] (one at a time)
+#   CommonShare[shnum]
+#   Share[shnum,server]
+
+
+# TODO: if offset table is corrupt, attacker could cause us to fetch whole
+# (large) share. But only from that one server, and they could throw lots of
+# data at our connection anyways.
+
+# log budget: when downloading at 1MBps (i.e. 8 segments-per-second), 10
+# log.OPERATIONAL per second, 100 log.NOISY per second. With k=3, that's 3
+# log.NOISY per block fetch.
+
+
+# test_cli.Error failed for a while: ShareFinder created, used up
+# (NotEnoughSharesError), started again. The self.running=False is the
+# problem.
+#
+# The second download is hungry, but because ShareFinder.running is false, it
+# never notifies the SegmentFetcher that there are no more shares coming, so
+# the download never completes. To trigger this in tests, we need the first
+# download to want more shares (so it must fail with NotEnoughSharesError, or
+# we must lose a share/server between downloads).
+#
+# fix was to not call self.stop when ShareFinder runs out of shares. stop()
+# is now only called by the Terminator.
+
+# TODO: make sure that _signal_corruption(f) isn't sending private local
+# variables in the CopiedFailure
+
+# tests to write:
+# * truncated share, so _satisfy_* doesn't get all it wants
+# * slow server
+
+# all classes are also Services, and the rule is that you don't initiate more
+# work unless self.running
+
+# GC: decide whether each service is restartable or not. For non-restartable
+# services, stopService() should delete a lot of attributes to kill reference
+# cycles. The primary goal is to decref remote storage BucketReaders when a
+# download is complete.
+
+========================================
+old stuff from download2_off:
+
+#! /usr/bin/python
+
+# known (shnum,Server) pairs are sorted into a list according to
+# desireability. This sort is picking a winding path through a matrix of
+# [shnum][server]. The goal is to get diversity of both shnum and server.
+
+# The initial order is:
+#  find the lowest shnum on the first server, add it
+#  look at the next server, find the lowest shnum that we don't already have
+#   if any
+#  next server, etc, until all known servers are checked
+#  now look at servers that we skipped (because ...
+
+# Keep track of which block requests are outstanding by (shnum,Server). Don't
+# bother prioritizing "validated" shares: the overhead to pull the share hash
+# chain is tiny (4 hashes = 128 bytes), and the overhead to pull a new block
+# hash chain is also tiny (1GB file, 8192 segments of 128KiB each, 13 hashes,
+# 832 bytes). Each time a block request is sent, also request any necessary
+# hashes. Don't bother with a "ValidatedShare" class (as distinct from some
+# other sort of Share). Don't bother avoiding duplicate hash-chain requests.
+
+# For each outstanding segread, walk the list and send requests (skipping
+# outstanding shnums) until requests for k distinct shnums are in flight. If
+# we can't do that, ask for more. If we get impatient on a request, find the
+# first non-outstanding
+
+# start with the first Share in the list, and send a request. Then look at
+# the next one. If we already have a pending request for the same shnum or
+# server, push that Share down onto the fallback list and try the next one,
+# etc. If we run out of non-fallback shares, use the fallback ones,
+# preferring shnums that we don't have outstanding requests for (i.e. assume
+# that all requests will complete). Do this by having a second fallback list.
+
+# hell, I'm reviving the Herder. But remember, we're still talking 3 objects
+# per file, not thousands.
+
+# actually, don't bother sorting the initial list. Append Shares as the
+# responses come back, that will put the fastest servers at the front of the
+# list, and give a tiny preference to servers that are earlier in the
+# permuted order.
+
+# more ideas:
+#  sort shares by:
+#   1: number of roundtrips needed to get some data
+#   2: share number
+#   3: ms of RTT delay
+# maybe measure average time-to-completion of requests, compare completion
+# time against that, much larger indicates congestion on the server side
+# or the server's upstream speed is less than our downstream. Minimum
+# time-to-completion indicates min(our-downstream,their-upstream). Could
+# fetch shares one-at-a-time to measure that better.
+
+# when should we risk duplicate work and send a new request?
+
+def walk(self):
+    shares = sorted(list)
+    oldshares = copy(shares)
+    outstanding = list()
+    fallbacks = list()
+    second_fallbacks = list()
+    while len(outstanding.nonlate.shnums) < k: # need more requests
+        while oldshares:
+            s = shares.pop(0)
+            if s.server in outstanding.servers or s.shnum in outstanding.shnums:
+                fallbacks.append(s)
+                continue
+            outstanding.append(s)
+            send_request(s)
+            break #'while need_more_requests'
+        # must use fallback list. Ask for more servers while we're at it.
+        ask_for_more_servers()
+        while fallbacks:
+            s = fallbacks.pop(0)
+            if s.shnum in outstanding.shnums:
+                # assume that the outstanding requests will complete, but
+                # send new requests for other shnums to existing servers
+                second_fallbacks.append(s)
+                continue
+            outstanding.append(s)
+            send_request(s)
+            break #'while need_more_requests'
+        # if we get here, we're being forced to send out multiple queries per
+        # share. We've already asked for more servers, which might help. If
+        # there are no late outstanding queries, then duplicate shares won't
+        # help. Don't send queries for duplicate shares until some of the
+        # queries are late.
+        if outstanding.late:
+            # we're allowed to try any non-outstanding share
+            while second_fallbacks:
+                pass
+    newshares = outstanding + fallbacks + second_fallbacks + oldshares
+        
+
+class Server:
+    """I represent an abstract Storage Server. One day, the StorageBroker
+    will return instances of me. For now, the StorageBroker returns (peerid,
+    RemoteReference) tuples, and this code wraps a Server instance around
+    them.
+    """
+    def __init__(self, peerid, ss):
+        self.peerid = peerid
+        self.remote = ss
+        self._remote_buckets = {} # maps shnum to RIBucketReader
+        # TODO: release the bucket references on shares that we no longer
+        # want. OTOH, why would we not want them? Corruption?
+
+    def send_query(self, storage_index):
+        """I return a Deferred that fires with a set of shnums. If the server
+        had shares available, I will retain the RemoteReferences to its
+        buckets, so that get_data(shnum, range) can be called later."""
+        d = self.remote.callRemote("get_buckets", self.storage_index)
+        d.addCallback(self._got_response)
+        return d
+
+    def _got_response(self, r):
+        self._remote_buckets = r
+        return set(r.keys())
+
+class ShareOnAServer:
+    """I represent one instance of a share, known to live on a specific
+    server. I am created every time a server responds affirmatively to a
+    do-you-have-block query."""
+
+    def __init__(self, shnum, server):
+        self._shnum = shnum
+        self._server = server
+        self._block_hash_tree = None
+
+    def cost(self, segnum):
+        """I return a tuple of (roundtrips, bytes, rtt), indicating how
+        expensive I think it would be to fetch the given segment. Roundtrips
+        indicates how many roundtrips it is likely to take (one to get the
+        data and hashes, plus one to get the offset table and UEB if this is
+        the first segment we've ever fetched). 'bytes' is how many bytes we
+        must fetch (estimated). 'rtt' is estimated round-trip time (float) in
+        seconds for a trivial request. The downloading algorithm will compare
+        costs to decide which shares should be used."""
+        # the most significant factor here is roundtrips: a Share for which
+        # we already have the offset table is better to than a brand new one
+
+    def max_bandwidth(self):
+        """Return a float, indicating the highest plausible bytes-per-second
+        that I've observed coming from this share. This will be based upon
+        the minimum (bytes-per-fetch / time-per-fetch) ever observed. This
+        can we used to estimate the server's upstream bandwidth. Clearly this
+        is only accurate if a share is retrieved with no contention for
+        either the upstream, downstream, or middle of the connection, but it
+        may still serve as a useful metric for deciding which servers to pull
+        from."""
+
+    def get_segment(self, segnum):
+        """I return a Deferred that will fire with the segment data, or
+        errback."""
+
+class NativeShareOnAServer(ShareOnAServer):
+    """For tahoe native (foolscap) servers, I contain a RemoteReference to
+    the RIBucketReader instance."""
+    def __init__(self, shnum, server, rref):
+        ShareOnAServer.__init__(self, shnum, server)
+        self._rref = rref # RIBucketReader
+
+class Share:
+    def __init__(self, shnum):
+        self._shnum = shnum
+        # _servers are the Server instances which appear to hold a copy of
+        # this share. It is populated when the ValidShare is first created,
+        # or when we receive a get_buckets() response for a shnum that
+        # already has a ValidShare instance. When we lose the connection to a
+        # server, we remove it.
+        self._servers = set()
+        # offsets, UEB, and share_hash_tree all live in the parent.
+        # block_hash_tree lives here.
+        self._block_hash_tree = None
+
+        self._want
+
+    def get_servers(self):
+        return self._servers
+
+
+    def get_block(self, segnum):
+        # read enough data to obtain a single validated block
+        if not self.have_offsets:
+            # we get the offsets in their own read, since they tell us where
+            # everything else lives. We must fetch offsets for each share
+            # separately, since they aren't directly covered by the UEB.
+            pass
+        if not self.parent.have_ueb:
+            # use _guessed_segsize to make a guess about the layout, so we
+            # can fetch both the offset table and the UEB in the same read.
+            # This also requires making a guess about the presence or absence
+            # of the plaintext_hash_tree. Oh, and also the version number. Oh
+            # well.
+            pass
+
+class CiphertextDownloader:
+    """I manage all downloads for a single file. I operate a state machine
+    with input events that are local read() requests, responses to my remote
+    'get_bucket' and 'read_bucket' messages, and connection establishment and
+    loss. My outbound events are connection establishment requests and bucket
+    read requests messages.
+    """
+    # eventually this will merge into the FileNode
+    ServerClass = Server # for tests to override
+
+    def __init__(self, storage_index, ueb_hash, size, k, N, storage_broker,
+                 shutdowner):
+        # values we get from the filecap
+        self._storage_index = si = storage_index
+        self._ueb_hash = ueb_hash
+        self._size = size
+        self._needed_shares = k
+        self._total_shares = N
+        self._share_hash_tree = IncompleteHashTree(self._total_shares)
+        # values we discover when we first fetch the UEB
+        self._ueb = None # is dict after UEB fetch+validate
+        self._segsize = None
+        self._numsegs = None
+        self._blocksize = None
+        self._tail_segsize = None
+        self._ciphertext_hash = None # optional
+        # structures we create when we fetch the UEB, then continue to fill
+        # as we download the file
+        self._share_hash_tree = None # is IncompleteHashTree after UEB fetch
+        self._ciphertext_hash_tree = None
+
+        # values we learn as we download the file
+        self._offsets = {} # (shnum,Server) to offset table (dict)
+        self._block_hash_tree = {} # shnum to IncompleteHashTree
+        # other things which help us
+        self._guessed_segsize = min(128*1024, size)
+        self._active_share_readers = {} # maps shnum to Reader instance
+        self._share_readers = [] # sorted by preference, best first
+        self._readers = set() # set of Reader instances
+        self._recent_horizon = 10 # seconds
+
+        # 'shutdowner' is a MultiService parent used to cancel all downloads
+        # when the node is shutting down, to let tests have a clean reactor.
+
+        self._init_available_servers()
+        self._init_find_enough_shares()
+
+    # _available_servers is an iterator that provides us with Server
+    # instances. Each time we pull out a Server, we immediately send it a
+    # query, so we don't need to keep track of who we've sent queries to.
+
+    def _init_available_servers(self):
+        self._available_servers = self._get_available_servers()
+        self._no_more_available_servers = False
+
+    def _get_available_servers(self):
+        """I am a generator of servers to use, sorted by the order in which
+        we should query them. I make sure there are no duplicates in this
+        list."""
+        # TODO: make StorageBroker responsible for this non-duplication, and
+        # replace this method with a simple iter(get_servers_for_index()),
+        # plus a self._no_more_available_servers=True
+        seen = set()
+        sb = self._storage_broker
+        for (peerid, ss) in sb.get_servers_for_index(self._storage_index):
+            if peerid not in seen:
+                yield self.ServerClass(peerid, ss) # Server(peerid, ss)
+                seen.add(peerid)
+        self._no_more_available_servers = True
+
+    # this block of code is responsible for having enough non-problematic
+    # distinct shares/servers available and ready for download, and for
+    # limiting the number of queries that are outstanding. The idea is that
+    # we'll use the k fastest/best shares, and have the other ones in reserve
+    # in case those servers stop responding or respond too slowly. We keep
+    # track of all known shares, but we also keep track of problematic shares
+    # (ones with hash failures or lost connections), so we can put them at
+    # the bottom of the list.
+
+    def _init_find_enough_shares(self):
+        # _unvalidated_sharemap maps shnum to set of Servers, and remembers
+        # where viable (but not yet validated) shares are located. Each
+        # get_bucket() response adds to this map, each act of validation
+        # removes from it.
+        self._sharemap = DictOfSets()
+
+        # _sharemap maps shnum to set of Servers, and remembers where viable
+        # shares are located. Each get_bucket() response adds to this map,
+        # each hash failure or disconnect removes from it. (TODO: if we
+        # disconnect but reconnect later, we should be allowed to re-query).
+        self._sharemap = DictOfSets()
+
+        # _problem_shares is a set of (shnum, Server) tuples, and
+
+        # _queries_in_flight maps a Server to a timestamp, which remembers
+        # which servers we've sent queries to (and when) but have not yet
+        # heard a response. This lets us put a limit on the number of
+        # outstanding queries, to limit the size of the work window (how much
+        # extra work we ask servers to do in the hopes of keeping our own
+        # pipeline filled). We remove a Server from _queries_in_flight when
+        # we get an answer/error or we finally give up. If we ever switch to
+        # a non-connection-oriented protocol (like UDP, or forwarded Chord
+        # queries), we can use this information to retransmit any query that
+        # has gone unanswered for too long.
+        self._queries_in_flight = dict()
+
+    def _count_recent_queries_in_flight(self):
+        now = time.time()
+        recent = now - self._recent_horizon
+        return len([s for (s,when) in self._queries_in_flight.items()
+                    if when > recent])
+
+    def _find_enough_shares(self):
+        # goal: have 2*k distinct not-invalid shares available for reading,
+        # from 2*k distinct servers. Do not have more than 4*k "recent"
+        # queries in flight at a time.
+        if (len(self._sharemap) >= 2*self._needed_shares
+            and len(self._sharemap.values) >= 2*self._needed_shares):
+            return
+        num = self._count_recent_queries_in_flight()
+        while num < 4*self._needed_shares:
+            try:
+                s = self._available_servers.next()
+            except StopIteration:
+                return # no more progress can be made
+            self._queries_in_flight[s] = time.time()
+            d = s.send_query(self._storage_index)
+            d.addBoth(incidentally, self._queries_in_flight.discard, s)
+            d.addCallbacks(lambda shnums: [self._sharemap.add(shnum, s)
+                                           for shnum in shnums],
+                           lambda f: self._query_error(f, s))
+            d.addErrback(self._error)
+            d.addCallback(self._reschedule)
+            num += 1
+
+    def _query_error(self, f, s):
+        # a server returned an error, log it gently and ignore
+        level = log.WEIRD
+        if f.check(DeadReferenceError):
+            level = log.UNUSUAL
+        log.msg("Error during get_buckets to server=%(server)s", server=str(s),
+                failure=f, level=level, umid="3uuBUQ")
+
+    # this block is responsible for turning known shares into usable shares,
+    # by fetching enough data to validate their contents.
+
+    # UEB (from any share)
+    # share hash chain, validated (from any share, for given shnum)
+    # block hash (any share, given shnum)
+
+    def _got_ueb(self, ueb_data, share):
+        if self._ueb is not None:
+            return
+        if hashutil.uri_extension_hash(ueb_data) != self._ueb_hash:
+            share.error("UEB hash does not match")
+            return
+        d = uri.unpack_extension(ueb_data)
+        self.share_size = mathutil.div_ceil(self._size, self._needed_shares)
+
+
+        # There are several kinds of things that can be found in a UEB.
+        # First, things that we really need to learn from the UEB in order to
+        # do this download. Next: things which are optional but not redundant
+        # -- if they are present in the UEB they will get used. Next, things
+        # that are optional and redundant. These things are required to be
+        # consistent: they don't have to be in the UEB, but if they are in
+        # the UEB then they will be checked for consistency with the
+        # already-known facts, and if they are inconsistent then an exception
+        # will be raised. These things aren't actually used -- they are just
+        # tested for consistency and ignored. Finally: things which are
+        # deprecated -- they ought not be in the UEB at all, and if they are
+        # present then a warning will be logged but they are otherwise
+        # ignored.
+
+        # First, things that we really need to learn from the UEB:
+        # segment_size, crypttext_root_hash, and share_root_hash.
+        self._segsize = d['segment_size']
+
+        self._blocksize = mathutil.div_ceil(self._segsize, self._needed_shares)
+        self._numsegs = mathutil.div_ceil(self._size, self._segsize)
+
+        self._tail_segsize = self._size % self._segsize
+        if self._tail_segsize == 0:
+            self._tail_segsize = self._segsize
+        # padding for erasure code
+        self._tail_segsize = mathutil.next_multiple(self._tail_segsize,
+                                                    self._needed_shares)
+
+        # Ciphertext hash tree root is mandatory, so that there is at most
+        # one ciphertext that matches this read-cap or verify-cap. The
+        # integrity check on the shares is not sufficient to prevent the
+        # original encoder from creating some shares of file A and other
+        # shares of file B.
+        self._ciphertext_hash_tree = IncompleteHashTree(self._numsegs)
+        self._ciphertext_hash_tree.set_hashes({0: d['crypttext_root_hash']})
+
+        self._share_hash_tree.set_hashes({0: d['share_root_hash']})
+
+
+        # Next: things that are optional and not redundant: crypttext_hash
+        if 'crypttext_hash' in d:
+            if len(self._ciphertext_hash) == hashutil.CRYPTO_VAL_SIZE:
+                self._ciphertext_hash = d['crypttext_hash']
+            else:
+                log.msg("ignoring bad-length UEB[crypttext_hash], "
+                        "got %d bytes, want %d" % (len(d['crypttext_hash']),
+                                                   hashutil.CRYPTO_VAL_SIZE),
+                        umid="oZkGLA", level=log.WEIRD)
+
+        # we ignore all of the redundant fields when downloading. The
+        # Verifier uses a different code path which does not ignore them.
+
+        # finally, set self._ueb as a marker that we don't need to request it
+        # anymore
+        self._ueb = d
+
+    def _got_share_hashes(self, hashes, share):
+        assert isinstance(hashes, dict)
+        try:
+            self._share_hash_tree.set_hashes(hashes)
+        except (IndexError, BadHashError, NotEnoughHashesError), le:
+            share.error("Bad or missing hashes")
+            return
+
+    #def _got_block_hashes(
+
+    def _init_validate_enough_shares(self):
+        # _valid_shares maps shnum to ValidatedShare instances, and is
+        # populated once the block hash root has been fetched and validated
+        # (which requires any valid copy of the UEB, and a valid copy of the
+        # share hash chain for each shnum)
+        self._valid_shares = {}
+
+        # _target_shares is an ordered list of ReadyShare instances, each of
+        # which is a (shnum, server) tuple. It is sorted in order of
+        # preference: we expect to get the fastest response from the
+        # ReadyShares at the front of the list. It is also sorted to
+        # distribute the shnums, so that fetching shares from
+        # _target_shares[:k] is likely (but not guaranteed) to give us k
+        # distinct shares. The rule is that we skip over entries for blocks
+        # that we've already received, limit the number of recent queries for
+        # the same block, 
+        self._target_shares = []
+
+    def _validate_enough_shares(self):
+        # my goal is to have at least 2*k distinct validated shares from at
+        # least 2*k distinct servers
+        valid_share_servers = set()
+        for vs in self._valid_shares.values():
+            valid_share_servers.update(vs.get_servers())
+        if (len(self._valid_shares) >= 2*self._needed_shares
+            and len(self._valid_share_servers) >= 2*self._needed_shares):
+            return
+        #for 
+
+    def _reschedule(self, _ign):
+        # fire the loop again
+        if not self._scheduled:
+            self._scheduled = True
+            eventually(self._loop)
+
+    def _loop(self):
+        self._scheduled = False
+        # what do we need?
+
+        self._find_enough_shares()
+        self._validate_enough_shares()
+
+        if not self._ueb:
+            # we always need a copy of the UEB
+            pass
+
+    def _error(self, f):
+        # this is an unexpected error: a coding bug
+        log.err(f, level=log.UNUSUAL)
+            
+
+
+# using a single packed string (and an offset table) may be an artifact of
+# our native storage server: other backends might allow cheap multi-part
+# files (think S3, several buckets per share, one for each section).
+
+# find new names for:
+#  data_holder
+#  Share / Share2  (ShareInstance / Share? but the first is more useful)
+
+class IShare(Interface):
+    """I represent a single instance of a single share (e.g. I reference the
+    shnum2 for share SI=abcde on server xy12t, not the one on server ab45q).
+    This interface is used by SegmentFetcher to retrieve validated blocks.
+    """
+    def get_block(segnum):
+        """Return an Observer2, which will be notified with the following
+        events:
+         state=COMPLETE, block=data (terminal): validated block data
+         state=OVERDUE (non-terminal): we have reason to believe that the
+                                       request might have stalled, or we
+                                       might just be impatient
+         state=CORRUPT (terminal): the data we received was corrupt
+         state=DEAD (terminal): the connection has failed
+        """
+
+
+# it'd be nice if we receive the hashes before the block, or just
+# afterwards, so we aren't stuck holding on to unvalidated blocks
+# that we can't process. If we guess the offsets right, we can
+# accomplish this by sending the block request after the metadata
+# requests (by keeping two separate requestlists), and have a one RTT
+# pipeline like:
+#  1a=metadata, 1b=block
+#  1b->process+deliver : one RTT
+
+# But if we guess wrong, and fetch the wrong part of the block, we'll
+# have a pipeline that looks like:
+#  1a=wrong metadata, 1b=wrong block
+#  1a->2a=right metadata,2b=right block
+#  2b->process+deliver
+# which means two RTT and buffering one block (which, since we'll
+# guess the segsize wrong for everything, means buffering one
+# segment)
+
+# if we start asking for multiple segments, we could get something
+# worse:
+#  1a=wrong metadata, 1b=wrong block0, 1c=wrong block1, ..
+#  1a->2a=right metadata,2b=right block0,2c=right block1, .
+#  2b->process+deliver
+
+# which means two RTT but fetching and buffering the whole file
+# before delivering anything. However, since we don't know when the
+# other shares are going to arrive, we need to avoid having more than
+# one block in the pipeline anyways. So we shouldn't be able to get
+# into this state.
+
+# it also means that, instead of handling all of
+# self._requested_blocks at once, we should only be handling one
+# block at a time: one of the requested block should be special
+# (probably FIFO). But retire all we can.
+
+    # this might be better with a Deferred, using COMPLETE as the success
+    # case and CORRUPT/DEAD in an errback, because that would let us hold the
+    # 'share' and 'shnum' arguments locally (instead of roundtripping them
+    # through Share.send_request). But that OVERDUE is not terminal. So I
+    # want a new sort of callback mechanism, with the extra-argument-passing
+    # aspects of Deferred, but without being so one-shot. Is this a job for
+    # Observer? No, it doesn't take extra arguments. So this uses Observer2.
+
+
+class Reader:
+    """I am responsible for a single offset+size read of the file. I handle
+    segmentation: I figure out which segments are necessary, request them
+    (from my CiphertextDownloader) in order, and trim the segments down to
+    match the offset+size span. I use the Producer/Consumer interface to only
+    request one segment at a time.
+    """
+    implements(IPushProducer)
+    def __init__(self, consumer, offset, size):
+        self._needed = []
+        self._consumer = consumer
+        self._hungry = False
+        self._offset = offset
+        self._size = size
+        self._segsize = None
+    def start(self):
+        self._alive = True
+        self._deferred = defer.Deferred()
+        # the process doesn't actually start until set_segment_size()
+        return self._deferred
+
+    def set_segment_size(self, segsize):
+        if self._segsize is not None:
+            return
+        self._segsize = segsize
+        self._compute_segnums()
+
+    def _compute_segnums(self, segsize):
+        # now that we know the file's segsize, what segments (and which
+        # ranges of each) will we need?
+        size = self._size
+        offset = self._offset
+        while size:
+            assert size >= 0
+            this_seg_num = int(offset / self._segsize)
+            this_seg_offset = offset - (seg_num*self._segsize)
+            this_seg_size = min(size, self._segsize-seg_offset)
+            size -= this_seg_size
+            if size:
+                offset += this_seg_size
+            yield (this_seg_num, this_seg_offset, this_seg_size)
+
+    def get_needed_segments(self):
+        return set([segnum for (segnum, off, size) in self._needed])
+
+
+    def stopProducing(self):
+        self._hungry = False
+        self._alive = False
+        # TODO: cancel the segment requests
+    def pauseProducing(self):
+        self._hungry = False
+    def resumeProducing(self):
+        self._hungry = True
+    def add_segment(self, segnum, offset, size):
+        self._needed.append( (segnum, offset, size) )
+    def got_segment(self, segnum, segdata):
+        """Return True if this schedule has more to go, or False if it is
+        done."""
+        assert self._needed[0][segnum] == segnum
+        (_ign, offset, size) = self._needed.pop(0)
+        data = segdata[offset:offset+size]
+        self._consumer.write(data)
+        if not self._needed:
+            # we're done
+            self._alive = False
+            self._hungry = False
+            self._consumer.unregisterProducer()
+            self._deferred.callback(self._consumer)
+    def error(self, f):
+        self._alive = False
+        self._hungry = False
+        self._consumer.unregisterProducer()
+        self._deferred.errback(f)
+
+
+
+class x:
+    def OFFread(self, consumer, offset=0, size=None):
+        """I am the main entry point, from which FileNode.read() can get
+        data."""
+        # tolerate concurrent operations: each gets its own Reader
+        if size is None:
+            size = self._size - offset
+        r = Reader(consumer, offset, size)
+        self._readers.add(r)
+        d = r.start()
+        if self.segment_size is not None:
+            r.set_segment_size(self.segment_size)
+            # TODO: if we can't find any segments, and thus never get a
+            # segsize, tell the Readers to give up
+        return d
