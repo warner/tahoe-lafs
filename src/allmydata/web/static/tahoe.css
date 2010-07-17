@@ -68,7 +68,7 @@ legend {
 table td.empty-marker {
   padding: 6em 10em;
   text-align: center;
-  vertical-align: center;
+  /*vertical-align: center;*/
 }
 
 /* styles for server listings in tables (nickname above nodeid) */
@@ -107,7 +107,7 @@ th.nickname-and-peerid {
   margin: 0 -3px -3px -3px; /* matches padding */
 }
 #this-client td > ul {
-  list-style-type: outside;
+  /*list-style-type: outside;*/
   margin: 0 0 0 2.3em;
   padding-left: 0;
 }

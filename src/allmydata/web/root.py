@@ -12,7 +12,7 @@ from allmydata import get_package_versions_string
 from allmydata.util import log
 from allmydata.interfaces import IFileNode
 from allmydata.web import filenode, directory, unlinked, status, operations
-from allmydata.web import storage
+from allmydata.web import storage, dirnode_js
 from allmydata.web.common import abbreviate_size, getxmlfile, WebError, \
      get_arg, RenderMixin, get_format, get_mutable_type
 
@@ -154,6 +154,10 @@ class Root(rend.Page):
         static_dir = resource_filename("allmydata.web", "static")
         for filen in os.listdir(static_dir):
             self.putChild(filen, nevow_File(os.path.join(static_dir, filen)))
+
+        self.putChild("browser", dirnode_js.DirnodeJS())
+        self.putChild("dirnode.js", nevow_File(resource_filename('allmydata.web', 'dirnode.js')))
+        self.putChild("jquery.js", nevow_File(resource_filename('allmydata.web', 'jquery.js')))
 
     def child_helper_status(self, ctx):
         # the Helper isn't attached until after the Tub starts, so this child
