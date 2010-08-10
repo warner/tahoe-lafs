@@ -137,6 +137,10 @@ pyflakes:
 	$(PYTHON) -OOu `which pyflakes` $(SOURCES) |sort |uniq
 	@echo
 
+pyflakes-git:
+	$(PYTHON) -OOu `which pyflakes` `git diff --name-only |grep .py` |sort |uniq
+	@echo
+
 check-umids:
 	$(PYTHON) misc/coding_tools/check-umids.py `find $(SOURCES) -name '*.py'`
 	@echo
