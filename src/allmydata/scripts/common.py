@@ -41,13 +41,13 @@ class BaseOptions(usage.Options):
     ]
 
     def opt_version(self):
-        import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string()
+        from allmydata.util.versionutil import get_package_versions_string
+        print >>self.stdout, get_package_versions_string()
         sys.exit(0)
 
     def opt_version_and_path(self):
-        import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string(show_paths=True)
+        from allmydata.util.versionutil import get_package_versions_string
+        print >>self.stdout, get_package_versions_string(show_paths=True)
         sys.exit(0)
 
 
