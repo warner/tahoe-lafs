@@ -1,2 +1,5 @@
 /src/allmydata/_version.py
 /twisted/plugins/dropin.cache
+/support
+/_trial_temp.lock
+/_trial_temp
