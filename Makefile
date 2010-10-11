@@ -209,7 +209,7 @@ bench-dirnode: .built
 # 'make repl' is a simple-to-type command to get a Python interpreter loop
 # from which you can type 'import allmydata'
 repl:
-	$(RUNPP) -p
+	$(RUNPP) $(PYTHON)
 
 test-darcs-boringfile:
 	$(MAKE)
