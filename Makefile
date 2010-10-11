@@ -7,12 +7,14 @@ PYTHON=python
 export PYTHON
 
 # the instructions are:
-#  1: run "make check-deps" and fix any problems it reports
+#  1: run "make check-deps" and fix any problems it reports. Running
+#     "make build-deps" might fix many of them for you.
 #  2: run "make test" and ensure that all pass
 #  3a (run-in-place): run "./bin/tahoe" from anywhere
 #  3b (install): run "make install PREFIX=XYZ", then run XYZ/tahoe
 #                (may require sudo if PREFIX= is /usr/lib)
 #                (works best if XYZ is on your $PATH)
+#                (requires deps too)
 # alternate spellings:
 #  python setup.py check-deps
 #  python setup.py test
@@ -28,7 +30,9 @@ export PYTHON
 # sys.path while running.
 check-deps:
 	$(PYTHON) setup.py check_deps
-#$(PYTHON) misc/build_helpers/check-deps.py
+
+build-deps:
+	$(PYTHON) setup.py build_deps
 
 # setup.py will extend sys.path to include our support/lib/... directory
 # itself. It will also create it in the beginning of the 'develop' command.

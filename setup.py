@@ -89,6 +89,19 @@ class CheckDeps(Command):
         os.execv(sys.executable,
                  [sys.executable, "misc/build_helpers/check-deps.py"])
 
+class BuildDeps(Command):
+    description = "Build any missing dependencies in ./support/lib/"
+    user_options = []
+    boolean_options = []
+    def initialize_options(self):
+        pass
+    def finalize_options(self):
+        pass
+    def run(self):
+        print "build deps"
+        os.execv(sys.executable,
+                 [sys.executable, "misc/build_helpers/check-deps.py", "build"])
+
 class sdist(_sdist):
     def run(self):
         update_version_py()
@@ -107,7 +120,7 @@ setup(name="tahoe-lafs",
       license="GNU GPL", # see README.txt -- there is an alternative licence
       cmdclass={"update_version": UpdateVersion,
                 "check_deps": CheckDeps,
-                #"build_deps": BuildDeps,
+                "build_deps": BuildDeps,
                 #"test": Test,
                 "sdist": sdist,
                 },

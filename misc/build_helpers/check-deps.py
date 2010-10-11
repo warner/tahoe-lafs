@@ -12,10 +12,11 @@ def to_int(x):
         return x
 
 class Checker:
-    def __init__(self, verbose):
+    def __init__(self, verbose, build):
         self.ok = True
         self.instructions = {}
         self.verbose = verbose
+        self.build = build
 
     def at_least(self, name, v, required):
         # start with simple dotted-decimal
@@ -76,7 +77,10 @@ support/lib/pythonX.Y/site-packages, ./tahoe-deps, and ../tahoe-deps .
 verbose = False
 if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--verbose"):
     verbose = True
-c = Checker(verbose)
+build = False
+if len(sys.argv) > 1 and sys.argv[1] == "build":
+    build = True
+c = Checker(verbose, build)
 
 # we want python-2.5 or newer to get sqlite
 # we want python-2.6 or newer to get json
