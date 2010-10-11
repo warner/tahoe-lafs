@@ -11,11 +11,8 @@ class CreateKeyGeneratorOptions(BasedirMixin, BaseOptions):
         ["node-directory", "d", None, "Specify which directory the key-generator should be created in. [no default]"],
     ]
 
-keygen_tac = """
+keygen_tac = """\
 # -*- python -*-
-
-import pkg_resources
-pkg_resources.require('allmydata-tahoe')
 
 from allmydata import key_generator
 from twisted.application import service

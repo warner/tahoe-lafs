@@ -6,76 +6,64 @@ default: build
 PYTHON=python
 export PYTHON
 
+# the instructions are:
+#  1: run "make check-deps" and fix any problems it reports
+#  2: run "make test" and ensure that all pass
+#  3a (run-in-place): run "./bin/tahoe" from anywhere
+#  3b (install): run "make install PREFIX=XYZ", then run XYZ/tahoe
+#                (may require sudo if PREFIX= is /usr/lib)
+#                (works best if XYZ is on your $PATH)
+# alternate spellings:
+#  python setup.py check-deps
+#  python setup.py test
+#  python ./bin/tahoe
+#  python setup.py install --prefix=XYZ
+# notes:
+#  everything defaults to the first 'python' on $PATH unless overridden,
+#  by e.g. "PYTHON=python2.6 make test" or "python2.6 setup.py test"
+#  PREFIX/--prefix defaults to sys.prefix
+
+# verify that all necessary runtime dependencies are available. This appends
+# ./tahoe-deps, ../tahoe-deps, and ./support/lib/python%d.%d/site-packages to
+# sys.path while running.
+check-deps:
+	$(PYTHON) setup.py check_deps
+#$(PYTHON) misc/build_helpers/check-deps.py
+
 # setup.py will extend sys.path to include our support/lib/... directory
 # itself. It will also create it in the beginning of the 'develop' command.
 
 PP=$(shell $(PYTHON) setup.py -q show_pythonpath)
 RUNPP=$(PYTHON) setup.py run_with_pythonpath
 
-.PHONY: make-version build
+.PHONY: update-version
 
-# The 'darcsver' setup.py command comes in the 'darcsver' package:
-# http://pypi.python.org/pypi/darcsver It is necessary only if you want to
-# automatically produce a new _version.py file from the current darcs history.
-make-version:
-	$(PYTHON) ./setup.py darcsver --count-all-patches
+# The get-version.py tool emits a short version string to stdout. When run
+# with --write-version.py, this will emit a small python module which defines
+# a "version" variable (a string). You should do this after a checkout and
+# write the results into src/allmydata/_version.py , where the "tahoe
+# --version" CLI command (and the HTTP Welcome Page) will read it,
 
-# We want src/allmydata/_version.py to be up-to-date, but it's a fairly
-# expensive operation (about 6 seconds on a just-before-0.7.0 tree, probably
-# because of the 332 patches since the last tag), and we've removed the need
-# for an explicit 'build' step by removing the C code from src/allmydata and
-# by running everything in place. It would be neat to do:
-#
-#src/allmydata/_version.py: _darcs/patches
-#	$(MAKE) make-version
-#
-# since that would update the embedded version string each time new darcs
-# patches were pulled, but without an obligatory 'build' step this rule
-# wouldn't be run frequently enough anyways.
-#
-# So instead, I'll just make sure that we update the version at least once
-# when we first start using the tree, and again whenever an explicit
-# 'make-version' is run, since then at least the developer has some means to
-# update things. It would be nice if 'make clean' deleted any
-# automatically-generated _version.py too, so that 'make clean; make all'
-# could be useable as a "what the heck is going on, get me back to a clean
-# state', but we need 'make clean' to work on non-darcs trees without
-# destroying useful information.
+# Source tarballs will come with a pre-generated _version.py . If you run
+# from a git tree, you should re-run "update-version" after each update, so
+# that the embedded version does not get out of date.
 
-.built:
-	$(MAKE) build
+update-version:
+	$(PYTHON) misc/build_helpers/get-version.py --write-version.py >src/allmydata/_version.py
 
 src/allmydata/_version.py:
-	$(MAKE) make-version
+	$(MAKE) update-version
 
-# c.f. ticket #455, there is a problem in the intersection of setuptools,
-# twisted's setup.py, and nevow's setup.py . A Tahoe build, to satisfy its
-# dependencies, may try to build both Twisted and Nevow. If both of these
-# occur during the same invocation of 'setup.py develop', then the Nevow
-# build will fail with an "ImportError: No module named components". Running
-# the build a second time will succeed. Until there is a new version of
-# setuptools which properly sandboxes sys.modules (or a new version of nevow
-# which doesn't import twisted during its build, or a new version of twisted
-# which doesn't import itself during its build), we just build tahoe twice
-# and ignore the errors from the first pass. Updated 16-Sep-2008: now we need
-# three invocations.
-
-build: src/allmydata/_version.py
-	$(PYTHON) setup.py build
-	touch .built
-
-# 'make install' will do the following:
-#   build+install tahoe (probably to /usr/lib/pythonN.N/site-packages)
-# 'make install PREFIX=/usr/local/stow/tahoe-N.N' will do the same, but to
-# a different location
+# 'make clean' should not delete _version.py (because we might be running
+# from a tarball, without a way to regenerate it), but it should arrange for
+# the next command (which command??) to try to rebuild it.
 
 install: src/allmydata/_version.py
 ifdef PREFIX
 	mkdir -p $(PREFIX)
-	$(PYTHON) ./setup.py install --single-version-externally-managed \
-           --prefix=$(PREFIX) --record=./tahoe.files
+	$(PYTHON) ./setup.py install --prefix=$(PREFIX)
 else
-	$(PYTHON) ./setup.py install --single-version-externally-managed
+	$(PYTHON) ./setup.py install
 endif
 
 
