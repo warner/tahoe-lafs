@@ -34,7 +34,8 @@ check-deps:
 # itself. It will also create it in the beginning of the 'develop' command.
 
 PP=$(shell $(PYTHON) setup.py -q show_pythonpath)
-RUNPP=$(PYTHON) setup.py run_with_pythonpath
+#RUNPP=$(PYTHON) setup.py run_with_pythonpath
+RUNPP=$(PYTHON) misc/build_helpers/run-with-pythonpath.py
 
 .PHONY: update-version
 
@@ -69,23 +70,11 @@ endif
 
 # TESTING
 
-.PHONY: signal-error-deps test test-coverage quicktest quicktest-coverage
-.PHONY: coverage-output get-old-coverage-coverage coverage-delta-output
-
-
-signal-error-deps:
-	@echo
-	@echo
-	@echo "ERROR: Not all of Tahoe's dependencies are in place.  Please see docs/install.html for help on installing dependencies."
-	@echo
-	@echo
-	exit 1
-
-check-auto-deps:
-	$(PYTHON) setup.py -q check_auto_deps || $(MAKE) signal-error-deps
+.PHONY: test test-coverage quicktest quicktest-coverage
+.PHONY: coverage-output
 
 .checked-deps:
-	$(MAKE) check-auto-deps
+	$(MAKE) check-deps
 	touch .checked-deps
 
 # you can use 'make test TEST=allmydata.test.test_introducer' to run just
@@ -96,18 +85,21 @@ TEST=allmydata
 # use 'make test TRIALARGS=--reporter=bwverbose' from buildbot, to
 # suppress the ansi color sequences
 
-test: build src/allmydata/_version.py
-	$(PYTHON) setup.py test $(TRIALARGS) -s $(TEST)
+# 'test' always updates the version and tests for dependencies before running
+# anything. These extra steps only take a second or two. It only runs the
+# full test suite. For more control, use 'quicktest'.
+test: check-deps update-version
+	$(MAKE) quicktest
 
-fuse-test: .built .checked-deps
+fuse-test: check-deps
 	$(RUNPP) -d contrib/fuse -p -c runtests.py
 
-test-coverage: build src/allmydata/_version.py
+test-coverage: check-deps update-version
 	rm -f .coverage
 	$(PYTHON) setup.py trial --reporter=bwverbose-coverage -s $(TEST)
 
 quicktest:
-	$(PYTHON) misc/build_helpers/run-with-pythonpath.py trial $(TRIALARGS) $(TEST)
+	$(RUNPP) trial $(TRIALARGS) $(TEST)
 
 # code-coverage: install the "coverage" package from PyPI, do "make
 # quicktest-coverage" to do a unit test run with coverage-gathering enabled,
@@ -117,7 +109,7 @@ quicktest:
 
 quicktest-coverage:
 	rm -f .coverage
-	$(PYTHON) misc/build_helpers/run-with-pythonpath.py trial --reporter=bwverbose-coverage $(TEST)
+	$(RUNPP) trial --reporter=bwverbose-coverage $(TEST)
 # on my laptop, "quicktest" takes 239s, "quicktest-coverage" takes 304s
 
 coverage-output:
@@ -125,17 +117,6 @@ coverage-output:
 	coverage html -i -d coverage-html $(COVERAGE_OMIT)
 	cp .coverage coverage-html/coverage.data
 	@echo "now point your browser at coverage-html/index.html"
-
-## use these two targets to compare this coverage against the previous run.
-## The deltas only work if the old test was run in the same directory, since
-## it compares absolute filenames.
-#get-old-figleaf-coverage:
-#	wget --progress=dot -O old.figleaf http://allmydata.org/tahoe-figleaf/current/figleaf.pickle
-#
-#figleaf-delta-output:
-#	$(RUNPP) -p -c "misc/figleaf2html -d coverage-html -r src -x misc/figleaf.excludes -o old.figleaf"
-#	cp .figleaf coverage-html/figleaf.pickle
-#	@echo "now point your browser at coverage-html/index.html"
 
 .PHONY: upload-coverage .coverage.el pyflakes count-lines
 .PHONY: check-memory check-memory-once check-speed check-grid

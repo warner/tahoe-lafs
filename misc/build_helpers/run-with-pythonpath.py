@@ -1,43 +1,35 @@
-# -*- python -*-
-# you must invoke this with an explicit python, from the tree root
+#!/usr/bin/env python
 
 """Run an arbitrary command with a PYTHONPATH that will include the Tahoe
 code, including dependent libraries. Run this like:
 
  python misc/build_helpers/run-with-pythonpath.py python foo.py
+  or
+ python misc/build_helpers/run-with-pythonpath.py trial --reporter=bwverbose allmydata.test.test_cli
+
+Note that $PATH will be searched for the command being executed ('python' and
+'trial' in these examples), and will use the first one found. To execute
+foo.py with a non-default python, use a distinct command name or an absolute
+path:
+
+ python2.6 misc/build_helpers/run-with-pythonpath.py python2.6 foo.py
+ /usr/bin/python2.6 misc/build_helpers/run-with-pythonpath.py /usr/bin/python2.6 foo.py
+
 """
 
 import os, sys, subprocess
 
-# figure out where support/lib/pythonX.X/site-packages is
-# add it to os.environ["PYTHONPATH"]
-# spawn the child process
+assert os.path.exists("Tahoe.home") # must run from source tree root
 
+# import the add_and_reexec() function from bin/tahoe
+scope = {}
+execfile("bin/tahoe", scope)
+scope["add_and_reexec"]("misc/build_helpers/run-with-pythonpath.py")
+# beyond here, if we're running from a source tree, then PYTHONPATH (and
+# sys.path) will always have our source directory (TREE/src) at the front,
+# and our tree-local dependency directories at the back
+# (TREE/support/lib/pythonX.Y/site-packages, TREE/tahoe-deps,
+# TREE/../tahoe-deps).
 
-def pylibdir(prefixdir):
-    pyver = "python%d.%d" % (sys.version_info[:2])
-    if sys.platform == "win32":
-        return os.path.join(prefixdir, "Lib", "site-packages")
-    else:
-        return os.path.join(prefixdir, "lib", pyver, "site-packages")
-
-basedir = os.path.dirname(os.path.abspath(__file__))
-supportlib = pylibdir(os.path.abspath("support"))
-
-oldpp = os.environ.get("PYTHONPATH", "").split(os.pathsep)
-if oldpp == [""]:
-    # grr silly split() behavior
-    oldpp = []
-newpp = os.pathsep.join(oldpp + [supportlib,])
-os.environ['PYTHONPATH'] = newpp
-
-from twisted.python.procutils import which
-cmd = sys.argv[1]
-if cmd and cmd[0] not in "/~.":
-    cmds = which(cmd)
-    if not cmds:
-        print >>sys.stderr, "'%s' not found on PATH" % (cmd,)
-        sys.exit(-1)
-    cmd = cmds[0]
-
-os.execve(cmd, sys.argv[1:], os.environ)
+command = sys.argv[1:]
+os.execvp(command[0], command)
