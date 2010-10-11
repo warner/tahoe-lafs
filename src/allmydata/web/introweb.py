@@ -5,7 +5,7 @@ from foolscap.api import SturdyRef
 from twisted.internet import address
 import allmydata
 import simplejson
-from allmydata import get_package_versions_string
+from allmydata.util.versionutil import get_package_versions_string
 from allmydata.util import idlib
 from allmydata.web.common import getxmlfile, get_arg
 

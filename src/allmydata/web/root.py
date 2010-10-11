@@ -9,7 +9,7 @@ from nevow.util import resource_filename
 from formless import webform
 
 import allmydata # to display import path
-from allmydata import get_package_versions_string
+from allmydata.util.versionutil import get_package_versions_string
 from allmydata import provisioning
 from allmydata.util import idlib, log
 from allmydata.interfaces import IFileNode
