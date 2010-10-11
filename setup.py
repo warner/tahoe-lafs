@@ -4,6 +4,18 @@ import os, sys, subprocess, re
 from distutils.core import setup, Command
 from distutils.command.sdist import sdist as _sdist
 
+assert os.path.exists("Tahoe.home") # must run from source tree
+
+# import the add_and_reexec() function from bin/tahoe
+scope = {}
+execfile("bin/tahoe", scope)
+scope["add_and_reexec"]("setup.py")
+# beyond here, if we're running from a source tree, then PYTHONPATH (and
+# sys.path) will always have our source directory (TREE/src) at the front,
+# and our tree-local dependency directories at the back
+# (TREE/support/lib/pythonX.Y/site-packages, TREE/tahoe-deps,
+# TREE/../tahoe-deps).
+
 VERSION_PY = """
 # This file is originally generated from Git information by running
 # 'setup.py update-version'. Distribution tarballs contain a pre-generated

@@ -1,72 +1,9 @@
 #! /usr/bin/env python
 
-import os, sys, textwrap
+import sys, textwrap
 
-# Manipulating sys.path from inside the program is insufficient in the face
-# of .eggs, since they aren't really native to Python. The .pth files that
-# easy_install/setuptools generates to make them be recognized are only
-# interpreted when found via PYTHONPATH, before we get control. So, when
-# necessary, we just add the appropriate directories to PYTHONPATH and then
-# re-exec ourselves.
-
-# It would be interesting to see what Trac does, because you can drop an egg
-# into a Trac project's plugins/ directory (without a .pth file) and it will
-# be loaded.
-
-def add_and_reexec(me_path):
-    me = os.path.realpath(sys.argv[0]) # handle symlinks to us
-    home = me
-    # TODO: this split might get confused on windows with "C:\\" stuff
-    for i in range(len(me_path.split(os.sep))):
-        home = os.path.dirname(home)
-    if not os.path.exists(os.path.join(home, "Tahoe.home")):
-        # we're not running from a source tree, so there are no paths to add
-        return
-
-    # we *are* running from a source tree, so we should add paths for the
-    # Tahoe source and our dependencies. Compute the directories we want to
-    # see in sys.path, starting with the Tahoe source.
-
-    oldpaths = set([os.path.normpath(p) for p in sys.path])
-    add_prefix = []
-    add_suffix = []
-
-    tahoe = os.path.normpath(os.path.join(home, "src"))
-    if tahoe not in oldpaths:
-        #print "adding tahoe", tahoe
-        add_prefix.append(tahoe)
-
-    # now directories for our dependencies
-    pyver = "python%d.%d" % (sys.version_info[0], sys.version_info[1])
-    deps = [os.path.normpath(os.path.join(home, dep))
-            for dep in ["tahoe-deps",
-                        "../tahoe-deps",
-                        "support/lib/%s/site-packages" % pyver]
-            ]
-    for path in deps:
-        if path not in oldpaths:
-            add_suffix.append(path)
-    if not add_prefix and not add_suffix:
-        # nothing to add
-        return
-
-    # we need to add some paths to PYTHONPATH and restart
-    if "TAHOE_REEXEC_PREVENTER" in os.environ:
-        # failsafe
-        print >>sys.stderr, "Uh-oh, reexec is stuck in a loop."
-        print >>sys.stderr, "sys.path:", sys.path
-        print >>sys.stderr, "$PYTHONPATH:", os.environ.get("PYTHONPATH")
-        sys.exit(1)
-    os.environ["TAHOE_REEXEC_PREVENTER"] = "1"
-    oldpp = []
-    if "PYTHONPATH" in os.environ:
-        oldpp = os.environ["PYTHONPATH"].split(os.pathsep)
-    os.environ["PYTHONPATH"] = os.pathsep.join(add_prefix + oldpp + add_suffix)
-    #print "REEXECing to add", add_prefix, add_suffix
-    os.execve(sys.executable, [sys.executable, me] + sys.argv[1:], os.environ)
-    # os.execve does not return
-
-add_and_reexec("misc/build_helpers/check-deps.py")
+# this must be run from setup.py, which provides a $PYTHONPATH that includes
+# our dependencies
 
 def to_int(x):
     try:
@@ -75,9 +12,10 @@ def to_int(x):
         return x
 
 class Checker:
-    def __init__(self):
+    def __init__(self, verbose):
         self.ok = True
         self.instructions = {}
+        self.verbose = verbose
 
     def at_least(self, name, v, required):
         # start with simple dotted-decimal
@@ -112,6 +50,8 @@ class Checker:
             print "%s (%s) is too old: we want at least %s" % (name, version,
                                                                required)
             return self.fail(name, instructions)
+        if self.verbose:
+            print " %s: %s" % (name, str(version))
         return version
 
     def exit(self):
@@ -133,7 +73,10 @@ add three directories from its source tree to PYTHONPATH:
 support/lib/pythonX.Y/site-packages, ./tahoe-deps, and ../tahoe-deps .
 """
 
-c = Checker()
+verbose = False
+if len(sys.argv) > 1 and sys.argv[1] in ("-v", "--verbose"):
+    verbose = True
+c = Checker(verbose)
 
 # we want python-2.5 or newer to get sqlite
 # we want python-2.6 or newer to get json

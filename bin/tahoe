@@ -66,6 +66,7 @@ def add_and_reexec(me_path):
     os.execve(sys.executable, [sys.executable, me] + sys.argv[1:], os.environ)
     # os.execve does not return
 
-add_and_reexec("bin/tahoe")
-from allmydata.scripts.runner import run
-run()
+if __name__ == '__main__':
+    add_and_reexec("bin/tahoe")
+    from allmydata.scripts.runner import run
+    run()
