@@ -1,7 +1,7 @@
 
 import os, platform, re, subprocess, sys
 
-from allmydata import __version__, __appname__
+from allmydata import __appname__
 
 _distributor_id_cmdline_re = re.compile("(?:Distributor ID:)\s*(.*)", re.I)
 _release_cmdline_re = re.compile("(?:Release:)\s*(.*)", re.I)

@@ -3,7 +3,6 @@ import os, sys
 from allmydata.scripts.common import BasedirMixin, BaseOptions
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, argv_to_unicode, quote_output
-import allmydata
 
 class CreateClientOptions(BasedirMixin, BaseOptions):
     optParameters = [
