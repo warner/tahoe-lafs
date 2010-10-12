@@ -6,3 +6,4 @@
 /.checked-deps
 /.coverage
 /.coverage.el
+/coverage-html

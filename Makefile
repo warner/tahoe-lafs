@@ -109,7 +109,8 @@ quicktest-coverage:
 	rm -f .coverage
 	$(PYTHON) setup.py test --reporter=bwverbose-coverage $(TRIALARGS) -t $(TEST)
 
-# quicktest: 690ms. setup.py test: 670ms.
+# quicktest (one fast test): 690ms. setup.py test: 670ms.
+# test (deps+version+test): 1.56s
 
 # code-coverage: install the "coverage" package from PyPI, do "make
 # quicktest-coverage" to do a unit test run with coverage-gathering enabled,
