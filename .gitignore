@@ -3,3 +3,5 @@
 /support
 /_trial_temp.lock
 /_trial_temp
+/.checked-deps
+/.coverage
