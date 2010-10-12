@@ -7,3 +7,4 @@
 /.coverage
 /.coverage.el
 /coverage-html
+/_test_memory

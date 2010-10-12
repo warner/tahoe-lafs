@@ -30,6 +30,7 @@ export PYTHON
 # sys.path while running.
 check-deps:
 	$(PYTHON) setup.py check_deps
+	touch .checked-deps
 
 build-deps:
 	$(PYTHON) setup.py build_deps
@@ -79,7 +80,6 @@ endif
 
 .checked-deps:
 	$(MAKE) check-deps
-	touch .checked-deps
 
 # you can use 'make test TEST=allmydata.test.test_introducer' to run just
 # test_introducer. TEST=allmydata.test.test_client.Basic.test_permute works
@@ -168,19 +168,19 @@ count-lines:
 	@echo -n "TODO: "
 	@grep TODO `find src -name '*.py' |grep -v /build/` | wc --lines
 
-check-memory: .built
+check-memory: .checked-deps
 	rm -rf _test_memory
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py upload"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py upload-self"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py upload-POST"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py download"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py download-GET"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py download-GET-slow"
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py receive"
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py upload
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py upload-self
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py upload-POST
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py download
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py download-GET
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py download-GET-slow
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py receive
 
-check-memory-once: .built
+check-memory-once: .checked-deps
 	rm -rf _test_memory
-	$(RUNPP) -p -c "src/allmydata/test/check_memory.py $(MODE)"
+	$(RUNPP) $(PYTHON) src/allmydata/test/check_memory.py $(MODE)
 
 # The check-speed target uses a pre-established client node to run a canned
 # set of performance tests against a test network that is also
