@@ -54,7 +54,7 @@ RUNPP=$(PYTHON) misc/build_helpers/run-with-pythonpath.py
 # that the embedded version does not get out of date.
 
 update-version:
-	$(PYTHON) misc/build_helpers/get-version.py --write-version.py >src/allmydata/_version.py
+	$(PYTHON) setup.py update_version
 
 src/allmydata/_version.py:
 	$(MAKE) update-version
@@ -100,10 +100,16 @@ fuse-test: check-deps
 
 test-coverage: check-deps update-version
 	rm -f .coverage
-	$(PYTHON) setup.py trial --reporter=bwverbose-coverage -s $(TEST)
+	$(PYTHON) setup.py test --reporter=bwverbose-coverage -t $(TEST)
 
 quicktest:
-	$(RUNPP) trial $(TRIALARGS) $(TEST)
+	$(PYTHON) setup.py test $(TRIALARGS) -t $(TEST)
+
+quicktest-coverage:
+	rm -f .coverage
+	$(PYTHON) setup.py test --reporter=bwverbose-coverage $(TRIALARGS) -t $(TEST)
+
+# quicktest: 690ms. setup.py test: 670ms.
 
 # code-coverage: install the "coverage" package from PyPI, do "make
 # quicktest-coverage" to do a unit test run with coverage-gathering enabled,
@@ -111,9 +117,6 @@ quicktest:
 # coverage-output" for a pretty HTML report. Also see "make .coverage.el" and
 # misc/coding_tools/coverage.el for emacs integration.
 
-quicktest-coverage:
-	rm -f .coverage
-	$(RUNPP) trial --reporter=bwverbose-coverage $(TEST)
 # on my laptop, "quicktest" takes 239s, "quicktest-coverage" takes 304s
 
 coverage-output:
