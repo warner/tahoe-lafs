@@ -1377,13 +1377,13 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
         return d
     def _test_control2(self, rref, filename):
         d = rref.callRemote("upload_from_file_to_uri",
-                            filename.encode(get_filesystem_encoding()), convergence=None)
-        downfile = os.path.join(self.basedir, "control.downfile").encode(get_filesystem_encoding())
+                            unicode(filename), convergence=None)
+        downfile = os.path.join(self.basedir, "control.downfile")
         d.addCallback(lambda uri:
                       rref.callRemote("download_from_uri_to_file",
-                                      uri, downfile))
+                                      uri, unicode(downfile)))
         def _check(res):
-            self.failUnlessEqual(res, downfile)
+            self.failUnlessEqual(res, unicode(downfile))
             data = open(downfile, "r").read()
             expected_data = open(filename, "r").read()
             self.failUnlessEqual(data, expected_data)

@@ -2247,7 +2247,7 @@ class RIControlClient(RemoteInterface):
         """Download a file from the grid, placing it on the node's local disk
         at the given filename (which must be absolute[?]). Returns the
         absolute filename where the file was written."""
-        return str
+        return unicode
 
     # debug stuff
 
