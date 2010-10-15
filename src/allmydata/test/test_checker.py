@@ -56,8 +56,8 @@ class WebResultsRendering(unittest.TestCase, WebRenderingMixin):
                               html)
         d.addCallback(_check_return_to)
         d.addCallback(lambda ignored: self.render_json(lcr))
-        def _check_json(json):
-            j = json.loads(json)
+        def _check_json(data):
+            j = json.loads(data)
             self.failUnlessEqual(j["storage-index"], "")
             self.failUnlessEqual(j["results"]["healthy"], True)
         d.addCallback(_check_json)

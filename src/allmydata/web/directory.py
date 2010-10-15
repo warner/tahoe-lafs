@@ -848,8 +848,7 @@ def DirectoryJSONMetadata(ctx, dirnode):
             contents['verify_uri'] = verifycap.to_string()
         contents['mutable'] = dirnode.is_mutable()
         data = ("dirnode", contents)
-        json = json.dumps(data, indent=1) + "\n"
-        return json
+        return json.dumps(data, indent=1) + "\n"
     d.addCallback(_got)
     d.addCallback(text_plain, ctx)
     return d
