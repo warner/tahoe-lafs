@@ -145,12 +145,6 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, SkipMixin):
 
     def test_version_no_noise(self):
         self.skip_if_cannot_run_bintahoe()
-        import pkg_resources
-        try:
-            pkg_resources.require("Twisted>=9.0.0")
-        except pkg_resources.VersionConflict:
-            raise unittest.SkipTest("We pass this test only with Twisted >= v9.0.0")
-
         d = utils.getProcessOutputAndValue(bintahoe, args=["--version"], env=os.environ)
         def _cb(res):
             out, err, rc_or_sig = res
@@ -404,11 +398,6 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
 
     def test_client_no_noise(self):
         self.skip_if_cannot_daemonize()
-        import pkg_resources
-        try:
-            pkg_resources.require("Twisted>=9.0.0")
-        except pkg_resources.VersionConflict:
-            raise unittest.SkipTest("We pass this test only with Twisted >= v9.0.0")
         basedir = self.workdir("test_client_no_noise")
         c1 = os.path.join(basedir, "c1")
         HOTLINE_FILE = os.path.join(c1, "suicide_prevention_hotline")
