@@ -1,6 +1,6 @@
 
 import urllib
-import simplejson
+import json
 from twisted.protocols.basic import LineOnlyReceiver
 from allmydata.scripts.common import get_alias, DEFAULT_ALIAS, escape_path, \
                                      UnknownAliasError
@@ -50,7 +50,7 @@ def check(options):
         stdout.write(jdata)
         stdout.write("\n")
         return 0
-    data = simplejson.loads(jdata)
+    data = json.loads(jdata)
 
     if options["repair"]:
         # show repair status
@@ -120,7 +120,7 @@ class DeepCheckOutput(LineOnlyReceiver):
             print >>self.stderr, quote_output(line, quotemarks=False)
             return
 
-        d = simplejson.loads(line)
+        d = json.loads(line)
         stdout = self.stdout
         if d["type"] not in ("file", "directory"):
             return
@@ -181,7 +181,7 @@ class DeepCheckAndRepairOutput(LineOnlyReceiver):
             print >>self.stderr, quote_output(line, quotemarks=False)
             return
 
-        d = simplejson.loads(line)
+        d = json.loads(line)
         stdout = self.stdout
         if d["type"] not in ("file", "directory"):
             return

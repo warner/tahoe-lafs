@@ -3,7 +3,7 @@ import os.path
 from twisted.trial import unittest
 from cStringIO import StringIO
 import urllib, re
-import simplejson
+import json
 
 from allmydata.util import fileutil, hashutil, base32
 from allmydata import uri
@@ -1989,7 +1989,7 @@ class Check(GridTestMixin, CLITestMixin, unittest.TestCase):
         def _check2((rc, out, err)):
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
-            data = simplejson.loads(out)
+            data = json.loads(out)
             self.failUnlessReallyEqual(to_str(data["summary"]), "Healthy")
         d.addCallback(_check2)
 
@@ -2181,7 +2181,7 @@ class Check(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
             lines = out.splitlines()
-            units = [simplejson.loads(line) for line in lines]
+            units = [json.loads(line) for line in lines]
             # root, small, g\u00F6\u00F6d, mutable,  stats
             self.failUnlessReallyEqual(len(units), 4+1)
         d.addCallback(_check5)

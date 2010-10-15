@@ -1,6 +1,6 @@
 
 import time, pprint, itertools
-import simplejson
+import json
 from twisted.internet import defer
 from nevow import rend, inevow, tags as T
 from allmydata.util import base32, idlib
@@ -377,7 +377,7 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
         data["requests"] = request_events
         data["segment"] = self.download_status.segment_events
         data["read"] = self.download_status.read_events
-        return simplejson.dumps(data, indent=1) + "\n"
+        return json.dumps(data, indent=1) + "\n"
 
     def render_events(self, ctx, data):
         if not self.download_status.storage_index:
@@ -918,7 +918,7 @@ class Status(rend.Page):
                                "progress": s.get_progress(),
                                })
 
-        return simplejson.dumps(data, indent=1) + "\n"
+        return json.dumps(data, indent=1) + "\n"
 
     def _get_all_statuses(self):
         h = self.history
@@ -1053,8 +1053,8 @@ class HelperStatus(rend.Page):
         req.setHeader("content-type", "text/plain")
         if self.helper:
             stats = self.helper.get_stats()
-            return simplejson.dumps(stats, indent=1) + "\n"
-        return simplejson.dumps({}) + "\n"
+            return json.dumps(stats, indent=1) + "\n"
+        return json.dumps({}) + "\n"
 
     def render_active_uploads(self, ctx, data):
         return data["chk_upload_helper.active_uploads"]
@@ -1096,7 +1096,7 @@ class Statistics(rend.Page):
         if t == "json":
             stats = self.provider.get_stats()
             req.setHeader("content-type", "text/plain")
-            return simplejson.dumps(stats, indent=1) + "\n"
+            return json.dumps(stats, indent=1) + "\n"
         return rend.Page.renderHTTP(self, ctx)
 
     def data_get_stats(self, ctx, data):

@@ -1,5 +1,5 @@
 
-import simplejson
+import json
 from twisted.web import http, server
 from twisted.python import log
 from zope.interface import Interface
@@ -64,7 +64,7 @@ def convert_children_json(nodemaker, children_json):
     t=mkdir-with-children and t=mkdir-immutable"""
     children = {}
     if children_json:
-        data = simplejson.loads(children_json)
+        data = json.loads(children_json)
         for (namex, (ctype, propdict)) in data.iteritems():
             namex = unicode(namex)
             writecap = to_str(propdict.get("rw_uri"))

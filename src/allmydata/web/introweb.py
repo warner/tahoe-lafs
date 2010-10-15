@@ -4,7 +4,7 @@ from nevow import rend, inevow
 from foolscap.api import SturdyRef
 from twisted.internet import address
 import allmydata
-import simplejson
+import json
 from allmydata.util.versionutil import get_package_versions_string
 from allmydata.util import idlib
 from allmydata.web.common import getxmlfile, get_arg
@@ -62,7 +62,7 @@ class IntroducerRoot(rend.Page):
                                in service_hosts.iteritems()])
         res["announcement_distinct_hosts"] = distinct_hosts
 
-        return simplejson.dumps(res, indent=1) + "\n"
+        return json.dumps(res, indent=1) + "\n"
 
     # FIXME: This code is duplicated in root.py and introweb.py.
     def data_version(self, ctx, data):

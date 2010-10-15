@@ -113,7 +113,7 @@ def get_package_versions_and_locations():
     # (Python and platform, and sqlite3 if you are on Python >= 2.5), and
     # because setuptools might fail to find something even though import
     # finds it:
-    import OpenSSL, allmydata, foolscap.api, nevow, platform, pycryptopp, setuptools, simplejson, twisted, zfec, zope.interface
+    import OpenSSL, allmydata, foolscap.api, nevow, platform, pycryptopp, setuptools, json, twisted, zfec, zope.interface
     pysqlitever = None
     pysqlitefile = None
     sqlitever = None
@@ -140,7 +140,7 @@ def get_package_versions_and_locations():
         'Nevow': (nevow.__version__, package_dir(nevow.__file__)),
         'pycryptopp': (pycryptopp.__version__, package_dir(pycryptopp.__file__)),
         'setuptools': (setuptools.__version__, package_dir(setuptools.__file__)),
-        'simplejson': (simplejson.__version__, package_dir(simplejson.__file__)),
+        'json': (json.__version__, package_dir(json.__file__)),
         'pysqlite': (pysqlitever, pysqlitefile),
         'sqlite': (sqlitever, 'unknown'),
         'zope.interface': ('unknown', package_dir(zope.interface.__file__)),
