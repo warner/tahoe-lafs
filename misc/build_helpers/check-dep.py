@@ -29,13 +29,18 @@ def check(name, import_code, version_code=None, required=None):
         print " %s: MISSING" % name
         print "  ", e
         sys.exit(1)
-    if required is None:
+    if version_code is None:
+        print " %s: present" % name
         return
     try:
         version = eval(version_code, scope)
     except:
         print " %s: ERROR" % name
         raise
+
+    if required is None:
+        print " %s: %s" % (name, version)
+        return version
 
     # start with simple dotted-decimal
     v_bits = tuple([to_int(x) for x in str(version).split(".")])
@@ -102,8 +107,9 @@ elif name == "pycrypto":
     else:
         at_least("pycrypto", v, "2.3")
 elif name == "pyasn1":
-    # pyasn1 is needed by twisted.conch in Twisted >= 9.0
-    check("pyasn1", "import pyasn1", "pyasn1.__version__", "0.0.8a")
+    # pyasn1 is needed by twisted.conch in Twisted >= 9.0 . We want 0.0.8a,
+    # but pyasn1.majorVersionId is all the introspection it offers.
+    check("pyasn1", "import pyasn1", None, None)
 elif name == "windmill":
     check("windmill", "import windmill", "windmill.__version__", minver)
 elif name == "pycryptopp":

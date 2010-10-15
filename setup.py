@@ -123,8 +123,8 @@ DEPS = [
     D("json", "1.9", None), # in py2.6.1
 
     # needed for SFTP
-    #D("pycrypto", "?", "pycrypto-2.3.tar.bz2"),
-    #D("pyasn1", "0.0.8a", "pyasn1-0.0.11a.tar.bz2"),
+    D("pycrypto", "2.3", "pycrypto-2.3.tar.bz2", uses_setuptools=False), # version??
+    D("pyasn1", "0.0.8a", "pyasn1-0.0.11a.tar.bz2"),
 
     # ticket #1001 webapp testing
     #D("windmill", "1.3", None),
