@@ -78,6 +78,85 @@ class UpdateVersion(Command):
         update_version_py()
         print "Version is now", get_version_from_verfile()
 
+# this is what we depend upon, recursively. Each element is a tuple of:
+#  (name, min_version, tarball_filename)
+
+class D:
+    def __init__(self, name, minver, tarball, uses_setuptools=True):
+        self.name = name
+        self.minver = minver
+        self.tarball = tarball
+        self.uses_setuptools = uses_setuptools
+
+DEPS = [
+    # we want python-2.5 or newer to get sqlite
+    # we want python-2.6 or newer to get json
+    D("python", "2.6", None),
+
+    # zooko's packages need these
+    D("darcsver", "1.2.0", "darcsver-1.6.3.tar.gz"),
+    D("setuptools_darcs", "1.1.0", "setuptools_darcs-1.2.11.tar.bz2"),
+    D("setuptools_trial", "0.5", "setuptools_trial-0.5.10.tar.gz"),
+    D("zbase32", "1.0", "zbase32-1.1.2.tar.gz"),
+
+    D("pyutil", "1.3.19", "pyutil-1.7.12.tar.bz2"), # setuptools-trial
+    D("argparse", "0.8", "argparse-1.1.tar.bz2", uses_setuptools=False),
+    D("zfec", "1.1.0", "zfec-1.4.7.tar.bz2"), # darcsver, setuptools_darcs, argparse, pyutil
+    D("twisted", "2.4.0", "Twisted-10.1.0.tar.bz2"),
+    D("zope.interface", "?", "zope.interface-3.6.1.tar.bz2"),
+    # foolscap < 0.5.1 had a performance bug which spent O(N**2) CPU for
+    # transferring large mutable files of size N.
+    D("foolscap", "0.5.1", "foolscap-0.5.1.tar.bz2"),
+    D("nevow", "0.6.0", "Nevow-0.10.0.tar.bz2"),
+
+    # non-x86ish could tolerate 0.5.14 . We want 0.5.20 to get bugfixes in
+    # SHA-256 and AES on x86/amd64.
+    D("pycryptopp", "0.5.20", "pycryptopp-0.5.25.tar.bz2"),
+
+    # sqlite: we require python >= 2.5, so it ought to be in stdlib unless
+    # this python was built badly
+    D("sqlite", "2.3.2", None), # in py2.5.5
+
+    # json: we require python >= 2.6, so it ought to be in stdlib. We can
+    # tolerate the out-of-stdlib simplejson >= 1.4 (which is in feisty), but
+    # don't here for simplicity, for now.
+    D("json", "1.9", None), # in py2.6.1
+
+    # needed for SFTP
+    #D("pycrypto", "?", "pycrypto-2.3.tar.bz2"),
+    #D("pyasn1", "0.0.8a", "pyasn1-0.0.11a.tar.bz2"),
+
+    # ticket #1001 webapp testing
+    #D("windmill", "1.3", None),
+    ]
+
+# to check whether a given dependency is installed, we spawn a new
+# misc/build_helpers/check-dep.py process (to let it re-scan PYTHONPATH and
+# to avoid tainting our own namespace). It has special code that knows how to
+# import each dependency and how to query for its version.
+
+# If the user pressed the
+# "automatically build everything for me" button, we then spawn a
+# build-dep.py process to unpack a tarball and install its contents to our
+# support/ directory.
+
+def check_dep(name, minver):
+    cmd = [sys.executable, "misc/build_helpers/check-dep.py",
+           name, minver]
+    p = subprocess.Popen(cmd)
+    rc = p.wait()
+    if rc == 0:
+        return True
+    return False
+
+def find_tarball(tarball):
+    for d in ["tahoe-deps", "../tahoe-deps"]:
+        fn = os.path.join(d, tarball)
+        print fn
+        if os.path.isfile(fn):
+            return fn
+    return None
+
 class CheckDeps(Command):
     description = "Check for all necessary python dependencies"
     user_options = []
@@ -87,6 +166,14 @@ class CheckDeps(Command):
     def finalize_options(self):
         pass
     def run(self):
+        ok = []
+        for d in DEPS:
+            ok.append(check_dep(d.name, d.minver))
+        if not all(ok):
+            print >>sys.stderr, "** some dependencies are missing **"
+            sys.exit(1)
+        sys.exit(0)
+
         os.execv(sys.executable,
                  [sys.executable, "misc/build_helpers/check-deps.py"])
 
@@ -99,9 +186,34 @@ class BuildDeps(Command):
     def finalize_options(self):
         pass
     def run(self):
-        print "build deps"
-        os.execv(sys.executable,
-                 [sys.executable, "misc/build_helpers/check-deps.py", "build"])
+        built_something = False
+        for d in DEPS:
+            if not check_dep(d.name, d.minver):
+                if not d.tarball:
+                    print "I need %s, but I don't know how to build it" % d.name
+                    sys.exit(1)
+                tarball_fn = find_tarball(d.tarball)
+                if not tarball_fn:
+                    print "I want to build %s, but I can't find a tarball" % d.name
+                    sys.exit(1)
+                cmd = [sys.executable, "misc/build_helpers/build-dep.py",
+                       d.name, tarball_fn]
+                if d.uses_setuptools:
+                    cmd.append("--setuptools")
+                print cmd
+                print "Building %s.." % tarball_fn
+                p = subprocess.Popen(cmd)
+                rc = p.wait()
+                if rc != 0:
+                    print >>sys.stderr, "unable to build %s" % d.name
+                    print >>sys.stderr, "exiting"
+                    sys.exit(1)
+                print " built %s" % d.name
+                built_something = True
+        if built_something:
+            print "all necessary dependencies built"
+        else:
+            print "nothing needed to be built. 'setup.py check_deps' should be happy now."
 
 # stripped down version of setuptools_trial
 class TrialTest(Command):

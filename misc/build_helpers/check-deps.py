@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-import sys, textwrap
+import os, sys, textwrap
 
 # this must be run from setup.py, which provides a $PYTHONPATH that includes
 # our dependencies
@@ -107,7 +107,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning,
     message="twisted.web.error.NoResource is deprecated since Twisted 9.0.  See twisted.web.resource.NoResource.",
     append=True)
 
-c.check("zfec", "import zfec", "zfec.__version__", "1.1.0")
+c.check("zfec", "import zfec", "zfec.__version__", "1.1.0", "install zfec")
+if "zfec" in c.instructions:
+    print "NEED ZFEC"
+    os.system("%s misc/build_helpers/build-dep.py zfec" % sys.executable)
+    print "DONE WITH ZFEC"
 c.check("twisted", "import twisted", "twisted.__version__", "2.4.0")
 c.check("zope.interface", "import zope.interface")
 c.check("foolscap", "import foolscap", "foolscap.__version__", "0.5.1",
