@@ -128,10 +128,12 @@ class DownloadNode:
         Note that there is no notion of a 'file pointer': each call to read()
         uses an independent offset= value."""
         # for concurrent operations: each gets its own Segmentation manager
+        # ignore overruns
         if size is None:
             size = self._verifycap.size
-        # clip size so offset+size does not go past EOF
-        size = min(size, self._verifycap.size-offset)
+        # clip size so offset+size does not go past EOF, and so size is not
+        # negative (which indicates that offset >= EOF)
+        size = max(0, min(size, self._verifycap.size-offset))
         if read_ev is None:
             read_ev = self._download_status.add_read_event(offset, size, now())
 
@@ -143,6 +145,10 @@ class DownloadNode:
             sp = self._history.stats_provider
             sp.count("downloader.files_downloaded", 1) # really read() calls
             sp.count("downloader.bytes_downloaded", size)
+        if size == 0:
+            read_ev.finished(now())
+            # no data, so no producer, so no register/unregisterProducer
+            return defer.succeed(consumer)
         s = Segmentation(self, offset, size, consumer, read_ev, lp)
         # this raises an interesting question: what segments to fetch? if
         # offset=0, always fetch the first segment, and then allow
