@@ -164,3 +164,14 @@ table.status-download-events td {
   border: 1px solid #a00;
   padding: 2px
 }
+
+span.description {
+  font-size: 80%;
+  float: left;
+  width: 50%;
+}
+
+span.invite_code {
+  font-family: monospace;
+  color: red;
+}

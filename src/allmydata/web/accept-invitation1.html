@@ -1,0 +1,36 @@
+<html>
+<head>
+<title>Tahoe-LAFS Invitation Acceptor</title>
+<link href="/tahoe_css" rel="stylesheet" type="text/css"/>
+</head>
+
+<body>
+<h1>Accept An Invitation To Join This Grid</h1>
+
+<p>Use this form to accept an "Invitation Code", to join an existing grid. If
+you are currently a member of a grid, the two grids will be merged. The
+information about who invited whom is public, and visible on your Control
+Panel's grid-membership page.</p>
+
+<form action="accept-invitation2" method="POST">
+<span>Paste their invitation code here: <span>
+<input type="text" name="invite_code" />
+
+<div>Who is inviting you?: <input type="text" name="petname" /></div>
+
+<div>
+<span class="description">This will be used as your "pet name" for the person
+inviting you. You'll see this name on your Control Panel, where you can
+measure and control how much disk space they're using on your node, and see
+how much space you're using on their node. This name is made public (so don't
+use something like "that guy Bob who I pretend to like but really I hate his
+guts"), but it is specifically for your benefit: the Control Panel will
+always make it clear when it is displaying one of your Petnames.</span>
+</div>
+
+
+
+<input type="submit" value="Join Grid" />
+</form>
+
+</body> </html>

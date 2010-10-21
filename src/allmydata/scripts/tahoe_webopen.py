@@ -1,6 +1,7 @@
 
 from allmydata.scripts.common import get_alias, DEFAULT_ALIAS, escape_path, \
                                      UnknownAliasError
+import os.path
 import urllib
 
 def webopen(options, opener=None):
@@ -21,7 +22,11 @@ def webopen(options, opener=None):
         if path:
             url += "/" + escape_path(path)
     else:
-        url = nodeurl
+        if options['private']:
+            secret = open(os.path.join(options['node-directory'],"private","control.key")).read().strip()
+            url = nodeurl + "private/" + secret + "/"
+        else:
+            url = nodeurl
     if options['info']:
         url += "?t=info"
     if not opener:

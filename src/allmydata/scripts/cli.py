@@ -404,6 +404,7 @@ class BackupOptions(FilesystemOptions):
 class WebopenOptions(FilesystemOptions):
     optFlags = [
         ("info", "i", "Open the t=info page for the file"),
+        ("private", "p", "Open the private control panel"),
         ]
     def parseArgs(self, where=''):
         self.where = argv_to_unicode(where)
@@ -413,7 +414,7 @@ class WebopenOptions(FilesystemOptions):
 
     longdesc = """Open a web browser to the contents of some file or
     directory on the grid. When run without arguments, open the Welcome
-    page."""
+    page. When run with only --private, open the Control Panel."""
 
 class ManifestOptions(FilesystemOptions):
     optFlags = [

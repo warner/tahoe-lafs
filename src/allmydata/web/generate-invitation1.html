@@ -1,0 +1,26 @@
+<html>
+<head>
+<title>Tahoe-LAFS Invitation Maker</title>
+<link href="/tahoe_css" rel="stylesheet" type="text/css"/>
+</head>
+
+<body>
+<h1>Invite Someone To Join This Grid</h1>
+
+<form action="generate-invitation2" method="POST">
+<div>Who are you inviting?: <input type="text" name="petname" /></div>
+
+<div>
+<span class="description">This will be used as your "pet name" for the
+invitee. Once they accept, you'll see this name on your Control Panel, where
+you can measure and control how much disk space they're using, and see how
+much space you're using on their node. This name is made public (so don't use
+something like "that guy Bob who I pretend to like but really I hate his
+guts"), but it is specifically for your benefit: the Control Panel will
+always make it clear when it is displaying one of your Petnames.</span>
+</div>
+
+<input type="submit" value="Generate Invitation Code" />
+</form>
+
+</body> </html>
