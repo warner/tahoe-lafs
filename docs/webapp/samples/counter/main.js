@@ -4,5 +4,5 @@ document.innerHTML = '<div>Counter: <span id="counter">?</span>'
 var counter = 0;
 function count() {
     counter += 1;
-    document.getElementById("counter").HTML='<span id="counter">'+counter+'</span>';
+    document.getElementById("counter").innerHTML = counter;
 }
