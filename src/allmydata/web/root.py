@@ -255,7 +255,14 @@ class Root(rend.Page):
         announced = server.get_announcement_time()
         announcement = server.get_announcement()
         version = announcement["my-version"]
-        service_name = announcement["service-name"]
+
+        usage_d = descriptor.get_claimed_usage()
+        def _format_usage(usage):
+            if usage is None:
+                return "?"
+            return abbreviate_size(usage)
+        usage_d.addCallback(_format_usage)
+        ctx.fillSlots("usage", usage_d) # TODO: blocks the whole page
 
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         ctx.fillSlots("connected", connected)
@@ -265,7 +272,6 @@ class Root(rend.Page):
         ctx.fillSlots("announced", time.strftime(TIME_FORMAT,
                                                  time.localtime(announced)))
         ctx.fillSlots("version", version)
-        ctx.fillSlots("service_name", service_name)
 
         return ctx.tag
 
