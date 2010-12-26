@@ -570,7 +570,11 @@ class StorageServerAndAccountant(StorageServer):
         msg_d = simplejson.loads(msg.decode("utf-8"))
         rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
         d = self.tub.getReference(rxFURL)
-        d.addCallback(lambda rx: rx.callRemote("account", account))
+        def _got_rx(rx):
+            account.connection_from(rx)
+            return rx.callRemote("account", account)
+        d.addCallback(_got_rx)
+        d.addErrback(log.err, umid="nFYfcA")
         return d
 
     def get_account(self, pubkey_s):

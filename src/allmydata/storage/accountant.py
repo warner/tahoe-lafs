@@ -1,5 +1,5 @@
 
-import os, time
+import os, time, weakref
 from twisted.application import service
 from foolscap.api import Referenceable
 
@@ -8,6 +8,8 @@ class Account(Referenceable):
         self.owner_num = owner_num
         self.server = server
         self.accountdir = accountdir
+        self.connected = False
+        self.connected_since = None
 
     def remote_get_version(self):
         return self.server.remote_get_version()
@@ -59,37 +61,28 @@ class Account(Referenceable):
 
     def _read(self, *paths):
         fn = os.path.join(self.accountdir, *paths)
-        return open(fn).read()
+        try:
+            return open(fn).read().strip()
+        except EnvironmentError:
+            return None
     def _write(self, s, *paths):
         fn = os.path.join(self.accountdir, *paths)
         tmpfn = fn + ".tmp"
         f = open(tmpfn, "w")
-        f.write(s)
+        f.write(s+"\n")
         f.close()
         os.rename(tmpfn, fn)
 
     def remote_set_nickname(self, nickname):
         if len(nickname) > 1000:
             raise ValueError("nickname too long")
-        self._write(nickname.encode("utf-8")+"\n", "nickname")
+        self._write(nickname.encode("utf-8"), "nickname")
 
     def get_nickname(self):
-        try:
-            return self._read("nickname").decode("utf-8")
-        except EnvironmentError:
-            return u""
-
-    def get_connection_status(self):
-        d = {"created": time.time() - 1000}
-        if True:
-            d["connected"] = True
-            d["since"] = time.time() - 100
-            d["from"] = "1.2.3.4"
-        else:
-            d["connected"] = False
-            d["since"] = 123
-            d["from"] = "2.3.4.5"
-        return d
+        n = self._read("nickname")
+        if n is not None:
+            return n.decode("utf-8")
+        return u""
 
     def remote_get_current_usage(self):
         return self.get_current_usage()
@@ -99,23 +92,62 @@ class Account(Referenceable):
         from random import random, randint
         return int(random() * (10**randint(1, 12)))
 
+    def connection_from(self, rx):
+        self.connected = True
+        self.connected_since = time.time()
+        rhost = rx.getPeer()
+        from twisted.internet import address
+        if isinstance(rhost, address.IPv4Address):
+            rhost_s = "%s:%d" % (rhost.host, rhost.port)
+        elif "LoopbackAddress" in str(rhost):
+            rhost_s = "loopback"
+        else:
+            rhost_s = str(rhost)
+        self._write(rhost_s, "last_connected_from")
+        rx.notifyOnDisconnect(self._disconnected)
+
+    def _disconnected(self):
+        self.connected = False
+        self.connected_since = None
+        self._write(str(int(time.time())), "last_seen")
+        self.disconnected_since = None
+
+    def get_connection_status(self):
+        # starts as: connected=False, connected_since=None,
+        #            last_connected_from=None, last_seen=None
+        # while connected: connected=True, connected_since=START,
+        #                  last_connected_from=HOST, last_seen=IGNOREME
+        # after disconnect: connected=False, connected_since=None,
+        #                   last_connected_from=HOST, last_seen=STOP
+
+        last_seen = self._read("last_seen")
+        if last_seen is not None:
+            last_seen = int(last_seen)
+        return {"connected": self.connected,
+                "connected_since": self.connected_since,
+                "last_connected_from": self._read("last_connected_from"),
+                "last_seen": last_seen,
+                "created": int(self._read("created")),
+                }
+
 class Accountant(service.MultiService):
     def __init__(self, basedir, create_if_missing):
         service.MultiService.__init__(self)
         self.accountsdir = os.path.join(basedir, "accounts")
         if not os.path.isdir(self.accountsdir):
             os.mkdir(self.accountsdir)
-            self._write_int(2, "next_ownernum")
+            self._write("2", "next_ownernum")
         self.create_if_missing = create_if_missing
+        self._active_accounts = weakref.WeakValueDictionary()
 
-    def _read_int(self, *paths):
+    def _read(self, *paths):
         fn = os.path.join(self.accountsdir, *paths)
-        return int(open(fn).read().strip())
-    def _write_int(self, num, *paths):
+        return open(fn).read().strip()
+    def _write(self, s, *paths):
         fn = os.path.join(self.accountsdir, *paths)
         tmpfn = fn + ".tmp"
         f = open(tmpfn, "w")
-        f.write("%d\n" % num)
+        f.write(s+"\n")
         f.close()
         os.rename(tmpfn, fn)
 
@@ -123,8 +155,11 @@ class Accountant(service.MultiService):
 
     def get_account(self, pubkey_vs, storage_server):
         ownernum = self.get_ownernum_by_pubkey(pubkey_vs)
-        return Account(ownernum, storage_server,
-                       os.path.join(self.accountsdir, pubkey_vs))
+        if pubkey_vs not in self._active_accounts:
+            a = Account(ownernum, storage_server,
+                        os.path.join(self.accountsdir, pubkey_vs))
+            self._active_accounts[pubkey_vs] = a
+        return self._active_accounts[pubkey_vs] # a is still alive
 
     def get_ownernum_by_pubkey(self, pubkey_vs):
         assert ("." not in pubkey_vs and "/" not in pubkey_vs)
@@ -132,11 +167,12 @@ class Accountant(service.MultiService):
         if not os.path.isdir(accountdir):
             if not self.create_if_missing:
                 return None
-            next_ownernum = self._read_int("next_ownernum")
-            self._write_int(next_ownernum+1, "next_ownernum")
+            next_ownernum = int(self._read("next_ownernum"))
+            self._write(str(next_ownernum+1), "next_ownernum")
             os.mkdir(accountdir)
-            self._write_int(next_ownernum, pubkey_vs, "ownernum")
-        ownernum = self._read_int(pubkey_vs, "ownernum")
+            self._write(str(next_ownernum), pubkey_vs, "ownernum")
+            self._write(str(int(time.time())), pubkey_vs, "created")
+        ownernum = int(self._read(pubkey_vs, "ownernum"))
         return ownernum
 
     # methods used by admin interfaces
