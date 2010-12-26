@@ -83,6 +83,37 @@
   </div>
 </div>
 
+<div class="section" id="clients">
+  <h2>All Clients</h2>
+
+  <div>
+    <table class="clients table-headings-top" n:render="sequence" n:data="clients">
+      <tr n:pattern="header">
+        <th class="nickname-and-peerid">
+            <div class="service-nickname">Nickname</div>
+            <div class="nodeid data-chars">ClientID</div></th>
+        <th>Connected?</th>
+        <th>Since</th>
+        <th>First Created</th>
+        <th>Usage (bytes)</th>
+      </tr>
+      <tr n:pattern="item" n:render="client_row">
+        <td class="nickname-and-peerid">
+          <div class="nickname"><n:slot name="nickname"/></div>
+          <div class="nodeid data-chars"><n:slot name="clientid"/></div></td>
+        <td>
+          <n:attr name="class">service-connected connected-<n:slot name="connected-bool"/></n:attr>
+          <n:slot name="connected"/>
+        </td>
+        <td class="service-since">       <n:slot name="since"/></td>
+        <td class="service-announced">   <n:slot name="created"/></td>
+        <td class="service-version">     <n:slot name="usage"/></td>
+      </tr>
+      <tr n:pattern="empty"><td>no clients!</td></tr>
+    </table>
+  </div>
+</div>
+
 <div class="section" id="other-resources">
   <h2>Other Resources</h2>
 

@@ -269,6 +269,31 @@ class Root(rend.Page):
 
         return ctx.tag
 
+    def data_clients(self, ctx, data):
+        a = self.client.get_accountant()
+        if a:
+            return a.get_all_accounts()
+        return []
+
+    def render_client_row(self, ctx, clientinfo):
+        (id,account) = clientinfo
+        c = account.get_connection_status()
+        if c["connected"]:
+            cs = "Yes: from %s" % c["from"]
+        else:
+            cs = "No: last from %s" % c["from"]
+        ctx.fillSlots("nickname", account.get_nickname())
+        ctx.fillSlots("clientid", id)
+        ctx.fillSlots("connected-bool", c["connected"])
+        ctx.fillSlots("connected", cs)
+        TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
+        ctx.fillSlots("since", time.strftime(TIME_FORMAT,
+                                             time.localtime(c["since"])))
+        ctx.fillSlots("created", time.strftime(TIME_FORMAT,
+                                               time.localtime(c["created"])))
+        ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
+        return ctx.tag
+
     def render_download_form(self, ctx, data):
         # this is a form where users can download files by URI
         form = T.form(action="uri", method="get",
