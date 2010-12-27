@@ -14,7 +14,9 @@ class Account(Referenceable):
     def remote_get_version(self):
         return self.server.remote_get_version()
     def remote_get_status(self):
-        return {"write": True, "read": True, "save": True}
+        import random
+        def maybe(): return bool(random.randint(0,1))
+        return {"write": maybe(), "read": maybe(), "save": maybe()}
     def remote_get_client_message(self):
         return {"message": "CLIENT MESSAGE WOO!"}
     # all other RIStorageServer methods should pass through to self.server

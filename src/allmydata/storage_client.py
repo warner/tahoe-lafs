@@ -31,6 +31,7 @@ the foolscap-based server implemented in src/allmydata/storage/*.py .
 
 import re, time, simplejson
 from zope.interface import implements
+from twisted.internet import defer
 from foolscap.api import eventually, Referenceable
 from allmydata.interfaces import IStorageBroker, IDisplayableServer, IServer
 from allmydata.util import log, base32
@@ -350,9 +351,15 @@ class NativeStorageServer(Referenceable):
         self._reconnector.reset()
 
     def get_claimed_usage(self):
-        if self.accounting_enabled:
+        if self.rref and self.accounting_enabled:
             return self.rref.callRemote("get_current_usage")
         return defer.succeed(None)
+
+    def get_account_status(self):
+        if self.rref and self.accounting_enabled:
+            return self.rref.callRemote("get_status")
+        # pre-accounting servers always allow everything, mostly
+        return defer.succeed({"write": True, "read": True, "save": True})
 
 class UnknownServerTypeError(Exception):
     pass

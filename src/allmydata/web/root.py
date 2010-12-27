@@ -256,13 +256,26 @@ class Root(rend.Page):
         announcement = server.get_announcement()
         version = announcement["my-version"]
 
+        status_d = descriptor.get_account_status()
+        def _format_status(status):
+            # WRS= FFF FFT FTT TTT
+            if not status.get("save",True):
+                return "deleted: all shares deleted"
+            if not status.get("read",True):
+                return "disabled: shares preserved, but no read or write"
+            if not status.get("write",True):
+                return "frozen: shares readable, but no new uploads"
+            return "normal: full read+write"
+        status_d.addCallback(_format_status)
+        ctx.fillSlots("status", status_d) # TODO: blocks the whole page
+
         usage_d = descriptor.get_claimed_usage()
         def _format_usage(usage):
             if usage is None:
                 return "?"
             return abbreviate_size(usage)
         usage_d.addCallback(_format_usage)
-        ctx.fillSlots("usage", usage_d) # TODO: blocks the whole page
+        ctx.fillSlots("usage", usage_d)
 
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         ctx.fillSlots("connected", connected)
