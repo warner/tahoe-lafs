@@ -25,3 +25,4 @@ Twisted-*.egg
 /.coverage
 /.coverage.el
 /coverage-html/
+/docs/webapp/samples/counter/twistd.log
