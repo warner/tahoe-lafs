@@ -61,6 +61,7 @@
             <div class="nodeid data-chars">PeerID</div></th>
         <th title="The server claims we are using this much space">Usage (bytes)</th>
         <th>Account Status</th>
+        <th>Server Message</th>
         <th>Connected?</th>
         <th title="Time of most recent connection or disconnection">Since</th>
         <th>First Announced</th>
@@ -72,6 +73,7 @@
           <div class="nodeid data-chars"><n:slot name="peerid"/></div></td>
         <td class="service-usage"><n:slot name="usage"/></td>
         <td class="service-account-status"><n:slot name="status"/></td>
+        <td class="server-message"><n:slot name="server_message"/></td>
         <td>
           <n:attr name="class">service-connected connected-<n:slot name="connected-bool"/></n:attr>
           <n:slot name="connected"/>

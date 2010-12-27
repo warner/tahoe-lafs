@@ -262,12 +262,28 @@ class Root(rend.Page):
             if not status.get("save",True):
                 return "deleted: all shares deleted"
             if not status.get("read",True):
-                return "disabled: shares preserved, but no read or write"
+                return "disabled: no read or write"
             if not status.get("write",True):
-                return "frozen: shares readable, but no new uploads"
+                return "frozen: read, but no write"
             return "normal: full read+write"
         status_d.addCallback(_format_status)
         ctx.fillSlots("status", status_d) # TODO: blocks the whole page
+
+        message_d = descriptor.get_server_message()
+        def _format_message(msg):
+            bits = T.span()
+            if "message" in msg:
+                bits[msg["message"]]
+            keys = set(msg.keys())
+            keys.discard("message")
+            if keys:
+                keys = sorted(keys)
+                for k in keys:
+                    bits[T.br()]
+                    bits["%s: %s" % (k, msg[k])]
+            return bits
+        message_d.addCallback(_format_message)
+        ctx.fillSlots("server_message", message_d)
 
         usage_d = descriptor.get_claimed_usage()
         def _format_usage(usage):

@@ -17,8 +17,11 @@ class Account(Referenceable):
         import random
         def maybe(): return bool(random.randint(0,1))
         return {"write": maybe(), "read": maybe(), "save": maybe()}
-    def remote_get_client_message(self):
-        return {"message": "CLIENT MESSAGE WOO!"}
+    def remote_get_account_message(self):
+        import random
+        return {"message": "free storage! %d" % random.randint(0,10),
+                "fancy": "free pony if you knew how to ask",
+                }
     # all other RIStorageServer methods should pass through to self.server
     # but add owner_num=
 

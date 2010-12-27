@@ -361,5 +361,28 @@ class NativeStorageServer(Referenceable):
         # pre-accounting servers always allow everything, mostly
         return defer.succeed({"write": True, "read": True, "save": True})
 
+    def get_server_message(self):
+        if not self.rref or not self.accounting_enabled:
+            return defer.succeed({})
+        d = self.rref.callRemote("get_account_message")
+        def _got(message):
+            # Servers use this to advertise new features to the client's
+            # user. If we recognize a feature, we should suppress the
+            # message, because we'll have other feature-specific code which
+            # knows how to call additional methods to get the correct
+            # information. If we don't recognize a feature, we should display
+            # the message, to let our user know that they could e.g. use this
+            # server if only they installed a plugin for some new payment
+            # type.
+
+            # for example, if we had code to handle a Bitcoin-based payment
+            # schme, we'd do this:
+            #if "bitcoin_v1" in message:
+            #    del message["bitcoin_v1"]
+
+            return message
+        d.addCallback(_got)
+        return d
+
 class UnknownServerTypeError(Exception):
     pass
