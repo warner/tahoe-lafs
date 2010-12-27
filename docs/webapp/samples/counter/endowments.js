@@ -3,3 +3,7 @@ function count() {
     counter += 1;
     document.getElementById("counter").innerHTML = counter;
 }
+
+var endowments = {
+    count: count
+}

@@ -26,3 +26,5 @@ Twisted-*.egg
 /.coverage.el
 /coverage-html/
 /docs/webapp/samples/counter/twistd.log
+/docs/webapp/samples/counter/output.js
+/docs/webapp/samples/counter/twistd.pid
