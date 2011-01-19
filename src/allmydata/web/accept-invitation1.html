@@ -16,9 +16,10 @@ Panel's grid-membership page.</p>
 <span>Paste their invitation code here: <span>
 <input type="text" name="invite_code" />
 
-<div>Who is inviting you?: <input type="text" name="petname" /></div>
+<hr>
 
-<div>
+<div class="inputbox">
+<span>Who is inviting you?: <input type="text" name="petname" /></span>
 <span class="description">This will be used as your "pet name" for the person
 inviting you. You'll see this name on your Control Panel, where you can
 measure and control how much disk space they're using on your node, and see
@@ -28,7 +29,15 @@ guts"), but it is specifically for your benefit: the Control Panel will
 always make it clear when it is displaying one of your Petnames.</span>
 </div>
 
+<br>
 
+<div class="inputbox">
+<span>Private Notes: <input type="textarea" name="notes" /></span>
+<span class="description">These private notes will only be seen by you.
+This is a good place to remember "really I hate his guts".</span>
+</div>
+
+<br>
 
 <input type="submit" value="Join Grid" />
 </form>

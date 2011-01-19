@@ -8,9 +8,8 @@
 <h1>Invite Someone To Join This Grid</h1>
 
 <form action="generate-invitation2" method="POST">
-<div>Who are you inviting?: <input type="text" name="petname" /></div>
-
-<div>
+<div class="inputbox">
+<span>Who are you inviting?: <input type="text" name="petname" /></span>
 <span class="description">This will be used as your "pet name" for the
 invitee. Once they accept, you'll see this name on your Control Panel, where
 you can measure and control how much disk space they're using, and see how
@@ -19,6 +18,16 @@ something like "that guy Bob who I pretend to like but really I hate his
 guts"), but it is specifically for your benefit: the Control Panel will
 always make it clear when it is displaying one of your Petnames.</span>
 </div>
+
+<br>
+
+<div class="inputbox">
+<span>Private Notes: <input type="textarea" name="notes" /></span>
+<span class="description">These private notes will only be seen by you.
+This is a good place to remember "really I hate his guts".</span>
+</div>
+
+<br>
 
 <input type="submit" value="Generate Invitation Code" />
 </form>

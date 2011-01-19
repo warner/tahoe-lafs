@@ -140,6 +140,7 @@ class InvitationMaker(Resource):
         self.client = client
     def render_POST(self, request):
         petname = get_arg(request, "petname")
+        notes = get_arg(request, "notes")
         template = contents("generate-invitation2.html")
         return template % {"invite_code": "1234",
                            "petname": html.escape(petname),
@@ -152,6 +153,7 @@ class InvitationAcceptor(Resource):
     def render_POST(self, request):
         invite_code = get_arg(request, "invite_code")
         petname = get_arg(request, "petname")
+        notes = get_arg(request, "notes")
         template = contents("accept-invitation2.html")
         return template % {"petname": html.escape(petname)}
 
