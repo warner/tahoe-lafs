@@ -1,9 +1,12 @@
 
 from zope.interface import Interface
 from foolscap.api import StringConstraint, TupleOf, SetOf, DictOf, Any, \
-    RemoteInterface
+    RemoteInterface, Referenceable
+from old import RIIntroducerSubscriberClient_v1
 FURL = StringConstraint(1000)
 
+# old introducer protocol (v1):
+#
 # Announcements are (FURL, service_name, remoteinterface_name,
 #                    nickname, my_version, oldest_supported)
 #  the (FURL, service_name, remoteinterface_name) refer to the service being
@@ -14,13 +17,17 @@ FURL = StringConstraint(1000)
 #  incompatible peer. The second goal is to enable the development of
 #  backwards-compatibility code.
 
-Announcement = TupleOf(FURL, str, str,
-                       str, str, str)
+Announcement_v1 = TupleOf(FURL, str, str,
+                          str, str, str)
 
-class RIIntroducerSubscriberClient(RemoteInterface):
-    __remote_name__ = "RIIntroducerSubscriberClient.tahoe.allmydata.com"
+# new protocol: Announcements are strings, a JSON serialized 3-tuple of (msg,
+# sig, pubkey). More details to come.
+Announcement_v2 = str
 
-    def announce(announcements=SetOf(Announcement)):
+class RIIntroducerSubscriberClient_v2(RemoteInterface):
+    __remote_name__ = "RIIntroducerSubscriberClient_v2.tahoe.allmydata.com"
+
+    def announce_v2(announcements=SetOf(Announcement_v2)):
         """I accept announcements from the publisher."""
         return None
 
@@ -41,38 +48,29 @@ class RIIntroducerSubscriberClient(RemoteInterface):
         """
         return None
 
-# When Foolscap can handle multiple interfaces (Foolscap#17), the
-# full-powered introducer will implement both RIIntroducerPublisher and
-# RIIntroducerSubscriberService. Until then, we define
-# RIIntroducerPublisherAndSubscriberService as a combination of the two, and
-# make everybody use that.
+SubscriberInfo = DictOf(str, Any())
 
-class RIIntroducerPublisher(RemoteInterface):
+class RIIntroducerPublisherAndSubscriberService_v2(RemoteInterface):
     """To publish a service to the world, connect to me and give me your
-    announcement message. I will deliver a copy to all connected subscribers."""
-    __remote_name__ = "RIIntroducerPublisher.tahoe.allmydata.com"
-
-    def publish(announcement=Announcement):
-        # canary?
-        return None
-
-class RIIntroducerSubscriberService(RemoteInterface):
-    __remote_name__ = "RIIntroducerSubscriberService.tahoe.allmydata.com"
-
-    def subscribe(subscriber=RIIntroducerSubscriberClient, service_name=str):
-        """Give me a subscriber reference, and I will call its new_peers()
-        method will any announcements that match the desired service name. I
-        will ignore duplicate subscriptions.
-        """
-        return None
-
-class RIIntroducerPublisherAndSubscriberService(RemoteInterface):
-    __remote_name__ = "RIIntroducerPublisherAndSubscriberService.tahoe.allmydata.com"
+    announcement message. I will deliver a copy to all connected subscribers.
+    To hear about services, connect to me and subscribe to a specific
+    service_name."""
+    __remote_name__ = "RIIntroducerPublisherAndSubscriberService_v2.tahoe.allmydata.com"
     def get_version():
         return DictOf(str, Any())
-    def publish(announcement=Announcement):
+    def publish(announcement=Announcement_v1):
         return None
-    def subscribe(subscriber=RIIntroducerSubscriberClient, service_name=str):
+    def publish_v2(announcement=Announcement_v2, canary=Referenceable):
+        return None
+    def subscribe(subscriber=RIIntroducerSubscriberClient_v1, service_name=str):
+        return None
+    def subscribe_v2(subscriber=RIIntroducerSubscriberClient_v2,
+                     service_name=str, subscriber_info=SubscriberInfo):
+        """Give me a subscriber reference, and I will call its announce_v2()
+        method with any announcements that match the desired service name. I
+        will ignore duplicate subscriptions. The subscriber_info dictionary
+        tells me about the subscriber, and is used for diagnostic/status
+        displays."""
         return None
 
 class IIntroducerClient(Interface):
@@ -80,13 +78,17 @@ class IIntroducerClient(Interface):
     publish their services to the rest of the world, and I help them learn
     about services available on other nodes."""
 
-    def publish(furl, service_name, remoteinterface_name):
+    def publish(furl, service_name, remoteinterface_name,
+                signing_key=None):
         """Once you call this, I will tell the world that the Referenceable
         available at FURL is available to provide a service named
         SERVICE_NAME. The precise definition of the service being provided is
         identified by the Foolscap 'remote interface name' in the last
         parameter: this is supposed to be a globally-unique string that
-        identifies the RemoteInterface that is implemented."""
+        identifies the RemoteInterface that is implemented.
+
+        If signing_key= is set to an instance of ecdsa.SigningKey, it will be
+        used to sign the announcement."""
 
     def subscribe_to(service_name, callback, *args, **kwargs):
         """Call this if you will eventually want to use services with the
