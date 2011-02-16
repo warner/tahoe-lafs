@@ -94,14 +94,18 @@ class IIntroducerClient(Interface):
         """Call this if you will eventually want to use services with the
         given SERVICE_NAME. This will prompt me to subscribe to announcements
         of those services. Your callback will be invoked with at least two
-        arguments: a serverid (binary string), and an announcement
-        dictionary, followed by any additional callback args/kwargs you give
-        me. I will run your callback for both new announcements and for
+        arguments: a serverid and an announcement dictionary, followed by any
+        additional callback args/kwargs you gave me. The serverid will be
+        None unless the announcement was signed by the corresponding pubkey,
+        in which case it will be a printable string like 'v0-base32..'.
+
+        I will run your callback for both new announcements and for
         announcements that have changed, but you must be prepared to tolerate
         duplicates.
 
-        The announcement dictionary that I give you will have the following
-        keys:
+        The announcement that I give you comes from some other client. It
+        will be a JSON-serializable dictionary which (by convention) is
+        expected to have at least the following keys:
 
          version: 0
          service-name: str('storage')
@@ -113,10 +117,8 @@ class IIntroducerClient(Interface):
          my-version: str
          oldest-supported: str
 
-        Note that app-version will be an empty dictionary until #466 is done
-        and both the introducer and the remote client have been upgraded. For
-        current (native) server types, the serverid will always be equal to
-        the binary form of the FURL's tubid.
+        Note that app-version will be an empty dictionary if either the
+        publishing client or the Introducer are running older code.
         """
 
     def connected_to_introducer():
