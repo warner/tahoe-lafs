@@ -29,11 +29,11 @@ the foolscap-based server implemented in src/allmydata/storage/*.py .
 # 6: implement other sorts of IStorageClient classes: S3, etc
 
 
-import time
+import time, re
 from zope.interface import implements, Interface
 from foolscap.api import eventually
 from allmydata.interfaces import IStorageBroker
-from allmydata.util import idlib, log
+from allmydata.util import idlib, log, base32
 from allmydata.util.assertutil import _assert, precondition
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.hashutil import sha1
@@ -85,11 +85,13 @@ class StorageFarmBroker:
         self.introducer_client = ic = introducer_client
         ic.subscribe_to("storage", self._got_announcement)
 
-    def _got_announcement(self, serverid, ann_d):
-        precondition(isinstance(serverid, str), serverid)
-        precondition(len(serverid) == 20, serverid)
-        assert ann_d["service-name"] == "storage"
-        old = self.descriptors.get(serverid)
+    def _got_announcement(self, key_s, ann_d):
+        if key_s is not None:
+            precondition(isinstance(key_s, str), key_s)
+            precondition(key_s.startswith("v0-"), key_s)
+        precondition(ann_d["service-name"] == "storage", ann_d)
+        old = self.descriptors.get(SERVERID)
+        XXX
         if old:
             if old.get_announcement() == ann_d:
                 return # duplicate
@@ -97,7 +99,7 @@ class StorageFarmBroker:
             del self.descriptors[serverid]
             old.stop_connecting()
             # now we forget about them and start using the new one
-        dsc = NativeStorageClientDescriptor(serverid, ann_d)
+        dsc = NativeStorageClientDescriptor(key_s, ann_d)
         self.descriptors[serverid] = dsc
         dsc.start_connecting(self.tub, self._trigger_connections)
         # the descriptor will manage their own Reconnector, and each time we
@@ -117,24 +119,18 @@ class StorageFarmBroker:
 
 
     def get_servers_for_index(self, peer_selection_index):
-        # first cut: return a list of (peerid, versioned-rref) tuples
+        # first cut: return a list of descriptors, sorted in permuted order
         assert self.permute_peers == True
-        servers = self.get_all_servers()
-        key = peer_selection_index
-        return sorted(servers, key=lambda x: sha1(key+x[0]).digest())
+        def _permute(server):
+            seed = server.get_permutation_seed()
+            return sha1(peer_selection_index+seed).digest()
+        return sorted(self.get_all_servers(), key=_permute)
 
     def get_all_servers(self):
-        # return a frozenset of (peerid, versioned-rref) tuples
-        servers = {}
-        for serverid,rref in self.test_servers.items():
-            servers[serverid] = rref
-        for serverid,dsc in self.descriptors.items():
-            rref = dsc.get_rref()
-            if rref:
-                servers[serverid] = rref
-        result = frozenset(servers.items())
-        _assert(len(result) <= len(self.get_all_serverids()), result, self.get_all_serverids())
-        return result
+        # return a frozenset of IServerDescriptor instances
+        servers = set(self.test_servers.values())
+        servers.update(self.descriptors.values())
+        return frozenset(servers)
 
     def get_all_serverids(self):
         serverids = set()
@@ -158,6 +154,18 @@ class IServerDescriptor(Interface):
     def get_nickname():
         pass
     def get_rref():
+        pass
+    def get_version():
+        pass
+    def get_permutation_seed():
+        pass
+    def get_long_description():
+        pass
+    def get_short_description():
+        """Like [abcd1234]"""
+    def get_lease_seed():
+        pass
+    def get_foolscap_write_enabler_seed():
         pass
 
 class NativeStorageClientDescriptor:
@@ -187,12 +195,12 @@ class NativeStorageClientDescriptor:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, serverid, ann_d, min_shares=1):
-        self.serverid = serverid
+    def __init__(self, key_s, ann_d, min_shares=1):
+        self.key_s = key_s
         self.announcement = ann_d
         self.min_shares = min_shares
 
-        self.serverid_s = idlib.shortnodeid_b2a(self.serverid)
+        #self.serverid_s = idlib.shortnodeid_b2a(self.serverid)
         self.announcement_time = time.time()
         self.last_connect_time = None
         self.last_loss_time = None
@@ -201,11 +209,36 @@ class NativeStorageClientDescriptor:
         self._reconnector = None
         self._trigger_cb = None
 
-    def get_serverid(self):
-        return self.serverid
+        furl = str(ann_d["FURL"])
+        m = re.match(r'pb://(\w+)@', furl)
+        assert m
+        tubid_s = m.group(1).lower()
+        self._tubid = base32.a2b(tubid_s)
+        self._permutation_seed = self._tubid
+        self._lease_seed = self._tubid
+
+        self._long_description = "XXX"
+        self._short_description = "X"
+
+    #def get_serverid(self):
+    #    return self.serverid
+    def get_version(self):
+        return self.rref.version
+    def get_permutation_seed(self):
+        return self._permutation_seed
+    def get_long_description(self):
+        return self._long_description
+    def get_short_description(self):
+        return self._short_description
+    def get_lease_seed(self):
+        return self._lease_seed
+    def get_foolscap_write_enabler_seed(self):
+        return self._tubid
 
     def get_nickname(self):
         return self.announcement["nickname"].decode("utf-8")
+
+
     def get_announcement(self):
         return self.announcement
     def get_remote_host(self):
@@ -223,8 +256,8 @@ class NativeStorageClientDescriptor:
         self._reconnector = tub.connectTo(furl, self._got_connection)
 
     def _got_connection(self, rref):
-        lp = log.msg(format="got connection to %(serverid)s, getting versions",
-                     serverid=self.serverid_s,
+        lp = log.msg(format="got connection to %(description)s, getting versions",
+                     description=self._short_description,
                      facility="tahoe.storage_broker", umid="coUECQ")
         if self._trigger_cb:
             eventually(self._trigger_cb)
@@ -232,11 +265,11 @@ class NativeStorageClientDescriptor:
         d = add_version_to_remote_reference(rref, default)
         d.addCallback(self._got_versioned_service, lp)
         d.addErrback(log.err, format="storageclient._got_connection",
-                     serverid=self.serverid_s, umid="Sdq3pg")
+                     description=self._short_description, umid="Sdq3pg")
 
     def _got_versioned_service(self, rref, lp):
-        log.msg(format="%(serverid)s provided version info %(version)s",
-                serverid=self.serverid_s, version=rref.version,
+        log.msg(format="server %(description)s provided version info %(version)s",
+                description=self._short_description, version=rref.version,
                 facility="tahoe.storage_broker", umid="SWmJYg",
                 level=log.NOISY, parent=lp)
 
@@ -249,8 +282,8 @@ class NativeStorageClientDescriptor:
         return self.rref
 
     def _lost(self):
-        log.msg(format="lost connection to %(serverid)s",
-                serverid=self.serverid_s,
+        log.msg(format="lost connection to %(description)s",
+                description=self._short_description,
                 facility="tahoe.storage_broker", umid="zbRllw")
         self.last_loss_time = time.time()
         self.rref = None

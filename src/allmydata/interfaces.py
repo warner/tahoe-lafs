@@ -346,19 +346,11 @@ class IStorageBucketReader(Interface):
 class IStorageBroker(Interface):
     def get_servers_for_index(peer_selection_index):
         """
-        @return: list of (peerid, versioned-rref) tuples
+        @return: permuted list of IServerDescriptor instances
         """
     def get_all_servers():
         """
-        @return: frozenset of (peerid, versioned-rref) tuples
-        """
-    def get_all_serverids():
-        """
-        @return: frozenset of serverid strings
-        """
-    def get_nickname_for_serverid(serverid):
-        """
-        @return: unicode nickname, or None
+        @return: frozenset of IServerDescriptor instances
         """
 
     # methods moved from IntroducerClient, need review
