@@ -15,7 +15,7 @@ from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
 from allmydata.control import ControlServer
 from allmydata.introducer.client import IntroducerClient
-from allmydata.util import hashutil, base32, pollmixin, log
+from allmydata.util import hashutil, base32, pollmixin, log, keyutil
 from allmydata.util.encodingutil import get_filesystem_encoding
 from allmydata.util.abbreviate import parse_abbreviated_size
 from allmydata.util.time_format import parse_duration, parse_date
@@ -212,11 +212,24 @@ class Client(node.Node, pollmixin.PollMixin):
         self.convergence = base32.a2b(convergence_s)
         self._secret_holder = SecretHolder(lease_secret, self.convergence)
 
+    def _create_server_key(self):
+        # we only create the key once. On all subsequent runs, we re-use the
+        # existing key
+        def _make_key():
+            sk_vs,vk_vs = keyutil.make_keypair()
+            return sk_vs
+        sk_vs = self.get_or_create_private_config("server.privkey", _make_key)
+        sk,vk_vs = keyutil.parse_privkey(sk_vs)
+        self.write_config("server.pubkey", vk_vs)
+        self._server_key = sk
+
     def init_storage(self):
         # should we run a storage server (and publish it for others to use)?
         if not self.get_config("storage", "enabled", True, boolean=True):
             return
         readonly = self.get_config("storage", "readonly", False, boolean=True)
+
+        self._create_server_key()
 
         storedir = os.path.join(self.basedir, self.STOREDIR)
 
@@ -272,7 +285,8 @@ class Client(node.Node, pollmixin.PollMixin):
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
             ri_name = RIStorageServer.__remote_name__
-            self.introducer_client.publish(furl, "storage", ri_name)
+            self.introducer_client.publish(furl, "storage", ri_name,
+                                           self._server_key)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")
