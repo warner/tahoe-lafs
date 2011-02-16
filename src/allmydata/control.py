@@ -99,12 +99,13 @@ class ControlServer(Referenceable, service.Service):
     def _do_one_ping(self, res, everyone_left, results):
         if not everyone_left:
             return results
-        peerid, connection = everyone_left.pop(0)
+        server = everyone_left.pop(0)
         start = time.time()
-        d = connection.callRemote("get_buckets", "\x00"*16)
+        d = server.get_rref().callRemote("get_buckets", "\x00"*16)
         def _done(ignored):
             stop = time.time()
             elapsed = stop - start
+            peerid = server.get_short_description()
             if peerid in results:
                 results[peerid].append(elapsed)
             else:

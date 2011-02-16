@@ -17,12 +17,12 @@ def json_check_counts(d):
     r["count-corrupt-shares"] = d["count-corrupt-shares"]
     r["list-corrupt-shares"] = [ (idlib.nodeid_b2a(serverid),
                                   base32.b2a(si), shnum)
-                                 for (serverid, si, shnum)
+                                 for (server, si, shnum)
                                  in d["list-corrupt-shares"] ]
     r["servers-responding"] = [idlib.nodeid_b2a(serverid)
-                               for serverid in d["servers-responding"]]
+                               for server in d["servers-responding"]]
     sharemap = {}
-    for (shareid, serverids) in d["sharemap"].items():
+    for (shareid, servers) in d["sharemap"].items():
         sharemap[shareid] = [idlib.nodeid_b2a(serverid)
                              for serverid in serverids]
     r["sharemap"] = sharemap
@@ -95,7 +95,7 @@ class ResultsBase:
 
         if data["list-corrupt-shares"]:
             badsharemap = []
-            for (serverid, si, shnum) in data["list-corrupt-shares"]:
+            for (server, si, shnum) in data["list-corrupt-shares"]:
                 nickname = sb.get_nickname_for_serverid(serverid)
                 badsharemap.append(T.tr[T.td["sh#%d" % shnum],
                                         T.td[T.div(class_="nickname")[nickname],
@@ -116,7 +116,7 @@ class ResultsBase:
         # FIXME: The two tables below contain nickname-and-nodeid table column markup which is duplicated with each other, introducer.xhtml, and deep-check-results.xhtml. All of these (and any other presentations of nickname-and-nodeid) should be combined.
 
         for shareid in sorted(data["sharemap"].keys()):
-            serverids = data["sharemap"][shareid]
+            servers = data["sharemap"][shareid]
             for i,serverid in enumerate(serverids):
                 if serverid not in servers:
                     servers[serverid] = []
@@ -356,7 +356,7 @@ class DeepCheckResults(rend.Page, ResultsBase, ReloadMixin):
         data["list-corrupt-shares"] = [ (idlib.nodeid_b2a(serverid),
                                          base32.b2a(storage_index),
                                          shnum)
-                                        for (serverid, storage_index, shnum)
+                                        for (server, storage_index, shnum)
                                         in res.get_corrupt_shares() ]
         data["list-unhealthy-files"] = [ (path_t, json_check_results(r))
                                          for (path_t, r)
@@ -520,7 +520,7 @@ class DeepCheckAndRepairResults(rend.Page, ResultsBase, ReloadMixin):
         data["list-corrupt-shares"] = [ (idlib.nodeid_b2a(serverid),
                                          base32.b2a(storage_index),
                                          shnum)
-                                        for (serverid, storage_index, shnum)
+                                        for (server, storage_index, shnum)
                                         in res.get_corrupt_shares() ]
 
         remaining_corrupt = [ (idlib.nodeid_b2a(serverid),

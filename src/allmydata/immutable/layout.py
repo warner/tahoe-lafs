@@ -296,17 +296,13 @@ class ReadBucketProxy:
 
     MAX_UEB_SIZE = 2000 # actual size is closer to 419, but varies by a few bytes
 
-    def __init__(self, rref, peerid, storage_index):
+    def __init__(self, rref, server, storage_index):
         self._rref = rref
-        self._peerid = peerid
-        peer_id_s = idlib.shortnodeid_b2a(peerid)
+        serverid = server.get_short_description()
         storage_index_s = si_b2a(storage_index)
-        self._reprstr = "<ReadBucketProxy %s to peer [%s] SI %s>" % (id(self), peer_id_s, storage_index_s)
+        self._reprstr = "<ReadBucketProxy %s to peer [%s] SI %s>" % (id(self), serverid, storage_index_s)
         self._started = False # sent request to server
         self._ready = observer.OneShotObserverList() # got response from server
-
-    def get_peerid(self):
-        return self._peerid
 
     def __repr__(self):
         return self._reprstr

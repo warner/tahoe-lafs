@@ -246,6 +246,7 @@ class Root(rend.Page):
         return len(sb.get_all_serverids())
 
     def data_connected_storage_servers(self, ctx, data):
+        XXX
         sb = self.client.get_storage_broker()
         return len(sb.get_all_servers())
 
