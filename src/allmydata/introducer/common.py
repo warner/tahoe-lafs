@@ -1,27 +1,28 @@
 
 import re, simplejson
-from base64 import b32decode
 from allmydata.util.ecdsa import VerifyingKey
 from allmydata.util import base32, hashutil
 
-def make_index(ann_d, key):
+def make_index(ann_d, key_s):
     """Return something that can be used as an index (e.g. a tuple of
     strings), such that two messages that refer to the same 'thing' will have
-    the same index. For introducer announcements, this is a tuple of
-    (service-name, signing-key), or (service-name, tubid) if the announcement
-    is not signed."""
+    the same index. This is a tuple of (service-name, signing-key) for signed
+    announcements, or (service-name, tubid) for unsigned announcements."""
 
     service_name = str(ann_d["service-name"])
-    if key:
-        index = (service_name, key.to_string())
+    if key_s:
+        return (service_name, key_s)
     else:
-        # otherwise, use the FURL to get a tubid
-        furl = str(ann_d["FURL"])
-        m = re.match(r'pb://(\w+)@', furl)
-        assert m
-        tubid = b32decode(m.group(1).upper())
-        index = (service_name, tubid)
-    return index
+        tubid = get_tubid_string_from_ann_d(ann_d)
+        return (service_name, tubid)
+
+def get_tubid_string_from_ann_d(ann_d):
+    return get_tubid_string(str(ann_d["FURL"]))
+
+def get_tubid_string(furl):
+    m = re.match(r'pb://(\w+)@', furl)
+    assert m
+    return m.group(1).lower()
 
 def convert_announcement_v1_to_v2(ann_t):
     (furl, service_name, ri_name, nickname, ver, oldest) = ann_t
@@ -68,15 +69,16 @@ def sign(ann_d, sk):
 class UnknownKeyError(Exception):
     pass
 
-def unsign(ann_s):
-    (msg_s, sig_vs, key_vs) = simplejson.loads(ann_s.decode("utf-8"))
-    key = None
+def unsign(ann_t):
+    (msg_s, sig_vs, key_vs) = ann_t
+    key_s = None
     if sig_vs and key_vs:
         if not sig_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- signatures recognized")
         if not key_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- keys recognized")
-        key = VerifyingKey.from_string(base32.a2b(key_vs[3:]))
+        key_s = key_vs[3:]
+        key = VerifyingKey.from_string(base32.a2b(key_s))
         key.verify(base32.a2b(sig_vs[3:]), msg_s, hashfunc=hashutil.SHA256)
     msg = simplejson.loads(msg_s.decode("utf-8"))
-    return (msg, key)
+    return (msg, key_s)
