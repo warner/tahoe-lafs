@@ -2,6 +2,7 @@
 import re, simplejson
 from base64 import b32decode
 from allmydata.util.ecdsa import VerifyingKey
+from allmydata.util import base32, hashutil
 
 def make_index(ann_d, key):
     """Return something that can be used as an index (e.g. a tuple of
@@ -56,17 +57,26 @@ def convert_announcement_v2_to_v1(ann_v2):
 
 
 def sign(ann_d, sk):
-    msg = simplejson.dumps(ann_d)
+    # returns (bytes, None, None) or (bytes, str, str)
+    msg = simplejson.dumps(ann_d).encode("utf-8")
     if not sk:
         return (msg, None, None)
     vk = sk.get_verifying_key()
-    return (msg, sk.sign(msg).encode("hex"), vk.to_string().encode("hex"))
+    sig = sk.sign(msg, hashfunc=hashutil.SHA256)
+    return (msg, "v0-"+base32.b2a(sig), "v0-"+base32.b2a(vk.to_string()))
+
+class UnknownKeyError(Exception):
+    pass
 
 def unsign(ann_s):
-    (msg_s, sig_s, key_s) = simplejson.loads(ann_s)
+    (msg_s, sig_vs, key_vs) = simplejson.loads(ann_s.decode("utf-8"))
     key = None
-    if sig_s and key_s:
-        key = VerifyingKey.from_string(key_s.decode("hex"))
-        key.verify(sig_s.decode("hex"), msg_s)
-    msg = simplejson.loads(msg_s)
+    if sig_vs and key_vs:
+        if not sig_vs.startswith("v0-"):
+            raise UnknownKeyError("only v0- signatures recognized")
+        if not key_vs.startswith("v0-"):
+            raise UnknownKeyError("only v0- keys recognized")
+        key = VerifyingKey.from_string(base32.a2b(key_vs[3:]))
+        key.verify(base32.a2b(sig_vs[3:]), msg_s, hashfunc=hashutil.SHA256)
+    msg = simplejson.loads(msg_s.decode("utf-8"))
     return (msg, key)
