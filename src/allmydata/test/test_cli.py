@@ -1038,8 +1038,8 @@ class Admin(unittest.TestCase):
             self.failUnless(pubkey_line.startswith(vk_header), pubkey_line)
             privkey_b = base32.a2b(privkey_line[len(sk_header):])
             pubkey_b = base32.a2b(pubkey_line[len(vk_header):])
-            sk = ecdsa.SigningKey.from_string(privkey_b)
-            vk = ecdsa.VerifyingKey.from_string(pubkey_b)
+            sk = ecdsa.SigningKey.from_string(privkey_b, curve=ecdsa.NIST256p)
+            vk = ecdsa.VerifyingKey.from_string(pubkey_b, curve=ecdsa.NIST256p)
             self.failUnlessEqual(sk.get_verifying_key().to_string(),
                                  vk.to_string())
         d.addCallback(_done)
