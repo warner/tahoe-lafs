@@ -197,7 +197,7 @@ class IntroducerClient(service.Service, Referenceable):
         return d
 
     def create_announcement(self, furl, service_name, remoteinterface_name,
-                            signing_key=None):
+                            signing_key, extra_keys):
         ann_d = {"version": 0,
                  "service-name": service_name,
                  "FURL": furl,
@@ -208,13 +208,14 @@ class IntroducerClient(service.Service, Referenceable):
                  "my-version": self._my_version,
                  "oldest-supported": self._oldest_supported,
                  }
+        ann_d.extend(extra_keys)
         return simplejson.dumps(sign(ann_d, signing_key))
 
 
     def publish(self, furl, service_name, remoteinterface_name,
-                signing_key=None):
+                signing_key=None, extra_keys={}):
         ann = self.create_announcement(furl, service_name, remoteinterface_name,
-                                       signing_key)
+                                       signing_key, extra_keys)
         self._published_announcements[service_name] = ann
         self._maybe_publish()
 
