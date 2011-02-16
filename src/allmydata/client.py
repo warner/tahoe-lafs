@@ -212,7 +212,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.convergence = base32.a2b(convergence_s)
         self._secret_holder = SecretHolder(lease_secret, self.convergence)
 
-    def _create_server_key(self):
+    def _maybe_create_server_key(self):
         # we only create the key once. On all subsequent runs, we re-use the
         # existing key
         def _make_key():
@@ -223,13 +223,25 @@ class Client(node.Node, pollmixin.PollMixin):
         self.write_config("server.pubkey", vk_vs)
         self._server_key = sk
 
+    def _init_permutation_seed(self, ss):
+        seed = self.get_config_from_file("permutation-seed")
+        if not seed:
+            have_shares = ss.have_shares()
+            if have_shares:
+                seed = base32.b2a(self.nodeid)
+            else:
+                vk = self._server_key.get_verifying_key()
+                seed = base32.b2a(vk.to_string())
+            self.write_config("permutation-seed", seed)
+        return seed
+
     def init_storage(self):
         # should we run a storage server (and publish it for others to use)?
         if not self.get_config("storage", "enabled", True, boolean=True):
             return
         readonly = self.get_config("storage", "readonly", False, boolean=True)
 
-        self._create_server_key()
+        self._maybe_create_server_key()
 
         storedir = os.path.join(self.basedir, self.STOREDIR)
 
@@ -282,11 +294,13 @@ class Client(node.Node, pollmixin.PollMixin):
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready
         def _publish(res):
+            permutation_seed_b32 = self._init_permutation_seed(ss)
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
             ri_name = RIStorageServer.__remote_name__
+            extra = {"permutation-seed-base32": permutation_seed_b32}
             self.introducer_client.publish(furl, "storage", ri_name,
-                                           self._server_key)
+                                           self._server_key, extra)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")
