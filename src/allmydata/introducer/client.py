@@ -7,8 +7,9 @@ from allmydata.interfaces import InsufficientVersionError
 from allmydata.introducer.interfaces import IIntroducerClient, \
      RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
 from allmydata.introducer.common import sign, unsign, make_index, \
-     convert_announcement_v1_to_v2, convert_announcement_v2_to_v1
-from allmydata.util import log, idlib
+     convert_announcement_v1_to_v2, convert_announcement_v2_to_v1, \
+     get_tubid_string_from_ann_d
+from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.ecdsa import BadSignatureError
 
@@ -152,9 +153,9 @@ class IntroducerClient(service.Service, Referenceable):
         self._local_subscribers.append( (service_name,cb,args,kwargs) )
         self._subscribed_service_names.add(service_name)
         self._maybe_subscribe()
-        for (servicename,nodeid),(ann_d,key,when) in self._current_announcements.items():
+        for (servicename,unique),(ann_d,key_s,when) in self._current_announcements.items():
             if servicename == service_name:
-                eventually(cb, nodeid, ann_d)
+                eventually(cb, key_s, ann_d, *args, **kwargs)
 
     def _maybe_subscribe(self):
         if not self._publisher:
@@ -253,16 +254,17 @@ class IntroducerClient(service.Service, Referenceable):
         self._debug_counts["inbound_message"] += 1
         for ann_s in announcements:
             try:
-                ann_d, key = unsign(ann_s) # might raise bad-sig error
+                ann_d, key_s = unsign(ann_s) # might raise bad-sig error
+                # key is "v0-base32abc123"
             except BadSignatureError:
                 self.log("bad signature on inbound announcement: %s" % (ann_s,),
                          parent=lp, level=log.WEIRD, umid="ZAU15Q")
                 # process other announcements that arrived with the bad one
                 continue
 
-            self._process_announcement(ann_d, key)
+            self._process_announcement(ann_d, key_s)
 
-    def _process_announcement(self, ann_d, key):
+    def _process_announcement(self, ann_d, key_s):
         self._debug_counts["inbound_announcement"] += 1
         service_name = str(ann_d["service-name"])
         if service_name not in self._subscribed_service_names:
@@ -277,14 +279,22 @@ class IntroducerClient(service.Service, Referenceable):
         lp2 = self.log(format="announcement for nickname '%(nick)s', service=%(svc)s: %(ann)s",
                        nick=nick_s, svc=service_name, ann=ann_d, umid="BoKEag")
 
-        index = make_index(ann_d, key)
-        nodeid = index[1]
-        nodeid_s = idlib.nodeid_b2a(nodeid)
+        # how do we describe this node in the logs?
+        desc_bits = []
+        if key_s:
+            desc_bits.append("serverid=" + key_s[:20])
+        if "FURL" in ann_d:
+            tubid_s = get_tubid_string_from_ann_d(ann_d)
+            desc_bits.append("tubid=" + tubid_s[:8])
+        description = "/".join(desc_bits)
+
+        # the index is used to track duplicates
+        index = make_index(ann_d, key_s)
 
         # is this announcement a duplicate?
         if self._current_announcements.get(index, [None]*3)[0] == ann_d:
-            self.log(format="reannouncement for [%(service)s]:%(nodeid)s, ignoring",
-                     service=service_name, nodeid=nodeid_s,
+            self.log(format="reannouncement for [%(service)s]:%(description)s, ignoring",
+                     service=service_name, description=description,
                      parent=lp2, level=log.UNUSUAL, umid="B1MIdA")
             self._debug_counts["duplicate_announcement"] += 1
             return
@@ -298,12 +308,12 @@ class IntroducerClient(service.Service, Referenceable):
             self.log("new announcement[%s]" % service_name,
                      parent=lp2, level=log.NOISY)
 
-        self._current_announcements[index] = (ann_d, key, time.time())
+        self._current_announcements[index] = (ann_d, key_s, time.time())
         # note: we never forget an index, but we might update its value
 
         for (service_name2,cb,args,kwargs) in self._local_subscribers:
             if service_name2 == service_name:
-                eventually(cb, nodeid, ann_d, *args, **kwargs)
+                eventually(cb, key_s, ann_d, *args, **kwargs)
 
     def remote_set_encoding_parameters(self, parameters):
         self.encoding_parameters = parameters
