@@ -444,6 +444,12 @@ Local Disk
     BASEDIR/storage/shares/). For configuration details (including how to
     limit the space that will be consumed), see `<backends/local-disk.rst>`_
 
+S3
+
+    The storage server can also move all shares to a configured AWS S3
+    bucket. The resulting local disk usage is minimal. For configuration
+    details, see `<backends/S3.rst>`_.
+
 
 Running A Helper
 ================

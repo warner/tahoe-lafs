@@ -1,0 +1,60 @@
+====================
+Storing Shares in S3
+====================
+
+The Tahoe-LAFS storage server can be configured to store its shares in an S3
+bucket, rather than on local disk. To enable this, add the following keys to
+the server's ``tahoe.cfg`` file:
+
+``[storage]``
+
+``backend = S3``
+
+    This turns off the local-disk backend and enables use of S3.
+
+``s3_access_key_id = (string, required)``
+``s3_secret_access_key = (string, required)``
+
+    These two give the storage server permission to access your AWS account,
+    allowing them to upload and download shares from S3.
+
+``s3_bucket = (string, required)``
+
+    This controls which bucket will be used to hold shares. The Tahoe-LAFS
+    storage server will only modify and access objects in the configured S3
+    bucket.
+
+``s3_url = (URL string, optional)``
+
+    This URL tells the storage server how to access the S3 service. It
+    defaults to ``s3.amazonaws.com``, but by setting it to something else,
+    you can use some other S3-like service.
+
+``s3_max_space = (str, optional)``
+
+    This tells the server to limit how much space can be used in the S3
+    bucket. Before each share is uploaded, the server will ask S3 for the
+    current bucket usage, and will only accept the share if it does not cause
+    the usage to grow above this limit. ``s3_max_space`` is configured with a
+    string that indicates a size in bytes. See the description of
+    ``reserved_space`` in `<local-disk.rst>`_ for the exact syntax. If
+    omitted, the default behavior is to allow unlimited usage.
+
+
+Once configured, the WUI "storage server" page will provide information about
+how much space is being used and how many shares are being stored.
+
+
+Issues
+------
+
+Objects in an S3 bucket cannot be read for free. As a result, when Tahoe is
+configured to store shares in S3 rather than on local disk, some common
+operations may behave differently:
+
+* lease crawling/expiration is not yet implemented. As a result, shares will
+  be retained forever, and the Storage Server status web page will not show
+  information about the number of mutable/immutable shares present.
+* enabling ``s3_max_space`` causes an extra S3 usage query to be sent for
+  each share upload, causing the upload process to run slightly slower and
+  incur more S3 request charges.
