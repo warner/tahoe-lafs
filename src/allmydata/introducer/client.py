@@ -1,14 +1,14 @@
 
-import time, simplejson
+import time
 from zope.interface import implements
 from twisted.application import service
 from foolscap.api import Referenceable, eventually, RemoteInterface, Violation
 from allmydata.interfaces import InsufficientVersionError
 from allmydata.introducer.interfaces import IIntroducerClient, \
      RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
-from allmydata.introducer.common import sign, unsign, make_index, \
+from allmydata.introducer.common import sign_to_foolscap, unsign_from_foolscap,\
      convert_announcement_v1_to_v2, convert_announcement_v2_to_v1, \
-     get_tubid_string_from_ann_d
+     make_index, get_tubid_string_from_ann_d
 from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.ecdsa import BadSignatureError
@@ -208,15 +208,16 @@ class IntroducerClient(service.Service, Referenceable):
                  "my-version": self._my_version,
                  "oldest-supported": self._oldest_supported,
                  }
-        ann_d.extend(extra_keys)
-        return simplejson.dumps(sign(ann_d, signing_key))
-
+        ann_d.update(extra_keys)
+        ann_t = sign_to_foolscap(ann_d, signing_key)
+        return ann_t
 
     def publish(self, furl, service_name, remoteinterface_name,
                 signing_key=None, extra_keys={}):
-        ann = self.create_announcement(furl, service_name, remoteinterface_name,
-                                       signing_key, extra_keys)
-        self._published_announcements[service_name] = ann
+        ann_t = self.create_announcement(furl,
+                                         service_name, remoteinterface_name,
+                                         signing_key, extra_keys)
+        self._published_announcements[service_name] = ann_t
         self._maybe_publish()
 
     def _maybe_publish(self):
@@ -224,22 +225,23 @@ class IntroducerClient(service.Service, Referenceable):
             self.log("want to publish, but no introducer yet", level=log.NOISY)
             return
         # this re-publishes everything. The Introducer ignores duplicates
-        for ann in self._published_announcements.values():
+        for ann_t in self._published_announcements.values():
             self._debug_counts["outbound_message"] += 1
             self._debug_outstanding += 1
-            d = self._publisher.callRemote("publish_v2", ann, self._canary)
+            d = self._publisher.callRemote("publish_v2", ann_t, self._canary)
             d.addBoth(self._debug_retired)
-            d.addErrback(self._handle_v1_publisher, ann) # for_v1
-            d.addErrback(log.err, ann=ann, facility="tahoe.introducer.client",
+            d.addErrback(self._handle_v1_publisher, ann_t) # for_v1
+            d.addErrback(log.err, ann_t=ann_t,
+                         facility="tahoe.introducer.client",
                          level=log.WEIRD, umid="xs9pVQ")
 
-    def _handle_v1_publisher(self, f, ann): # for_v1
+    def _handle_v1_publisher(self, f, ann_t): # for_v1
         f.trap(Violation, NameError)
         # they don't have the 'publish_v2' method, so fall back to the old
         # 'publish' method (which takes an unsigned tuple of bytestrings)
         self.log("falling back to publish_v1",
                  level=log.UNUSUAL, umid="9RCT1A", failure=f)
-        ann_v1 = convert_announcement_v2_to_v1(ann)
+        ann_v1 = convert_announcement_v2_to_v1(ann_t)
         self._debug_outstanding += 1
         d = self._publisher.callRemote("publish", ann_v1)
         d.addBoth(self._debug_retired)
@@ -253,12 +255,13 @@ class IntroducerClient(service.Service, Referenceable):
     def got_announcements(self, announcements, lp=None):
         # this is the common entry point for both v1 and v2 announcements
         self._debug_counts["inbound_message"] += 1
-        for ann_s in announcements:
+        for ann_t in announcements:
             try:
-                ann_d, key_s = unsign(ann_s) # might raise bad-sig error
+                # this might raise UnknownKeyError or bad-sig error
+                ann_d, key_s = unsign_from_foolscap(ann_t)
                 # key is "v0-base32abc123"
             except BadSignatureError:
-                self.log("bad signature on inbound announcement: %s" % (ann_s,),
+                self.log("bad signature on inbound announcement: %s" % (ann_t,),
                          parent=lp, level=log.WEIRD, umid="ZAU15Q")
                 # process other announcements that arrived with the bad one
                 continue

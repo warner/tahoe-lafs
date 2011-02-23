@@ -20,9 +20,9 @@ FURL = StringConstraint(1000)
 Announcement_v1 = TupleOf(FURL, str, str,
                           str, str, str)
 
-# new protocol: Announcements are strings, a JSON serialized 3-tuple of (msg,
-# sig, pubkey). More details to come.
-Announcement_v2 = str
+# v2 protocol over foolscap: Announcements are 3-tuples of (bytes, str, str)
+# or (bytes, none, none)
+Announcement_v2 = Any()
 
 class RIIntroducerSubscriberClient_v2(RemoteInterface):
     __remote_name__ = "RIIntroducerSubscriberClient_v2.tahoe.allmydata.com"
@@ -94,10 +94,10 @@ class IIntroducerClient(Interface):
         """Call this if you will eventually want to use services with the
         given SERVICE_NAME. This will prompt me to subscribe to announcements
         of those services. Your callback will be invoked with at least two
-        arguments: a serverid and an announcement dictionary, followed by any
-        additional callback args/kwargs you gave me. The serverid will be
-        None unless the announcement was signed by the corresponding pubkey,
-        in which case it will be a printable string like 'v0-base32..'.
+        arguments: a pubkey and an announcement dictionary, followed by any
+        additional callback args/kwargs you gave me. The pubkey will be None
+        unless the announcement was signed by the corresponding pubkey, in
+        which case it will be a printable string like 'v0-base32..'.
 
         I will run your callback for both new announcements and for
         announcements that have changed, but you must be prepared to tolerate

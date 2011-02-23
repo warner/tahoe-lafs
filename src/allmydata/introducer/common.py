@@ -1,6 +1,6 @@
 
 import re, simplejson
-from allmydata.util.ecdsa import VerifyingKey
+from allmydata.util.ecdsa import VerifyingKey, NIST256p
 from allmydata.util import base32, hashutil
 
 def make_index(ann_d, key_s):
@@ -42,10 +42,11 @@ def convert_announcement_v1_to_v2(ann_t):
              "my-version": ver,
              "oldest-supported": oldest,
              }
-    return simplejson.dumps( (simplejson.dumps(ann_d), None, None) )
+    msg = simplejson.dumps(ann_d).encode("utf-8")
+    return (msg, None, None)
 
 def convert_announcement_v2_to_v1(ann_v2):
-    (msg, sig, pubkey) = simplejson.loads(ann_v2)
+    (msg, sig, pubkey) = ann_v2
     ann_d = simplejson.loads(msg)
     assert ann_d["version"] == 0
     ann_t = (str(ann_d["FURL"]), str(ann_d["service-name"]),
@@ -57,19 +58,23 @@ def convert_announcement_v2_to_v1(ann_v2):
     return ann_t
 
 
-def sign(ann_d, sk):
-    # returns (bytes, None, None) or (bytes, str, str)
+def sign_to_foolscap(ann_d, sk):
+    # return (bytes, None, None) or (bytes, str, str). A future HTTP-based
+    # serialization will use JSON({msg:b64(JSON(msg).utf8), sig:v0-b64(sig),
+    # pubkey:v0-b64(pubkey)}) .
     msg = simplejson.dumps(ann_d).encode("utf-8")
-    if not sk:
-        return (msg, None, None)
-    vk = sk.get_verifying_key()
-    sig = sk.sign(msg, hashfunc=hashutil.SHA256)
-    return (msg, "v0-"+base32.b2a(sig), "v0-"+base32.b2a(vk.to_string()))
+    if sk:
+        vk = sk.get_verifying_key()
+        sig = sk.sign(msg, hashfunc=hashutil.SHA256)
+        ann_t = (msg, "v0-"+base32.b2a(sig), "v0-"+base32.b2a(vk.to_string()))
+    else:
+        ann_t = (msg, None, None)
+    return ann_t
 
 class UnknownKeyError(Exception):
     pass
 
-def unsign(ann_t):
+def unsign_from_foolscap(ann_t):
     (msg_s, sig_vs, key_vs) = ann_t
     key_s = None
     if sig_vs and key_vs:
@@ -78,7 +83,7 @@ def unsign(ann_t):
         if not key_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- keys recognized")
         key_s = key_vs[3:]
-        key = VerifyingKey.from_string(base32.a2b(key_s))
+        key = VerifyingKey.from_string(base32.a2b(key_s), curve=NIST256p)
         key.verify(base32.a2b(sig_vs[3:]), msg_s, hashfunc=hashutil.SHA256)
     msg = simplejson.loads(msg_s.decode("utf-8"))
-    return (msg, key_s)
+    return (msg, key_vs)

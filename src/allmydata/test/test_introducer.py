@@ -14,7 +14,7 @@ from allmydata.introducer.server import IntroducerService
 from allmydata.introducer import old
 # test compatibility with old introducer .tac files
 from allmydata.introducer import IntroducerNode
-from allmydata.util import pollmixin, ecdsa
+from allmydata.util import pollmixin, ecdsa, base32
 import allmydata.test.common_util as testutil
 
 class LoggingMultiService(service.MultiService):
@@ -83,7 +83,7 @@ class Client(unittest.TestCase):
                               "my_version", "oldest_version", {})
         announcements = []
         ic.subscribe_to("storage",
-                        lambda nodeid,ann_d: announcements.append(ann_d))
+                        lambda key_s,ann_d: announcements.append(ann_d))
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnpigj2ja2qr2srq4ikjwnl7xfgbra"
         ann1 = (furl1, "storage", "RIStorage", "nick1", "ver23", "ver0")
         ann1b = (furl1, "storage", "RIStorage", "nick1", "ver24", "ver0")
@@ -136,16 +136,16 @@ class Client(unittest.TestCase):
                                "introducer.furl", u"my_nickname",
                                "ver24","oldest_version",{})
         announcements = []
-        def _received(nodeid, ann_d):
-            announcements.append( (nodeid, ann_d) )
+        def _received(key_s, ann_d):
+            announcements.append( (key_s, ann_d) )
         ic1.subscribe_to("storage", _received)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnp"
         furl1a = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:7777/gydnp"
         furl2 = "pb://ttwwooyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/ttwwoo"
 
-        privkey = ecdsa.SigningKey.generate()
+        privkey = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
         pubkey = privkey.get_verifying_key()
-        pubkey_hex = pubkey.to_string().encode("hex")
+        pubkey_s = "v0-"+base32.b2a(pubkey.to_string())
 
         # ann1: ic1, furl1
         # ann1a: ic1, furl1a (same SturdyRef, different connection hints)
@@ -153,20 +153,20 @@ class Client(unittest.TestCase):
         # ann2: ic2, furl2
 
         self.ann1 = ic1.create_announcement(furl1, "storage", "RIStorage",
-                                            privkey)
+                                            privkey, {})
         self.ann1a =  ic1.create_announcement(furl1a, "storage", "RIStorage",
-                                              privkey)
+                                              privkey, {})
         self.ann1b = ic2.create_announcement(furl1, "storage", "RIStorage",
-                                             privkey)
+                                             privkey, {})
         self.ann2 = ic2.create_announcement(furl2, "storage", "RIStorage",
-                                            privkey)
+                                            privkey, {})
 
         ic1.remote_announce_v2([self.ann1]) # queues eventual-send
         d = fireEventually()
         def _then1(ign):
             self.failUnlessEqual(len(announcements), 1)
-            nodeid,ann_d = announcements[0]
-            self.failUnlessEqual(nodeid.encode("hex"), pubkey_hex)
+            key_s,ann_d = announcements[0]
+            self.failUnlessEqual(key_s, pubkey_s)
             self.failUnlessEqual(ann_d["FURL"], furl1)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then1)
@@ -185,8 +185,8 @@ class Client(unittest.TestCase):
         d.addCallback(fireEventually)
         def _then3(ign):
             self.failUnlessEqual(len(announcements), 2)
-            nodeid,ann_d = announcements[-1]
-            self.failUnlessEqual(nodeid.encode("hex"), pubkey_hex)
+            key_s,ann_d = announcements[-1]
+            self.failUnlessEqual(key_s, pubkey_s)
             self.failUnlessEqual(ann_d["FURL"], furl1)
             self.failUnlessEqual(ann_d["my-version"], "ver24")
         d.addCallback(_then3)
@@ -197,8 +197,8 @@ class Client(unittest.TestCase):
         d.addCallback(fireEventually)
         def _then4(ign):
             self.failUnlessEqual(len(announcements), 3)
-            nodeid,ann_d = announcements[-1]
-            self.failUnlessEqual(nodeid.encode("hex"), pubkey_hex)
+            key_s,ann_d = announcements[-1]
+            self.failUnlessEqual(key_s, pubkey_s)
             self.failUnlessEqual(ann_d["FURL"], furl1a)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then4)
@@ -207,14 +207,14 @@ class Client(unittest.TestCase):
         # backlog. The introducer only records one announcement per index, so
         # the backlog will only have the latest message.
         announcements2 = []
-        def _received2(nodeid, ann_d):
-            announcements2.append( (nodeid, ann_d) )
+        def _received2(key_s, ann_d):
+            announcements2.append( (key_s, ann_d) )
         d.addCallback(lambda ign: ic1.subscribe_to("storage", _received2))
         d.addCallback(fireEventually)
         def _then5(ign):
             self.failUnlessEqual(len(announcements2), 1)
-            nodeid,ann_d = announcements2[-1]
-            self.failUnlessEqual(nodeid.encode("hex"), pubkey_hex)
+            key_s,ann_d = announcements2[-1]
+            self.failUnlessEqual(key_s, pubkey_s)
             self.failUnlessEqual(ann_d["FURL"], furl1a)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then5)
@@ -286,8 +286,8 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                                      "version", "oldest",
                                      {"component": "component-v1"})
             received_announcements[c] = {}
-            def got(serverid, ann_d, announcements):
-                announcements[serverid] = ann_d
+            def got(key_s, ann_d, announcements):
+                announcements[key_s] = ann_d
             c.subscribe_to("storage", got, received_announcements[c])
             subscribing_clients.append(c)
             expected_announcements[i] += 1 # all expect a 'storage' announcement
@@ -296,7 +296,8 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
             if i < NUM_STORAGE:
                 if i == 1:
                     # sign the announcement
-                    privkey = privkeys[c] = ecdsa.SigningKey.generate()
+                    privkey = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+                    privkeys[c] = privkey
                     c.publish(node_furl, "storage", "ri_name", privkey)
                 else:
                     c.publish(node_furl, "storage", "ri_name")
@@ -559,7 +560,6 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
     test_system_v1_server.timeout = 480
     # occasionally takes longer than 350s on "draco"
 
-from allmydata.util import base32
 class FakeRemoteReference:
     def notifyOnDisconnect(self, *args, **kwargs): pass
     def getRemoteTubID(self): return "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
@@ -649,8 +649,9 @@ class Announcements(unittest.TestCase):
         client_v2 = IntroducerClient(tub, introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        serverid = base32.a2b("62ubehyunnyhzs7r6vdonnm2hpi52w6y")
-        ann_s0 = client_v2.create_announcement(furl1, "storage", "RIStorage")
+        serverid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
+        ann_s0 = client_v2.create_announcement(furl1, "storage", "RIStorage",
+                                               None, {})
         canary0 = Referenceable()
         introducer.remote_publish_v2(ann_s0, canary0)
         a = introducer.get_announcements()
@@ -671,13 +672,13 @@ class Announcements(unittest.TestCase):
         client_v2 = IntroducerClient(tub, introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        serverid = base32.a2b("62ubehyunnyhzs7r6vdonnm2hpi52w6y")
-        sk = ecdsa.SigningKey.generate()
+        sk = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
         pk = sk.get_verifying_key()
-        pks = pk.to_string()
-        ann_s0 = client_v2.create_announcement(furl1, "storage", "RIStorage", sk)
+        pks = "v0-"+base32.b2a(pk.to_string())
+        ann_t0 = client_v2.create_announcement(furl1, "storage", "RIStorage",
+                                               sk, {})
         canary0 = Referenceable()
-        introducer.remote_publish_v2(ann_s0, canary0)
+        introducer.remote_publish_v2(ann_t0, canary0)
         a = introducer.get_announcements()
         self.failUnlessEqual(len(a), 1)
         (index, (ann_s, canary, ann_d, when)) = a.items()[0]
@@ -691,10 +692,9 @@ class Announcements(unittest.TestCase):
 
     def test_client_v1(self):
         introducer = IntroducerService()
-        tub = introducer_furl = None
 
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        serverid = base32.a2b("62ubehyunnyhzs7r6vdonnm2hpi52w6y")
+        serverid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
         ann = (furl1, "storage", "RIStorage",
                u"nick-v1".encode("utf-8"), "my_version", "oldest")
         introducer.remote_publish(ann)
@@ -740,8 +740,8 @@ class NonV1Server(SystemTestMixin, unittest.TestCase):
         c = IntroducerClient(tub, self.introducer_furl,
                              u"nickname-client", "version", "oldest", {})
         announcements = {}
-        def got(serverid, ann_d):
-            announcements[serverid] = ann_d
+        def got(key_s, ann_d):
+            announcements[key_s] = ann_d
         c.subscribe_to("storage", got)
 
         c.setServiceParent(self.parent)

@@ -5,11 +5,11 @@ from twisted.application import service
 from foolscap.api import Referenceable
 import allmydata
 from allmydata import node
-from allmydata.util import log, base32, idlib
+from allmydata.util import log
 from allmydata.introducer.interfaces import \
      RIIntroducerPublisherAndSubscriberService_v2
 from allmydata.introducer.common import convert_announcement_v1_to_v2, \
-     convert_announcement_v2_to_v1, unsign, make_index
+     convert_announcement_v2_to_v1, unsign_from_foolscap, make_index
 
 class IntroducerNode(node.Node):
     PORTNUMFILE = "introducer.port"
@@ -141,30 +141,30 @@ class IntroducerService(service.MultiService, Referenceable):
     def remote_get_version(self):
         return self.VERSION
 
-    def remote_publish(self, ann_s): # for_v1
+    def remote_publish(self, ann_t): # for_v1
         lp = self.log("introducer: old (v1) announcement published: %s"
-                      % (ann_s,), umid="6zGOIw")
-        ann_v2 = convert_announcement_v1_to_v2(ann_s)
+                      % (ann_t,), umid="6zGOIw")
+        ann_v2 = convert_announcement_v1_to_v2(ann_t)
         return self.publish(ann_v2, None, lp)
 
-    def remote_publish_v2(self, ann_s, canary):
+    def remote_publish_v2(self, ann_t, canary):
         lp = self.log("introducer: announcement (v2) published", umid="L2QXkQ")
-        return self.publish(ann_s, canary, lp)
+        return self.publish(ann_t, canary, lp)
 
-    def publish(self, ann_s, canary, lp):
+    def publish(self, ann_t, canary, lp):
         try:
-            self._publish(ann_s, canary, lp)
+            self._publish(ann_t, canary, lp)
         except:
             log.err(format="Introducer.remote_publish failed on %(ann)s",
-                    ann=ann_s,
+                    ann=ann_t,
                     level=log.UNUSUAL, parent=lp, umid="620rWA")
             raise
 
-    def _publish(self, ann_s, canary, lp):
+    def _publish(self, ann_t, canary, lp):
         self._debug_counts["inbound_message"] += 1
-        self.log("introducer: announcement published: %s" % (ann_s,),
+        self.log("introducer: announcement published: %s" % (ann_t,),
                  umid="wKHgCw")
-        ann_d, key = unsign(ann_s) # might raise BadSignatureError
+        ann_d, key = unsign_from_foolscap(ann_t) # might raise BadSignatureError
         index = make_index(ann_d, key)
 
         service_name = str(ann_d["service-name"])
@@ -172,9 +172,10 @@ class IntroducerService(service.MultiService, Referenceable):
             self._attach_stub_client(ann_d, index, lp)
             return
 
-        if index in self._announcements:
-            (old_ann_s, canary, ann_d, timestamp) = self._announcements[index]
-            if old_ann_s == ann_s:
+        old = self._announcements.get(index)
+        if old:
+            (old_ann_t, canary, old_ann_d, timestamp) = old
+            if old_ann_d == ann_d:
                 self.log("but we already knew it, ignoring", level=log.NOISY,
                          umid="myxzLw")
                 self._debug_counts["inbound_duplicate"] += 1
@@ -183,7 +184,7 @@ class IntroducerService(service.MultiService, Referenceable):
                 self.log("old announcement being updated", level=log.NOISY,
                          umid="304r9g")
                 self._debug_counts["inbound_update"] += 1
-        self._announcements[index] = (ann_s, canary, ann_d, time.time())
+        self._announcements[index] = (ann_t, canary, ann_d, time.time())
         #if canary:
         #    canary.notifyOnDisconnect ...
         # use a CanaryWatcher? with cw.is_connected()?
@@ -194,11 +195,11 @@ class IntroducerService(service.MultiService, Referenceable):
             self._debug_counts["outbound_message"] += 1
             self._debug_counts["outbound_announcements"] += 1
             self._debug_outstanding += 1
-            d = s.callRemote("announce_v2", set([ann_s]))
+            d = s.callRemote("announce_v2", set([ann_t]))
             d.addBoth(self._debug_retired)
             d.addErrback(log.err,
                          format="subscriber errored on announcement %(ann)s",
-                         ann=ann_s, facility="tahoe.introducer",
+                         ann=ann_t, facility="tahoe.introducer",
                          level=log.UNUSUAL, umid="jfGMXQ")
 
     def _attach_stub_client(self, ann_d, index, lp):
@@ -222,10 +223,10 @@ class IntroducerService(service.MultiService, Referenceable):
             for (subscriber, info) in s.items():
                 # we correlate these by looking for a subscriber whose tubid
                 # matches this announcement
-                sub_tubid = base32.a2b(subscriber.getRemoteTubID()) # binary
+                sub_tubid = subscriber.getRemoteTubID()
                 if sub_tubid == ann_tubid:
                     self.log(format="found a match, nodeid=%(nodeid)s",
-                             nodeid=idlib.nodeid_b2a(sub_tubid),
+                             nodeid=sub_tubid,
                              level=log.NOISY, parent=lp2, umid="xsWs1A")
                     # found a match. Does it need info?
                     if not info[0]:
@@ -271,8 +272,7 @@ class IntroducerService(service.MultiService, Referenceable):
             # publish a 'stub client' record which contains the same
             # information. If we've already received this, it will be in
             # self._stub_client_announcements
-            tubid_b32 = subscriber.getRemoteTubID()
-            tubid = base32.a2b(tubid_b32)
+            tubid = subscriber.getRemoteTubID()
             if tubid in self._stub_client_announcements:
                 subscriber_info = self._stub_client_announcements[tubid]
 
@@ -285,8 +285,8 @@ class IntroducerService(service.MultiService, Referenceable):
         subscriber.notifyOnDisconnect(_remove)
 
         # now tell them about any announcements they're interested in
-        announcements = set( [ ann_s
-                               for idx,(ann_s,canary,ann_d,when)
+        announcements = set( [ ann_t
+                               for idx,(ann_t,canary,ann_d,when)
                                in self._announcements.items()
                                if idx[0] == service_name] )
         if announcements:
