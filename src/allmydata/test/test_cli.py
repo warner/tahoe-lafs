@@ -27,7 +27,7 @@ from allmydata.scripts import common
 from allmydata.scripts.common import DEFAULT_ALIAS, get_aliases, get_alias, \
      DefaultAliasMarker
 
-from allmydata.scripts import cli, debug, runner, backupdb, admin
+from allmydata.scripts import cli, debug, runner, backupdb
 from allmydata.test.common_util import StallMixin, ReallyEqualMixin
 from allmydata.test.no_network import GridTestMixin
 from twisted.internet import threads # CLI tests use deferToThread
