@@ -39,7 +39,6 @@ generate-keypair, derive the public key and print it to stdout.
 
 def derive_pubkey(options):
     out = options.stdout
-    err = options.stderr
     from allmydata.util import keyutil
     privkey_vs = options.privkey
     sk, pubkey_vs = keyutil.parse_privkey(privkey_vs)
