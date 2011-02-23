@@ -102,7 +102,7 @@ class StorageServer(service.MultiService, Referenceable):
     def have_shares(self):
         # quick test to decide if we need to commit to an implicit
         # permutation-seed or if we should use a new one
-        return bool(set(os.list(self.sharedir)) - set(["incoming"]))
+        return bool(set(os.listdir(self.sharedir)) - set(["incoming"]))
 
     def add_bucket_counter(self):
         statefile = os.path.join(self.storedir, "bucket_counter.state")
