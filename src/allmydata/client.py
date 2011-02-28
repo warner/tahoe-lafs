@@ -203,10 +203,10 @@ class Client(node.Node, pollmixin.PollMixin):
         # existing key
         def _make_key():
             sk_vs,vk_vs = keyutil.make_keypair()
-            return sk_vs
+            return sk_vs+"\n"
         sk_vs = self.get_or_create_private_config("server.privkey", _make_key)
-        sk,vk_vs = keyutil.parse_privkey(sk_vs)
-        self.write_config("server.pubkey", vk_vs)
+        sk,vk_vs = keyutil.parse_privkey(sk_vs.strip())
+        self.write_config("server.pubkey", vk_vs+"\n")
         self._server_key = sk
 
     def _init_permutation_seed(self, ss):
@@ -218,8 +218,8 @@ class Client(node.Node, pollmixin.PollMixin):
             else:
                 vk = self._server_key.get_verifying_key()
                 seed = base32.b2a(vk.to_string())
-            self.write_config("permutation-seed", seed)
-        return seed
+            self.write_config("permutation-seed", seed+"\n")
+        return seed.strip()
 
     def init_storage(self):
         # should we run a storage server (and publish it for others to use)?
