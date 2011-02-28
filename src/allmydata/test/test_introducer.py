@@ -11,6 +11,7 @@ from twisted.application import service
 from allmydata.interfaces import InsufficientVersionError
 from allmydata.introducer.client import IntroducerClient, ClientAdapter_v1
 from allmydata.introducer.server import IntroducerService
+from allmydata.introducer.common import get_tubid_string_from_ann_d
 from allmydata.introducer import old
 # test compatibility with old introducer .tac files
 from allmydata.introducer import IntroducerNode
@@ -286,9 +287,13 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                                      "version", "oldest",
                                      {"component": "component-v1"})
             received_announcements[c] = {}
-            def got(key_s, ann_d, announcements):
-                announcements[key_s] = ann_d
-            c.subscribe_to("storage", got, received_announcements[c])
+            def got(key_s_or_tubid, ann_d, announcements, i):
+                if i == 0:
+                    index = get_tubid_string_from_ann_d(ann_d)
+                else:
+                    index = key_s_or_tubid or get_tubid_string_from_ann_d(ann_d)
+                announcements[index] = ann_d
+            c.subscribe_to("storage", got, received_announcements[c], i)
             subscribing_clients.append(c)
             expected_announcements[i] += 1 # all expect a 'storage' announcement
 
@@ -404,7 +409,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                 anns = received_announcements[c]
                 self.failUnlessEqual(len(anns), NUM_STORAGE)
 
-                nodeid0 = b32decode(tubs[clients[0]].tubID.upper())
+                nodeid0 = tubs[clients[0]].tubID
                 ann_d = anns[nodeid0]
                 nick = ann_d["nickname"]
                 self.failUnlessEqual(type(nick), unicode)
