@@ -24,6 +24,7 @@ from allmydata.stats import StatsProvider
 from allmydata.history import History
 from allmydata.interfaces import IStatsProducer, RIStubClient
 from allmydata.nodemaker import NodeMaker
+from allmydata.blacklist import Blacklist
 
 
 KiB=1024
@@ -147,6 +148,7 @@ class Client(node.Node, pollmixin.PollMixin):
         if key_gen_furl:
             self.init_key_gen(key_gen_furl)
         self.init_client()
+        self.init_blacklist()
         # ControlServer and Helper are attached after Tub startup
         self.init_ftp_server()
         self.init_sftp_server()
@@ -389,6 +391,12 @@ class Client(node.Node, pollmixin.PollMixin):
     def set_default_mutable_keysize(self, keysize):
         self._key_generator.set_default_keysize(keysize)
 
+    def init_blacklist(self):
+        self.blacklist = None
+        fn = os.path.join(self.basedir, "webapi.blacklist")
+        if os.path.exists(fn):
+            self.blacklist = Blacklist(fn)
+
     def init_web(self, webport):
         self.log("init_web(webport=%s)", args=(webport,))
 
@@ -479,11 +487,18 @@ class Client(node.Node, pollmixin.PollMixin):
     # dirnodes. The first takes a URI and produces a filenode or (new-style)
     # dirnode. The other three create brand-new filenodes/dirnodes.
 
-    def create_node_from_uri(self, write_uri, read_uri=None, deep_immutable=False, name="<unknown name>"):
+    def create_node_from_uri(self, write_uri, read_uri=None,
+                             deep_immutable=False, name="<unknown name>"):
         # This returns synchronously.
-        # Note that it does *not* validate the write_uri and read_uri; instead we
-        # may get an opaque node if there were any problems.
-        return self.nodemaker.create_from_cap(write_uri, read_uri, deep_immutable=deep_immutable, name=name)
+        # Note that it does *not* validate the write_uri and read_uri;
+        # instead we may get an opaque node if there were any problems.
+        n = self.nodemaker.create_from_cap(write_uri, read_uri,
+                                           deep_immutable=deep_immutable,
+                                           name=name)
+        if self.blacklist:
+            si = n.get_storage_index()
+            self.blacklist.check_storageindex(si) # may raise FileProhibited
+        return n
 
     def create_dirnode(self, initial_children={}):
         d = self.nodemaker.create_new_mutable_directory(initial_children)

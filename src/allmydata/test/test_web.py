@@ -161,6 +161,7 @@ class FakeClient(Client):
         self.history = FakeHistory()
         self.uploader = FakeUploader()
         self.uploader.setServiceParent(self)
+        self.blacklist = None
         self.nodemaker = FakeNodeMaker(None, self._secret_holder, None,
                                        self.uploader, None,
                                        None, None)
@@ -4448,6 +4449,56 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
             return res
         d.addBoth(_flush_errors)
 
+        return d
+
+    def test_blacklist(self):
+        # download from a blacklisted URI, get an error
+        self.basedir = "web/Grid/blacklist"
+        self.set_up_grid()
+        c0 = self.g.clients[0]
+        c0_basedir = c0.basedir
+        self.uris = {}
+        DATA = "off-limits " * 50
+        d = c0.upload(upload.Data(DATA, convergence=""))
+        def _stash_uri(ur):
+            self.uri = ur.uri
+            self.url = "uri/"+self.uri
+            u = uri.from_string_filenode(self.uri)
+            self.si = u.get_storage_index()
+        d.addCallback(_stash_uri)
+        d.addCallback(lambda ign: self.GET(self.url))
+        def _blacklist_but_dont_restart(ign):
+            fn = os.path.join(c0_basedir, "webapi.blacklist")
+            f = open(fn, "w")
+            f.write("%s %s\n" % (base32.b2a(self.si), "off-limits"))
+            f.close()
+            # now we *don't* restart the client: since no blacklist was seen
+            # at startup, the change is ignored. This confirms that the node
+            # behaves as the docs specify, even if that behavior might not be
+            # what you always want. (the intention is to avoid a performance
+            # penalty for the majority of nodes that don't use a blacklist).
+        d.addCallback(_blacklist_but_dont_restart)
+        d.addCallback(lambda ign: self.GET(self.url))
+        d.addCallback(lambda ign: self.restart_client(0)) # c0 now invalid
+        # now the blacklist should be active
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri",
+                                           403, "Forbidden",
+                                           "Access Prohibited: off-limits",
+                                           self.GET, "uri/" + self.uri))
+        def _unblacklist(ign):
+            fn = os.path.join(c0_basedir, "webapi.blacklist")
+            open(fn, "w").close()
+            # the Blacklist object watches mtime to tell when the file has
+            # changed, but on windows this test will run faster than the
+            # filesystem's mtime resolution. So we edit Blacklist.last_mtime
+            # to force a reload.
+            self.g.clients[0].blacklist.last_mtime -= 2.0
+        d.addCallback(_unblacklist)
+        # now a read should work
+        d.addCallback(lambda ign: self.GET(self.url))
+        # read again to exercise the blacklist-is-unchanged logic
+        d.addCallback(lambda ign: self.GET(self.url))
         return d
 
 class CompletelyUnhandledError(Exception):
