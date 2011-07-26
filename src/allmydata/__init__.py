@@ -266,6 +266,7 @@ _vers_and_locs_list = get_package_versions_and_locations()
 
 def cross_check_pkg_resources_versus_import():
     """This function returns a list of errors due to any failed cross-checks."""
+    return
 
     import pkg_resources
     from _auto_deps import install_requires
