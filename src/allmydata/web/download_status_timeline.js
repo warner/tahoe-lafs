@@ -2,6 +2,69 @@
 $(function() {
 
       function onDataReceived(data) {
+          var w = 800,
+              h = 300;
+          var chart = d3.select("#timeline").append("svg:svg")
+          .attr("width", w+40)
+          .attr("height", h+30);
+          if (0)
+              chart.append("svg:rect")
+              .attr("fill", "steelblue")
+              .attr("width", "40px")
+              .attr("height", "20px");
+
+          function reltime(t) {return t-data.bounds.min;}
+          var last = data.bounds.max - data.bounds.min;
+          last = reltime(d3.max(data.dyhb, function (d) {return d.finish_time;}));
+          last = last * 1.05;
+          // d3.time.scale() has no support for ms or us.
+          var xt = d3.time.scale().domain([data.bounds.min, data.bounds.max])
+                                   .range([0,w]),
+              x = d3.scale.linear().domain([0, last])
+                                   .range([0,w]),
+              y = d3.scale.ordinal()
+                          .domain(d3.range(data.dyhb.length))
+                          .rangeBands([0, h], .2);
+          var dyhb = chart.selectAll("rect.dyhb")
+               .data(data.dyhb)
+              .enter().append("svg:rect")
+               .attr("class", "dyhb")
+               .attr("x", function(d) {return x(reltime(d.start_time));})
+               .attr("y", function(d,i) { return y(i); })
+               .attr("width", function(d) { return d.finish_time ?
+                                            x(reltime(d.finish_time)) : "1px"; })
+               .attr("height", y.rangeBand())
+               .attr("stroke", "black")
+               .attr("fill", function(d) { return data.server_info[d.serverid].color; } )
+               .attr("title", function(d) {return "shnums: "+d.response_shnums;})
+          ;
+
+          var rules = chart.selectAll("g.rule")
+                .data(x.ticks(10))
+               .enter().append("svg:g")
+                .attr("class", "rule")
+                .attr("transform", function(d) { return "translate(" +x(d) + ",0)"; });
+
+          rules.append("svg:line")
+              .attr("y1", h)
+              .attr("y2", h + 6)
+              .attr("stroke", "black");
+
+          rules.append("svg:line")
+              .attr("y1", 0)
+              .attr("y2", h)
+              .attr("stroke", "white")
+              .attr("stroke-opacity", .3);
+
+          rules.append("svg:text")
+              .attr("y", h + 9)
+              .attr("dy", ".71em")
+              .attr("text-anchor", "middle")
+              .attr("fill", "black")
+              .text(x.tickFormat(10));
+
+
+          return;
           var bounds = { min: data.bounds.min,
                          max: data.bounds.max
                        };
