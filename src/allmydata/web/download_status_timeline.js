@@ -2,11 +2,16 @@
 $(function() {
 
       function onDataReceived(data) {
-          var w = 800,
-              h = 300;
-          var chart = d3.select("#timeline").append("svg:svg")
-          .attr("width", w+40)
-          .attr("height", h+30);
+          var timeline = d3.select("#timeline");
+          var w = Number(timeline.style("width").slice(0,-2)),
+              h = Number(timeline.style("height").slice(0,-2));
+          // the SVG fills the whole div
+          var chart = timeline.append("svg:svg")
+          .attr("width", w)
+          .attr("height", h);
+          // but the stuff we put inside it should have some room
+          w = w-50;
+          h = h-60;
           if (0)
               chart.append("svg:rect")
               .attr("fill", "steelblue")
@@ -15,53 +20,236 @@ $(function() {
 
           function reltime(t) {return t-data.bounds.min;}
           var last = data.bounds.max - data.bounds.min;
-          last = reltime(d3.max(data.dyhb, function (d) {return d.finish_time;}));
+          //last = reltime(d3.max(data.dyhb, function(d){return d.finish_time;}));
           last = last * 1.05;
           // d3.time.scale() has no support for ms or us.
-          var xt = d3.time.scale().domain([data.bounds.min, data.bounds.max])
+          var xOFF = d3.time.scale().domain([data.bounds.min, data.bounds.max])
                                    .range([0,w]),
-              x = d3.scale.linear().domain([0, last])
-                                   .range([0,w]),
+              x = d3.scale.linear().domain([-last*0.05, last])
+                                   .range([0,w]);
+
+          // DYHB section
+          var h_dyhb = 20 * data.dyhb.length;
               y = d3.scale.ordinal()
                           .domain(d3.range(data.dyhb.length))
-                          .rangeBands([0, h], .2);
-          var dyhb = chart.selectAll("rect.dyhb")
+                          .rangeBands([20, h_dyhb], .2);
+          chart.append("svg:text")
+              .attr("x", "20px")
+              .attr("y", "0px")
+              .attr("text-anchor", "start") // anchor at top-left
+              .attr("dy", ".71em")
+              .attr("fill", "black")
+              .text("DYHB Requests");
+          var dyhb = chart.selectAll("g.dyhb") // one per row
                .data(data.dyhb)
-              .enter().append("svg:rect")
+              .enter().append("svg:g")
                .attr("class", "dyhb")
-               .attr("x", function(d) {return x(reltime(d.start_time));})
-               .attr("y", function(d,i) { return y(i); })
-               .attr("width", function(d) { return d.finish_time ?
-                                            x(reltime(d.finish_time)) : "1px"; })
+               .attr("transform", function(d,i) {return "translate("+x(reltime(d.start_time))+","+y(i)+")";})
+          ;
+          function left(d) { return x(reltime(d.start_time)); }
+          function right(d) {
+              return d.finish_time ? x(reltime(d.finish_time)) : "1px";
+          }
+          function width(d) {
+              return d.finish_time ? x(reltime(d.finish_time))-x(reltime(d.start_time)) : "1px";
+          }
+          function middle(d) {
+              if (d.finish_time)
+                  return (x(reltime(d.start_time))+x(reltime(d.finish_time)))/2;
+              else
+                  return x(reltime(d.start_time)) + 1;
+          }
+          function color(d) { return data.server_info[d.serverid].color; }
+          function servername(d) { return d.serverid.slice(0,4); }
+          dyhb.append("svg:text")
+               .attr("text-anchor", "end")
+               .attr("fill", "black")
+               .attr("dx", "-0.2em")
+               .attr("dy", "0.7em")
+               .attr("font-size", "12px")
+               .text(servername)
+          ;
+          dyhb.append("svg:rect")
+               .attr("width", width)
                .attr("height", y.rangeBand())
                .attr("stroke", "black")
-               .attr("fill", function(d) { return data.server_info[d.serverid].color; } )
-               .attr("title", function(d) {return "shnums: "+d.response_shnums;})
+               .attr("fill", color)
+               .attr("title", function(d){return "shnums: "+d.response_shnums;})
+          ;
+          dyhb.append("svg:g")
+               .attr("class", "rightbox")
+               .attr("transform", function(d) {return "translate("+right(d)
+                                               +",0)";})
+              .append("svg:text")
+               .attr("text-anchor", "start")
+               .attr("dx", "0.5em")
+               .attr("dy", "0.6em")
+               .attr("fill", "black")
+               .attr("font-size", "14px")
+               .text(function (d) {return "shnums: "+d.response_shnums;})
           ;
 
+          // read() requests
+          var h_read = 20,
+              y_read = h_dyhb+10;
+          //  actually, we can have multiple rows: d.row says which one to
+          //  use. The python-side code figures out the row assignments to
+          //  avoid overlap
+          chart.append("svg:text")
+              .attr("x", "20px")
+              .attr("y", y_read)
+              .attr("text-anchor", "start") // anchor at top-left
+              .attr("dy", ".71em")
+              .attr("fill", "black")
+              .text("read() Requests");
+          var read = chart.selectAll("g.read")
+               .data(data.read)
+              .enter().append("svg:g")
+               .attr("class", "read")
+               .attr("transform", function(d) {
+                         return "translate("+left(d)+",0)"; })
+          ;
+          read.append("svg:rect")
+               //.attr("x", function(d) {return x(reltime(d.start_time));})
+               .attr("y", y_read+20)
+               .attr("width", width)
+               .attr("height", h_read)
+               .attr("fill", "red")
+               .attr("stroke", "black")
+          ;
+          read.append("svg:text")
+               .attr("x", middle)
+               .attr("y", y_read+20)
+               .attr("dy", "0.9em")
+               .attr("fill", "black")
+               .text(function(d) {return "["+d.start+":+"+d.length+"]";})
+          ;
+
+          // segment requests
+          var h_segment = 20,
+              y_segment = y_read+50;
+          // again, this permits multiple rows
+          chart.append("svg:text")
+              .attr("x", "20px")
+              .attr("y", y_segment)
+              .attr("text-anchor", "start") // anchor at top-left
+              .attr("dy", ".71em")
+              .attr("fill", "black")
+              .text("segment() Requests");
+          var segment = chart.selectAll("g.segment")
+               .data(data.segment)
+              .enter().append("svg:g")
+               .attr("class", "segment")
+               .attr("transform", function(d) {
+                         return "translate("+left(d)+",0)"; })
+          ;
+          segment.append("svg:rect")
+               //.attr("x", function(d) {return x(reltime(d.start_time));})
+               .attr("y", y_segment+20) // y_segment+20+30*d.row
+               .attr("width", width)
+               .attr("height", h_segment)
+               .attr("fill", function(d){if (d.success) return "#c0ffc0";
+                                         else return "#ffc0c0";})
+               .attr("stroke", "black")
+               .attr("title", function(d) {
+                         return "seg"+d.segment_number+" ["+d.segment_start
+                             +":+"+d.segment_length+"] (took "
+                             +(d.finish_time-d.start_time)+")";})
+          ;
+          segment.append("svg:text")
+               .attr("x", middle)
+               .attr("y", y_segment+20)
+               .attr("dy", "0.9em")
+               .attr("fill", "black")
+               .text(function(d) {return d.segment_number;})
+          ;
+
+          var shnum_colors = d3.scale.category10();
+
+          // block requests
+          var h_block = 20,
+              block_top = y_segment+50;
+
+          chart.append("svg:text")
+              .attr("x", "20px")
+              .attr("y", block_top)
+              .attr("text-anchor", "start") // anchor at top-left
+              .attr("dy", ".71em")
+              .attr("fill", "black")
+              .text("block() Requests");
+          var block_row_to_y = {};
+          function buildit() {
+              var row_y=block_top+20;
+              for (var group=0; group < data.block_rownums.length; group++) {
+                  for (var row=0; row < data.block_rownums[group]; row++) {
+                      block_row_to_y[group+"-"+row] = row_y;
+                      row_y += 12;
+                  }
+                  row_y += 5;
+              }
+          }
+          buildit();
+          var blocks = chart.selectAll("g.block")
+               .data(data.block)
+              .enter().append("svg:g")
+               .attr("class", "block")
+               .attr("transform", function(d) {
+                         var y = block_row_to_y[d.row[0]+"-"+d.row[1]];
+                         return "translate("+left(d)+"," +y+")"; })
+          ;
+          // everything appended to blocks starts at the top-left of the
+          // correct per-rect location
+          blocks.append("svg:rect")
+               .attr("width", width)
+               .attr("height", 10)
+               .attr("fill", color)
+               .attr("stroke", function(d){return shnum_colors(d.shnum);})
+               .attr("stroke-width", function(d) {
+                         if (d.response_length > 100) return 2;
+                         else return 1;
+                     })
+               .attr("title", function(d){
+                         return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)
+                             +" ["+d.start+":+"+d.length+"] -> "
+                             +d.response_length;})
+          ;
+          if (0)
+          blocks.append("svg:text")
+               .attr("x", middle)
+               //.attr("y", y_block+20)
+               .attr("dy", "0.9em")
+               .attr("fill", "black")
+               //.text(function(d) {return d.shnum;})
+          ;
+
+          // horizontal scale markers: vertical lines at rational timestamps
           var rules = chart.selectAll("g.rule")
                 .data(x.ticks(10))
                .enter().append("svg:g")
                 .attr("class", "rule")
-                .attr("transform", function(d) { return "translate(" +x(d) + ",0)"; });
-
+                .attr("transform", function(d) { return "translate(" +x(d) +
+                                                 ",0)"; });
           rules.append("svg:line")
               .attr("y1", h)
               .attr("y2", h + 6)
               .attr("stroke", "black");
-
           rules.append("svg:line")
               .attr("y1", 0)
               .attr("y2", h)
-              .attr("stroke", "white")
+              .attr("stroke", "black")
               .attr("stroke-opacity", .3);
-
           rules.append("svg:text")
               .attr("y", h + 9)
               .attr("dy", ".71em")
               .attr("text-anchor", "middle")
               .attr("fill", "black")
               .text(x.tickFormat(10));
+          chart.append("svg:text")
+              .attr("x", w/2)
+              .attr("y", h + 35)
+              .attr("text-anchor", "middle")
+              .attr("fill", "black")
+              .text("seconds");
 
 
           return;
