@@ -154,7 +154,7 @@ $(function() {
                              +(d.finish_time-d.start_time)+")";})
           ;
           segment.append("svg:text")
-               .attr("x", middle)
+               .attr("x", function(d) {return width(d)/2;})
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return d.segment_number;})
