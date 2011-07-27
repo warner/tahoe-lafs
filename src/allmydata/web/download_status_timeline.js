@@ -3,20 +3,13 @@ $(function() {
 
       function onDataReceived(data) {
           var timeline = d3.select("#timeline");
-          var w = Number(timeline.style("width").slice(0,-2)),
-              h = Number(timeline.style("height").slice(0,-2));
-          // the SVG fills the whole div
+          var w = Number(timeline.style("width").slice(0,-2));
+          // the SVG fills the width of the whole div, but it will extend
+          // as far vertically as necessary (depends upon the data)
           var chart = timeline.append("svg:svg")
-          .attr("width", w)
-          .attr("height", h);
+          .attr("width", w);
           // but the stuff we put inside it should have some room
           w = w-50;
-          h = h-60;
-          if (0)
-              chart.append("svg:rect")
-              .attr("fill", "steelblue")
-              .attr("width", "40px")
-              .attr("height", "20px");
 
           function reltime(t) {return t-data.bounds.min;}
           var last = data.bounds.max - data.bounds.min;
@@ -28,24 +21,6 @@ $(function() {
               x = d3.scale.linear().domain([-last*0.05, last])
                                    .range([0,w]);
 
-          // DYHB section
-          var h_dyhb = 20 * data.dyhb.length;
-              y = d3.scale.ordinal()
-                          .domain(d3.range(data.dyhb.length))
-                          .rangeBands([20, h_dyhb], .2);
-          chart.append("svg:text")
-              .attr("x", "20px")
-              .attr("y", "0px")
-              .attr("text-anchor", "start") // anchor at top-left
-              .attr("dy", ".71em")
-              .attr("fill", "black")
-              .text("DYHB Requests");
-          var dyhb = chart.selectAll("g.dyhb") // one per row
-               .data(data.dyhb)
-              .enter().append("svg:g")
-               .attr("class", "dyhb")
-               .attr("transform", function(d,i) {return "translate("+x(reltime(d.start_time))+","+y(i)+")";})
-          ;
           function left(d) { return x(reltime(d.start_time)); }
           function right(d) {
               return d.finish_time ? x(reltime(d.finish_time)) : "1px";
@@ -61,26 +36,49 @@ $(function() {
           }
           function color(d) { return data.server_info[d.serverid].color; }
           function servername(d) { return d.serverid.slice(0,4); }
+
+          var y = 0;
+          chart.append("svg:text")
+              .attr("x", "20px")
+              .attr("y", y)
+              .attr("text-anchor", "start") // anchor at top-left
+              .attr("dy", ".71em")
+              .attr("fill", "black")
+              .text("DYHB Requests");
+          y += 20;
+
+          // DYHB section
+          var dyhb_y = d3.scale.ordinal()
+                          .domain(d3.range(data.dyhb.length))
+                          .rangeBands([y, y+data.dyhb.length*20], .2);
+          y += data.dyhb.length*20;
+          var dyhb = chart.selectAll("g.dyhb") // one per row
+               .data(data.dyhb)
+              .enter().append("svg:g")
+               .attr("class", "dyhb")
+               .attr("transform", function(d,i) {return "translate("+x(reltime(d.start_time))+","+dyhb_y(i)+")";})
+          ;
           dyhb.append("svg:text")
                .attr("text-anchor", "end")
                .attr("fill", "black")
-               .attr("dx", "-0.2em")
+               //.attr("dx", "-0.2em") // XXX doesn't work?
                .attr("dy", "0.7em")
                .attr("font-size", "12px")
                .text(servername)
           ;
           dyhb.append("svg:rect")
                .attr("width", width)
-               .attr("height", y.rangeBand())
+               .attr("height", dyhb_y.rangeBand())
                .attr("stroke", "black")
                .attr("fill", color)
                .attr("title", function(d){return "shnums: "+d.response_shnums;})
           ;
-          dyhb.append("svg:g")
+          var dyhb_rightboxes = dyhb.append("svg:g")
                .attr("class", "rightbox")
                .attr("transform", function(d) {return "translate("+right(d)
                                                +",0)";})
-              .append("svg:text")
+          ;
+          dyhb_rightboxes.append("svg:text") // XXX too far right
                .attr("text-anchor", "start")
                .attr("dx", "0.5em")
                .attr("dy", "0.6em")
@@ -90,64 +88,63 @@ $(function() {
           ;
 
           // read() requests
-          var h_read = 20,
-              y_read = h_dyhb+10;
           //  actually, we can have multiple rows: d.row says which one to
           //  use. The python-side code figures out the row assignments to
           //  avoid overlap
           chart.append("svg:text")
               .attr("x", "20px")
-              .attr("y", y_read)
+              .attr("y", y)
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
               .text("read() Requests");
+          y += 20;
           var read = chart.selectAll("g.read")
                .data(data.read)
               .enter().append("svg:g")
                .attr("class", "read")
                .attr("transform", function(d) {
-                         return "translate("+left(d)+",0)"; })
+                         return "translate("+left(d)+","+y+")"; })
           ;
+          y += 25;
           read.append("svg:rect")
                //.attr("x", function(d) {return x(reltime(d.start_time));})
-               .attr("y", y_read+20)
+               .attr("y", function(d) {return 20*d.row;})
                .attr("width", width)
-               .attr("height", h_read)
+               .attr("height", 20)
                .attr("fill", "red")
                .attr("stroke", "black")
           ;
           read.append("svg:text")
                .attr("x", middle)
-               .attr("y", y_read+20)
+               //.attr("y", y_read+20)
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return "["+d.start+":+"+d.length+"]";})
           ;
 
           // segment requests
-          var h_segment = 20,
-              y_segment = y_read+50;
           // again, this permits multiple rows
           chart.append("svg:text")
               .attr("x", "20px")
-              .attr("y", y_segment)
+              .attr("y", y)
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
               .text("segment() Requests");
+          y += 20;
           var segment = chart.selectAll("g.segment")
                .data(data.segment)
               .enter().append("svg:g")
                .attr("class", "segment")
                .attr("transform", function(d) {
-                         return "translate("+left(d)+",0)"; })
+                         return "translate("+left(d)+","+(y+30*d.row)+")"; })
           ;
+          y += 25;
           segment.append("svg:rect")
                //.attr("x", function(d) {return x(reltime(d.start_time));})
-               .attr("y", y_segment+20) // y_segment+20+30*d.row
                .attr("width", width)
-               .attr("height", h_segment)
+               .attr("height", 20)
                .attr("fill", function(d){if (d.success) return "#c0ffc0";
                                          else return "#ffc0c0";})
                .attr("stroke", "black")
@@ -158,7 +155,6 @@ $(function() {
           ;
           segment.append("svg:text")
                .attr("x", middle)
-               .attr("y", y_segment+20)
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return d.segment_number;})
@@ -167,25 +163,23 @@ $(function() {
           var shnum_colors = d3.scale.category10();
 
           // block requests
-          var h_block = 20,
-              block_top = y_segment+50;
-
           chart.append("svg:text")
               .attr("x", "20px")
-              .attr("y", block_top)
+              .attr("y", y)
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
               .text("block() Requests");
+          y += 20;
           var block_row_to_y = {};
           function buildit() {
-              var row_y=block_top+20;
+              var row_y=y;
               for (var group=0; group < data.block_rownums.length; group++) {
                   for (var row=0; row < data.block_rownums[group]; row++) {
                       block_row_to_y[group+"-"+row] = row_y;
-                      row_y += 12;
+                      row_y += 12; y += 12;
                   }
-                  row_y += 5;
+                  row_y += 5; y += 5;
               }
           }
           buildit();
@@ -194,8 +188,8 @@ $(function() {
               .enter().append("svg:g")
                .attr("class", "block")
                .attr("transform", function(d) {
-                         var y = block_row_to_y[d.row[0]+"-"+d.row[1]];
-                         return "translate("+left(d)+"," +y+")"; })
+                         var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
+                         return "translate("+left(d)+"," +ry+")"; })
           ;
           // everything appended to blocks starts at the top-left of the
           // correct per-rect location
@@ -213,13 +207,15 @@ $(function() {
                              +" ["+d.start+":+"+d.length+"] -> "
                              +d.response_length;})
           ;
-          if (0)
+          if (1)
           blocks.append("svg:text")
-               .attr("x", middle)
+               .attr("x", function(d) {return width(d)/2;}) // XXX finish_time=undef?
                //.attr("y", y_block+20)
                .attr("dy", "0.9em")
                .attr("fill", "black")
-               //.text(function(d) {return d.shnum;})
+               .attr("font-size", "8px")
+               .attr("text-anchor", "middle")
+               .text(function(d) {return "sh"+d.shnum;})
           ;
 
           // horizontal scale markers: vertical lines at rational timestamps
@@ -230,29 +226,34 @@ $(function() {
                 .attr("transform", function(d) { return "translate(" +x(d) +
                                                  ",0)"; });
           rules.append("svg:line")
-              .attr("y1", h)
-              .attr("y2", h + 6)
+              .attr("y1", y)
+              .attr("y2", y + 6)
               .attr("stroke", "black");
           rules.append("svg:line")
               .attr("y1", 0)
-              .attr("y2", h)
+              .attr("y2", y)
               .attr("stroke", "black")
               .attr("stroke-opacity", .3);
           rules.append("svg:text")
-              .attr("y", h + 9)
+              .attr("y", y + 9)
               .attr("dy", ".71em")
               .attr("text-anchor", "middle")
               .attr("fill", "black")
               .text(x.tickFormat(10));
           chart.append("svg:text")
               .attr("x", w/2)
-              .attr("y", h + 35)
+              .attr("y", y + 35)
               .attr("text-anchor", "middle")
               .attr("fill", "black")
               .text("seconds");
+          y += 45;
 
+          chart.attr("height", y);
 
           return;
+      }
+
+      function unused() {
           var bounds = { min: data.bounds.min,
                          max: data.bounds.max
                        };
