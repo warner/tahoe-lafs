@@ -179,7 +179,7 @@ $(function() {
               .text("block() requests");
           y += 20;
           var block_row_to_y = {};
-          function buildit() {
+          var dummy = function() {
               var row_y=y;
               for (var group=0; group < data.block_rownums.length; group++) {
                   for (var row=0; row < data.block_rownums[group]; row++) {
@@ -188,8 +188,7 @@ $(function() {
                   }
                   row_y += 5; y += 5;
               }
-          }
-          buildit();
+          }();
           var blocks = chart.selectAll("g.block")
                .data(data.block)
               .enter().append("svg:g")
