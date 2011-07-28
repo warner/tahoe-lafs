@@ -70,14 +70,6 @@ $(function() {
                              +dyhb_y(i)+")";
                      })
           ;
-          dyhb.append("svg:text")
-               .attr("text-anchor", "end")
-               .attr("fill", "#444")
-               //.attr("dx", "-0.2em") // XXX doesn't work?
-               .attr("dy", "0.7em")
-               .attr("font-size", "12px")
-               .text(servername)
-          ;
           dyhb.append("svg:rect")
                .attr("width", width)
                .attr("height", dyhb_y.rangeBand())
@@ -85,15 +77,24 @@ $(function() {
                .attr("fill", color)
                .attr("title", function(d){return "shnums: "+d.response_shnums;})
           ;
+          dyhb.append("svg:text")
+               .attr("text-anchor", "end")
+               .attr("fill", "#444")
+               .attr("x", "-0.3em") // for some reason dx doesn't work
+               .attr("dy", "1.0em")
+               .attr("font-size", "12px")
+               .text(servername)
+          ;
           var dyhb_rightboxes = dyhb.append("svg:g")
                .attr("class", "rightbox")
-               .attr("transform", function(d) {return "translate("+right(d)
+               .attr("transform", function(d) {return "translate("+width(d)
                                                +",0)";})
           ;
-          dyhb_rightboxes.append("svg:text") // XXX too far right
+          dyhb_rightboxes.append("svg:text")
                .attr("text-anchor", "start")
+               .attr("y", dyhb_y.rangeBand())
                .attr("dx", "0.5em")
-               .attr("dy", "0.6em")
+               .attr("dy", "-0.4em")
                .attr("fill", "#444")
                .attr("font-size", "14px")
                .text(function (d) {return "shnums: "+d.response_shnums;})
@@ -162,6 +163,7 @@ $(function() {
           ;
           segment.append("svg:text")
                .attr("x", halfwidth)
+               .attr("text-anchor", "middle")
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return d.segment_number;})
