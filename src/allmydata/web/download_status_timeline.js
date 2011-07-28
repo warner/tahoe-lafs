@@ -28,6 +28,11 @@ $(function() {
           function width(d) {
               return d.finish_time ? x(reltime(d.finish_time))-x(reltime(d.start_time)) : "1px";
           }
+          function halfwidth(d) {
+              if (d.finish_time)
+                  return (x(reltime(d.finish_time))-x(reltime(d.start_time)))/2;
+              return "1px";
+          }
           function middle(d) {
               if (d.finish_time)
                   return (x(reltime(d.start_time))+x(reltime(d.finish_time)))/2;
@@ -35,7 +40,11 @@ $(function() {
                   return x(reltime(d.start_time)) + 1;
           }
           function color(d) { return data.server_info[d.serverid].color; }
-          function servername(d) { return d.serverid.slice(0,4); }
+          function servername(d) { return data.server_info[d.serverid].short; }
+          function timeformat(duration) {
+              // TODO: trim to microseconds, maybe humanize
+              return duration;
+          }
 
           var y = 0;
           chart.append("svg:text")
@@ -44,7 +53,7 @@ $(function() {
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
-              .text("DYHB Requests");
+              .text("DYHB requests");
           y += 20;
 
           // DYHB section
@@ -56,11 +65,14 @@ $(function() {
                .data(data.dyhb)
               .enter().append("svg:g")
                .attr("class", "dyhb")
-               .attr("transform", function(d,i) {return "translate("+x(reltime(d.start_time))+","+dyhb_y(i)+")";})
+               .attr("transform", function(d,i) {
+                         return "translate("+x(reltime(d.start_time))+","
+                             +dyhb_y(i)+")";
+                     })
           ;
           dyhb.append("svg:text")
                .attr("text-anchor", "end")
-               .attr("fill", "black")
+               .attr("fill", "#444")
                //.attr("dx", "-0.2em") // XXX doesn't work?
                .attr("dy", "0.7em")
                .attr("font-size", "12px")
@@ -82,56 +94,52 @@ $(function() {
                .attr("text-anchor", "start")
                .attr("dx", "0.5em")
                .attr("dy", "0.6em")
-               .attr("fill", "black")
+               .attr("fill", "#444")
                .attr("font-size", "14px")
                .text(function (d) {return "shnums: "+d.response_shnums;})
           ;
 
           // read() requests
-          //  actually, we can have multiple rows: d.row says which one to
-          //  use. The python-side code figures out the row assignments to
-          //  avoid overlap
           chart.append("svg:text")
               .attr("x", "20px")
               .attr("y", y)
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
-              .text("read() Requests");
+              .text("read() requests");
           y += 20;
           var read = chart.selectAll("g.read")
                .data(data.read)
               .enter().append("svg:g")
                .attr("class", "read")
                .attr("transform", function(d) {
-                         return "translate("+left(d)+","+y+")"; })
+                         return "translate("+left(d)+","+(y+30*d.row)+")"; })
           ;
-          y += 25;
+          y += 30*(1+d3.max(data.read, function(d){return d.row;}));
           read.append("svg:rect")
-               //.attr("x", function(d) {return x(reltime(d.start_time));})
-               .attr("y", function(d) {return 20*d.row;})
                .attr("width", width)
                .attr("height", 20)
                .attr("fill", "red")
                .attr("stroke", "black")
+               .attr("title", function(d)
+                     {return "read(start="+d.start+", len="+d.length+") -> "
+                      +d.bytes_returned+" bytes";})
           ;
           read.append("svg:text")
                .attr("x", middle)
-               //.attr("y", y_read+20)
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return "["+d.start+":+"+d.length+"]";})
           ;
 
           // segment requests
-          // again, this permits multiple rows
           chart.append("svg:text")
               .attr("x", "20px")
               .attr("y", y)
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
-              .text("segment() Requests");
+              .text("segment() requests");
           y += 20;
           var segment = chart.selectAll("g.segment")
                .data(data.segment)
@@ -140,21 +148,20 @@ $(function() {
                .attr("transform", function(d) {
                          return "translate("+left(d)+","+(y+30*d.row)+")"; })
           ;
-          y += 25;
+          y += 30*(1+d3.max(data.segment, function(d){return d.row;}));
           segment.append("svg:rect")
-               //.attr("x", function(d) {return x(reltime(d.start_time));})
                .attr("width", width)
                .attr("height", 20)
-               .attr("fill", function(d){if (d.success) return "#c0ffc0";
-                                         else return "#ffc0c0";})
+               .attr("fill", function(d){return d.success ? "#cfc" : "#fcc";})
                .attr("stroke", "black")
+               .attr("stroke-width", 1)
                .attr("title", function(d) {
                          return "seg"+d.segment_number+" ["+d.segment_start
                              +":+"+d.segment_length+"] (took "
-                             +(d.finish_time-d.start_time)+")";})
+                             +timeformat(d.finish_time-d.start_time)+")";})
           ;
           segment.append("svg:text")
-               .attr("x", function(d) {return width(d)/2;})
+               .attr("x", halfwidth)
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .text(function(d) {return d.segment_number;})
@@ -169,7 +176,7 @@ $(function() {
               .attr("text-anchor", "start") // anchor at top-left
               .attr("dy", ".71em")
               .attr("fill", "black")
-              .text("block() Requests");
+              .text("block() requests");
           y += 20;
           var block_row_to_y = {};
           function buildit() {
@@ -195,22 +202,19 @@ $(function() {
           // correct per-rect location
           blocks.append("svg:rect")
                .attr("width", width)
-               .attr("height", 10)
+               .attr("y", function(d) {return (d.response_length > 100) ? 0:3;})
+               .attr("height",
+                     function(d) {return (d.response_length > 100) ? 10:4;})
                .attr("fill", color)
                .attr("stroke", function(d){return shnum_colors(d.shnum);})
-               .attr("stroke-width", function(d) {
-                         if (d.response_length > 100) return 2;
-                         else return 1;
-                     })
+               .attr("stroke-width", 1)
                .attr("title", function(d){
                          return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)
                              +" ["+d.start+":+"+d.length+"] -> "
                              +d.response_length;})
           ;
-          if (1)
           blocks.append("svg:text")
-               .attr("x", function(d) {return width(d)/2;}) // XXX finish_time=undef?
-               //.attr("y", y_block+20)
+               .attr("x", halfwidth)
                .attr("dy", "0.9em")
                .attr("fill", "black")
                .attr("font-size", "8px")
@@ -297,24 +301,6 @@ $(function() {
 
           vis.anchor("top").top(-20).add(pv.Label).text("DYHB Requests");
 
-          vis.add(pv.Bar)
-              .data(data.dyhb)
-              .height(20)
-              .top(function (d) {return 30*d.row;})
-              .left(function(d){return x(d.start_time);})
-              .width(function(d){return x(d.finish_time)-x(d.start_time);})
-              .title(function(d){return "shnums: "+d.response_shnums;})
-              .fillStyle(function(d){return data.server_info[d.serverid].color;})
-              .strokeStyle("black").lineWidth(1);
-
-          vis.add(pv.Rule)
-              .data(data.dyhb)
-              .top(function(d){return 30*d.row + 20/2;})
-              .left(0).width(0)
-              .strokeStyle("#888")
-              .anchor("left").add(pv.Label)
-              .text(function(d){return d.serverid.slice(0,4);});
-
           /* we use a function for data=relx.ticks() here instead of
            simply .data(relx.ticks()) so that it will be recalculated when
            the scales change (by pan/zoom) */
@@ -324,52 +310,6 @@ $(function() {
               .left(relx)
               .anchor("bottom").add(pv.Label)
               .text(function(d){return relx.tickFormat(d)+"s";});
-
-          var read = vis.add(pv.Panel).top(read_top);
-          read.anchor("top").top(-20).add(pv.Label).text("read() requests");
-
-          read.add(pv.Bar)
-              .data(data.read)
-              .height(20)
-              .top(function (d) {return 30*d.row;})
-              .left(function(d){return x(d.start_time);})
-              .width(function(d){return x(d.finish_time)-x(d.start_time);})
-              .title(function(d){return "read(start="+d.start+", len="+d.length+") -> "+d.bytes_returned+" bytes";})
-              .fillStyle("red")
-              .strokeStyle("black").lineWidth(1);
-
-          var segment = vis.add(pv.Panel).top(segment_top);
-          segment.anchor("top").top(-20).add(pv.Label).text("segment() requests");
-
-          segment.add(pv.Bar)
-              .data(data.segment)
-              .height(20)
-              .top(function (d) {return 30*d.row;})
-              .left(function(d){return x(d.start_time);})
-              .width(function(d){return x(d.finish_time)-x(d.start_time);})
-              .title(function(d){return "seg"+d.segment_number+" ["+d.segment_start+":+"+d.segment_length+"] (took "+(d.finish_time-d.start_time)+")";})
-              .fillStyle(function(d){if (d.success) return "#c0ffc0";
-                                    else return "#ffc0c0";})
-              .strokeStyle("black").lineWidth(1);
-
-          var block = vis.add(pv.Panel).top(block_top);
-          block.anchor("top").top(-20).add(pv.Label).text("block() requests");
-
-          var shnum_colors = pv.Colors.category10();
-          block.add(pv.Bar)
-              .data(data.block)
-              .height(10)
-              .top(function (d) {return block_row_to_y[d.row[0]+"-"+d.row[1]];})
-              .left(function(d){return x(d.start_time);})
-              .width(function(d){return x(d.finish_time)-x(d.start_time);})
-              .title(function(d){return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)+" ["+d.start+":+"+d.length+"] -> "+d.response_length;})
-              .fillStyle(function(d){return data.server_info[d.serverid].color;})
-              .strokeStyle(function(d){return shnum_colors(d.shnum).color;})
-              .lineWidth(function(d)
-                         {if (d.response_length > 100) return 3;
-                         else return 1;
-                          })
-          ;
 
 
           vis.height(height);
