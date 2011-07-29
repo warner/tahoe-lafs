@@ -1,0 +1,13 @@
+# -*- org -*-
+
+* bugs
+** scroll events fail on FF5 (work on Chrome)
+   - both scroll-up and scroll-down cause zoom-in
+   - scroll-up should be zoom-in, -down should be zoom-out
+** some rules get left on screen
+** range of x() changes, ticks narrow to only part of width
+
+
+
+
+
