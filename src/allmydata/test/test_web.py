@@ -4457,6 +4457,7 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
         self.set_up_grid()
         c0 = self.g.clients[0]
         c0_basedir = c0.basedir
+        fn = os.path.join(c0_basedir, "access.blacklist")
         self.uris = {}
         DATA = "off-limits " * 50
         d = c0.upload(upload.Data(DATA, convergence=""))
@@ -4468,7 +4469,6 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
         d.addCallback(_stash_uri)
         d.addCallback(lambda ign: self.GET(self.url))
         def _blacklist_but_dont_restart(ign):
-            fn = os.path.join(c0_basedir, "webapi.blacklist")
             f = open(fn, "w")
             f.write("%s %s\n" % (base32.b2a(self.si), "off-limits"))
             f.close()
@@ -4487,7 +4487,6 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
                                            "Access Prohibited: off-limits",
                                            self.GET, "uri/" + self.uri))
         def _unblacklist(ign):
-            fn = os.path.join(c0_basedir, "webapi.blacklist")
             open(fn, "w").close()
             # the Blacklist object watches mtime to tell when the file has
             # changed, but on windows this test will run faster than the
@@ -4499,6 +4498,44 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
         d.addCallback(lambda ign: self.GET(self.url))
         # read again to exercise the blacklist-is-unchanged logic
         d.addCallback(lambda ign: self.GET(self.url))
+
+        # now add a blacklisted directory, and make sure files under it are
+        # refused too
+        def _add_dir(ign):
+            childnode = c0.create_node_from_uri(self.uri, None)
+            return c0.create_dirnode({u"child": (childnode,{}) })
+        d.addCallback(_add_dir)
+        def _get_dircap(dn):
+            self.dir_si_b32 = base32.b2a(dn.get_storage_index())
+            self.dir_url_rw = "uri/"+dn.get_write_uri()+"/?t=json"
+            self.dir_url_ro = "uri/"+dn.get_readonly_uri()+"/?t=json"
+            self.child_url = "uri/"+dn.get_readonly_uri()+"/child"
+        d.addCallback(_get_dircap)
+        d.addCallback(lambda ign: self.GET(self.dir_url_rw))
+        d.addCallback(lambda ign: self.GET(self.dir_url_ro))
+        d.addCallback(lambda ign: self.GET(self.child_url))
+        def _block_dir(ign):
+            f = open(fn, "w")
+            f.write("%s %s\n" % (base32.b2a(self.si), "dir-off-limits"))
+            f.close()
+            self.g.clients[0].blacklist.last_mtime -= 2.0
+        d.addCallback(_block_dir)
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 2",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.dir_url_rw))
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 3",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.dir_url_ro))
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 4",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.child_url))
+
         return d
 
 class CompletelyUnhandledError(Exception):

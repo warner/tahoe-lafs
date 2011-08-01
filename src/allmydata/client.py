@@ -148,7 +148,6 @@ class Client(node.Node, pollmixin.PollMixin):
         if key_gen_furl:
             self.init_key_gen(key_gen_furl)
         self.init_client()
-        self.init_blacklist()
         # ControlServer and Helper are attached after Tub startup
         self.init_ftp_server()
         self.init_sftp_server()
@@ -280,6 +279,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.terminator.setServiceParent(self)
         self.add_service(Uploader(helper_furl, self.stats_provider))
         self.init_stub_client()
+        self.init_blacklist()
         self.init_nodemaker()
 
     def init_client_storage_broker(self):
@@ -332,6 +332,12 @@ class Client(node.Node, pollmixin.PollMixin):
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="OEHq3g")
 
+    def init_blacklist(self):
+        self.blacklist = None
+        fn = os.path.join(self.basedir, "access.blacklist")
+        if os.path.exists(fn):
+            self.blacklist = Blacklist(fn)
+
     def init_nodemaker(self):
         self.nodemaker = NodeMaker(self.storage_broker,
                                    self._secret_holder,
@@ -339,7 +345,8 @@ class Client(node.Node, pollmixin.PollMixin):
                                    self.getServiceNamed("uploader"),
                                    self.terminator,
                                    self.get_encoding_parameters(),
-                                   self._key_generator)
+                                   self._key_generator,
+                                   self.blacklist)
 
     def get_history(self):
         return self.history
@@ -390,12 +397,6 @@ class Client(node.Node, pollmixin.PollMixin):
 
     def set_default_mutable_keysize(self, keysize):
         self._key_generator.set_default_keysize(keysize)
-
-    def init_blacklist(self):
-        self.blacklist = None
-        fn = os.path.join(self.basedir, "webapi.blacklist")
-        if os.path.exists(fn):
-            self.blacklist = Blacklist(fn)
 
     def init_web(self, webport):
         self.log("init_web(webport=%s)", args=(webport,))
@@ -495,9 +496,6 @@ class Client(node.Node, pollmixin.PollMixin):
         n = self.nodemaker.create_from_cap(write_uri, read_uri,
                                            deep_immutable=deep_immutable,
                                            name=name)
-        if self.blacklist:
-            si = n.get_storage_index()
-            self.blacklist.check_storageindex(si) # may raise FileProhibited
         return n
 
     def create_dirnode(self, initial_children={}):

@@ -14,7 +14,8 @@ class NodeMaker:
 
     def __init__(self, storage_broker, secret_holder, history,
                  uploader, terminator,
-                 default_encoding_parameters, key_generator):
+                 default_encoding_parameters, key_generator,
+                 blacklist=None):
         self.storage_broker = storage_broker
         self.secret_holder = secret_holder
         self.history = history
@@ -22,6 +23,7 @@ class NodeMaker:
         self.terminator = terminator
         self.default_encoding_parameters = default_encoding_parameters
         self.key_generator = key_generator
+        self.blacklist = blacklist
 
         self._node_cache = weakref.WeakValueDictionary() # uri -> node
 
@@ -60,14 +62,20 @@ class NodeMaker:
         else:
             memokey = "M" + bigcap
         if memokey in self._node_cache:
-            return self._node_cache[memokey]
-        cap = uri.from_string(bigcap, deep_immutable=deep_immutable, name=name)
-        node = self._create_from_single_cap(cap)
-        if node:
-            self._node_cache[memokey] = node  # note: WeakValueDictionary
+            node = self._node_cache[memokey]
         else:
-            # don't cache UnknownNode
-            node = UnknownNode(writecap, readcap, deep_immutable=deep_immutable, name=name)
+            cap = uri.from_string(bigcap, deep_immutable=deep_immutable,
+                                  name=name)
+            node = self._create_from_single_cap(cap)
+            if node:
+                self._node_cache[memokey] = node  # note: WeakValueDictionary
+            else:
+                # don't cache UnknownNode
+                node = UnknownNode(writecap, readcap,
+                                   deep_immutable=deep_immutable, name=name)
+        if self.blacklist:
+            si = node.get_storage_index()
+            self.blacklist.check_storageindex(si) # may raise FileProhibited
         return node
 
     def _create_from_single_cap(self, cap):
