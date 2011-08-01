@@ -1,10 +1,10 @@
 
 function onDataReceived(data) {
-    function console(text) {
+    function status(text) {
         d3.select("#console").text(text);
         //$("#console").text("hi");// same
     }
-    console("started");
+    status("started");
     var timeline = d3.select("#timeline");
     var w = Number(timeline.style("width").slice(0,-2));
     // the SVG fills the width of the whole div, but it will extend
@@ -238,17 +238,15 @@ function onDataReceived(data) {
          .text(function(d) {return "sh"+d.shnum;})
     ;
 
-    var count=0;
+    var num = d3.format(".4g");
+    var bottom_y = y; // ignore subsequent changes to y
     redraw();
     function redraw() {
-        console("redraw "+count);
-        count += 1;
-
         if (d3.event) d3.event.transform(x);
 
         // horizontal scale markers: vertical lines at rational timestamps
         var rules = chart.selectAll("g.rule")
-            .data(x.ticks(10))//, String)
+            .data(x.ticks(10))
             .attr("transform", tx);
         rules.select("text").text(x.tickFormat(10));
 
@@ -258,16 +256,16 @@ function onDataReceived(data) {
         ;
 
         newrules.append("svg:line")
-            .attr("y1", y)
-            .attr("y2", y + 6)
+            .attr("y1", bottom_y)
+            .attr("y2", bottom_y + 6)
             .attr("stroke", "black");
         newrules.append("svg:line")
             .attr("y1", 0)
-            .attr("y2", y)
-            .attr("stroke", "black")
+            .attr("y2", bottom_y)
+            .attr("stroke", "red")
             .attr("stroke-opacity", .3);
         newrules.append("svg:text")
-            .attr("y", y + 9)
+            .attr("y", bottom_y + 9)
             .attr("dy", ".71em")
             .attr("text-anchor", "middle")
             .attr("fill", "black")
