@@ -1,10 +1,5 @@
 
 function onDataReceived(data) {
-    function status(text) {
-        d3.select("#console").text(text);
-        //$("#console").text("hi");// same
-    }
-    status("started");
     var timeline = d3.select("#timeline");
     var w = Number(timeline.style("width").slice(0,-2));
     // the SVG fills the width of the whole div, but it will extend
