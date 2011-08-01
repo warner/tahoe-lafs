@@ -123,22 +123,25 @@ function onDataReceived(data) {
              .attr("transform", function(d,i) {
                        return "translate("+x(reltime(d.start_time))+","
                            +dyhb_y(i)+")";
-                   })
-            .enter().append("svg:g")
+                   });
+        var new_dyhb = dyhb.enter().append("svg:g")
              .attr("class", "dyhb")
              .attr("transform", function(d,i) {
                        return "translate("+x(reltime(d.start_time))+","
                            +dyhb_y(i)+")";
                    })
         ;
-        dyhb.append("svg:rect")
+        dyhb.select("rect")
+             .attr("width", width)
+        ;
+        new_dyhb.append("svg:rect")
              .attr("width", width)
              .attr("height", dyhb_y.rangeBand())
              .attr("stroke", "black")
              .attr("fill", color)
              .attr("title", function(d){return "shnums: "+d.response_shnums;})
         ;
-        dyhb.append("svg:text")
+        new_dyhb.append("svg:text")
              .attr("text-anchor", "end")
              .attr("fill", "#444")
              .attr("x", "-0.3em") // for some reason dx doesn't work
@@ -146,7 +149,10 @@ function onDataReceived(data) {
              .attr("font-size", "12px")
              .text(servername)
         ;
-        var dyhb_rightboxes = dyhb.append("svg:g")
+        dyhb.select(".rightbox")
+             .attr("transform", function(d) {return "translate("+width(d)
+                                             +",0)";});
+        var dyhb_rightboxes = new_dyhb.append("svg:g")
              .attr("class", "rightbox")
              .attr("transform", function(d) {return "translate("+width(d)
                                              +",0)";})
@@ -169,14 +175,18 @@ function onDataReceived(data) {
         var read = chart.selectAll("g.read")
              .data(data.read)
              .attr("transform", function(d) {
-                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
-            .enter().append("svg:g")
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; });
+        read.select("rect")
+             .attr("width", width);
+        read.select("text")
+             .attr("x", middle);
+        var new_read = read.enter().append("svg:g")
              .attr("class", "read")
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; })
         ;
         y += 30*(1+d3.max(data.read, function(d){return d.row;}));
-        read.append("svg:rect")
+        new_read.append("svg:rect")
              .attr("width", width)
              .attr("height", 20)
              .attr("fill", "red")
@@ -185,7 +195,7 @@ function onDataReceived(data) {
                    {return "read(start="+d.start+", len="+d.length+") -> "
                     +d.bytes_returned+" bytes";})
         ;
-        read.append("svg:text")
+        new_read.append("svg:text")
              .attr("x", middle)
              .attr("dy", "0.9em")
              .attr("fill", "black")
