@@ -26,15 +26,56 @@ function onDataReceived(data) {
     // but the stuff we put inside it should have some room
     w = w-50;
 
+    // at this point we assume the data is fixed, but the zoom/pan is not
+
+    // create the static things (those which don't exist or not exist based
+    // upon the timeline data). Their locations will be adjusted later,
+    // during redraw, when we know the x+y coordinates
+    chart.append("svg:text")
+        .attr("class", "dyhb-label")
+        //.attr("x", "20px").attr("y", y)
+        .attr("text-anchor", "start") // anchor at top-left
+        .attr("dy", ".71em")
+        .attr("fill", "black")
+        .text("DYHB requests");
+
+    chart.append("svg:text")
+        .attr("class", "read-label")
+        //.attr("x", "20px").attr("y", y)
+        .attr("text-anchor", "start") // anchor at top-left
+        .attr("dy", ".71em")
+        .attr("fill", "black")
+        .text("read() requests");
+    chart.append("svg:text")
+        .attr("class", "segment-label")
+        //.attr("x", "20px").attr("y", y)
+        .attr("text-anchor", "start") // anchor at top-left
+        .attr("dy", ".71em")
+        .attr("fill", "black")
+        .text("segment() requests");
+    chart.append("svg:text")
+        .attr("class", "block-label")
+        //.attr("x", "20px").attr("y", y)
+        .attr("text-anchor", "start") // anchor at top-left
+        .attr("dy", ".71em")
+        .attr("fill", "black")
+        .text("block() requests");
+    chart.append("svg:text")
+        .attr("class", "seconds-label")
+        //.attr("x", w/2).attr("y", y + 35)
+        .attr("text-anchor", "middle")
+        .attr("fill", "black")
+        .text("seconds");
+
     function reltime(t) {return t-data.bounds.min;}
     var last = data.bounds.max - data.bounds.min;
     //last = reltime(d3.max(data.dyhb, function(d){return d.finish_time;}));
     last = last * 1.05;
     // d3.time.scale() has no support for ms or us.
     var xOFF = d3.time.scale().domain([data.bounds.min, data.bounds.max])
-                             .range([0,w]),
-        x = d3.scale.linear().domain([-last*0.05, last])
-                             .range([0,w]);
+                 .range([0,w]);
+    var x = d3.scale.linear().domain([-last*0.05, last])
+              .range([0,w]);
     function tx(d) { return "translate(" +x(d) + ",0)"; }
     function left(d) { return x(reltime(d.start_time)); }
     function right(d) {
@@ -50,199 +91,201 @@ function onDataReceived(data) {
     }
     function middle(d) {
         if (d.finish_time)
-            return (x(reltime(d.start_time))+x(reltime(d.finish_time)))/2;
-        else
-            return x(reltime(d.start_time)) + 1;
-    }
-    function color(d) { return data.server_info[d.serverid].color; }
-    function servername(d) { return data.server_info[d.serverid].short; }
-    function timeformat(duration) {
-        // TODO: trim to microseconds, maybe humanize
-        return duration;
-    }
-
-    var y = 0;
-    chart.append("svg:text")
-        .attr("x", "20px")
-        .attr("y", y)
-        .attr("text-anchor", "start") // anchor at top-left
-        .attr("dy", ".71em")
-        .attr("fill", "black")
-        .text("DYHB requests");
-    y += 20;
-
-    // DYHB section
-    var dyhb_y = d3.scale.ordinal()
-                    .domain(d3.range(data.dyhb.length))
-                    .rangeBands([y, y+data.dyhb.length*20], .2);
-    y += data.dyhb.length*20;
-    var dyhb = chart.selectAll("g.dyhb") // one per row
-         .data(data.dyhb)
-        .enter().append("svg:g")
-         .attr("class", "dyhb")
-         .attr("transform", function(d,i) {
-                   return "translate("+x(reltime(d.start_time))+","
-                       +dyhb_y(i)+")";
-               })
-    ;
-    dyhb.append("svg:rect")
-         .attr("width", width)
-         .attr("height", dyhb_y.rangeBand())
-         .attr("stroke", "black")
-         .attr("fill", color)
-         .attr("title", function(d){return "shnums: "+d.response_shnums;})
-    ;
-    dyhb.append("svg:text")
-         .attr("text-anchor", "end")
-         .attr("fill", "#444")
-         .attr("x", "-0.3em") // for some reason dx doesn't work
-         .attr("dy", "1.0em")
-         .attr("font-size", "12px")
-         .text(servername)
-    ;
-    var dyhb_rightboxes = dyhb.append("svg:g")
-         .attr("class", "rightbox")
-         .attr("transform", function(d) {return "translate("+width(d)
-                                         +",0)";})
-    ;
-    dyhb_rightboxes.append("svg:text")
-         .attr("text-anchor", "start")
-         .attr("y", dyhb_y.rangeBand())
-         .attr("dx", "0.5em")
-         .attr("dy", "-0.4em")
-         .attr("fill", "#444")
-         .attr("font-size", "14px")
-         .text(function (d) {return "shnums: "+d.response_shnums;})
-    ;
-
-    // read() requests
-    chart.append("svg:text")
-        .attr("x", "20px")
-        .attr("y", y)
-        .attr("text-anchor", "start") // anchor at top-left
-        .attr("dy", ".71em")
-        .attr("fill", "black")
-        .text("read() requests");
-    y += 20;
-    var read = chart.selectAll("g.read")
-         .data(data.read)
-        .enter().append("svg:g")
-         .attr("class", "read")
-         .attr("transform", function(d) {
-                   return "translate("+left(d)+","+(y+30*d.row)+")"; })
-    ;
-    y += 30*(1+d3.max(data.read, function(d){return d.row;}));
-    read.append("svg:rect")
-         .attr("width", width)
-         .attr("height", 20)
-         .attr("fill", "red")
-         .attr("stroke", "black")
-         .attr("title", function(d)
-               {return "read(start="+d.start+", len="+d.length+") -> "
-                +d.bytes_returned+" bytes";})
-    ;
-    read.append("svg:text")
-         .attr("x", middle)
-         .attr("dy", "0.9em")
-         .attr("fill", "black")
-         .text(function(d) {return "["+d.start+":+"+d.length+"]";})
-    ;
-
-    // segment requests
-    chart.append("svg:text")
-        .attr("x", "20px")
-        .attr("y", y)
-        .attr("text-anchor", "start") // anchor at top-left
-        .attr("dy", ".71em")
-        .attr("fill", "black")
-        .text("segment() requests");
-    y += 20;
-    var segment = chart.selectAll("g.segment")
-         .data(data.segment)
-        .enter().append("svg:g")
-         .attr("class", "segment")
-         .attr("transform", function(d) {
-                   return "translate("+left(d)+","+(y+30*d.row)+")"; })
-    ;
-    y += 30*(1+d3.max(data.segment, function(d){return d.row;}));
-    segment.append("svg:rect")
-         .attr("width", width)
-         .attr("height", 20)
-         .attr("fill", function(d){return d.success ? "#cfc" : "#fcc";})
-         .attr("stroke", "black")
-         .attr("stroke-width", 1)
-         .attr("title", function(d) {
-                   return "seg"+d.segment_number+" ["+d.segment_start
-                       +":+"+d.segment_length+"] (took "
-                       +timeformat(d.finish_time-d.start_time)+")";})
-    ;
-    segment.append("svg:text")
-         .attr("x", halfwidth)
-         .attr("text-anchor", "middle")
-         .attr("dy", "0.9em")
-         .attr("fill", "black")
-         .text(function(d) {return d.segment_number;})
-    ;
-
-    var shnum_colors = d3.scale.category10();
-
-    // block requests
-    chart.append("svg:text")
-        .attr("x", "20px")
-        .attr("y", y)
-        .attr("text-anchor", "start") // anchor at top-left
-        .attr("dy", ".71em")
-        .attr("fill", "black")
-        .text("block() requests");
-    y += 20;
-    var block_row_to_y = {};
-    var dummy = function() {
-        var row_y=y;
-        for (var group=0; group < data.block_rownums.length; group++) {
-            for (var row=0; row < data.block_rownums[group]; row++) {
-                block_row_to_y[group+"-"+row] = row_y;
-                row_y += 12; y += 12;
-            }
-            row_y += 5; y += 5;
+                return (x(reltime(d.start_time))+x(reltime(d.finish_time)))/2;
+            else
+                return x(reltime(d.start_time)) + 1;
         }
-    }();
-    var blocks = chart.selectAll("g.block")
-         .data(data.block)
-        .enter().append("svg:g")
-         .attr("class", "block")
-         .attr("transform", function(d) {
-                   var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
-                   return "translate("+left(d)+"," +ry+")"; })
-    ;
-    // everything appended to blocks starts at the top-left of the
-    // correct per-rect location
-    blocks.append("svg:rect")
-         .attr("width", width)
-         .attr("y", function(d) {return (d.response_length > 100) ? 0:3;})
-         .attr("height",
-               function(d) {return (d.response_length > 100) ? 10:4;})
-         .attr("fill", color)
-         .attr("stroke", function(d){return shnum_colors(d.shnum);})
-         .attr("stroke-width", 1)
-         .attr("title", function(d){
-                   return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)
-                       +" ["+d.start+":+"+d.length+"] -> "
-                       +d.response_length;})
-    ;
-    blocks.append("svg:text")
-         .attr("x", halfwidth)
-         .attr("dy", "0.9em")
-         .attr("fill", "black")
-         .attr("font-size", "8px")
-         .attr("text-anchor", "middle")
-         .text(function(d) {return "sh"+d.shnum;})
-    ;
+        function color(d) { return data.server_info[d.serverid].color; }
+        function servername(d) { return data.server_info[d.serverid].short; }
+        function timeformat(duration) {
+            // TODO: trim to microseconds, maybe humanize
+            return duration;
+        }
 
-    var num = d3.format(".4g");
-    var bottom_y = y; // ignore subsequent changes to y
-    redraw();
+
     function redraw() {
         if (d3.event) d3.event.transform(x);
+        // at this point zoom/pan must be fixed
+
+        var y = 0;
+        //chart.select(".dyhb-label")
+        //    .attr("x", x(0))//"20px")
+        //    .attr("y", y);
+        y += 20;
+
+        // DYHB section
+        var dyhb_y = d3.scale.ordinal()
+                        .domain(d3.range(data.dyhb.length))
+                        .rangeBands([y, y+data.dyhb.length*20], .2);
+        y += data.dyhb.length*20;
+        var dyhb = chart.selectAll("g.dyhb") // one per row
+             .data(data.dyhb)
+             .attr("transform", function(d,i) {
+                       return "translate("+x(reltime(d.start_time))+","
+                           +dyhb_y(i)+")";
+                   })
+            .enter().append("svg:g")
+             .attr("class", "dyhb")
+             .attr("transform", function(d,i) {
+                       return "translate("+x(reltime(d.start_time))+","
+                           +dyhb_y(i)+")";
+                   })
+        ;
+        dyhb.append("svg:rect")
+             .attr("width", width)
+             .attr("height", dyhb_y.rangeBand())
+             .attr("stroke", "black")
+             .attr("fill", color)
+             .attr("title", function(d){return "shnums: "+d.response_shnums;})
+        ;
+        dyhb.append("svg:text")
+             .attr("text-anchor", "end")
+             .attr("fill", "#444")
+             .attr("x", "-0.3em") // for some reason dx doesn't work
+             .attr("dy", "1.0em")
+             .attr("font-size", "12px")
+             .text(servername)
+        ;
+        var dyhb_rightboxes = dyhb.append("svg:g")
+             .attr("class", "rightbox")
+             .attr("transform", function(d) {return "translate("+width(d)
+                                             +",0)";})
+        ;
+        dyhb_rightboxes.append("svg:text")
+             .attr("text-anchor", "start")
+             .attr("y", dyhb_y.rangeBand())
+             .attr("dx", "0.5em")
+             .attr("dy", "-0.4em")
+             .attr("fill", "#444")
+             .attr("font-size", "14px")
+             .text(function (d) {return "shnums: "+d.response_shnums;})
+        ;
+
+        // read() requests
+        chart.select(".read-label")
+            .attr("x", "20px")
+            .attr("y", y);
+        y += 20;
+        var read = chart.selectAll("g.read")
+             .data(data.read)
+             .attr("transform", function(d) {
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
+            .enter().append("svg:g")
+             .attr("class", "read")
+             .attr("transform", function(d) {
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
+        ;
+        y += 30*(1+d3.max(data.read, function(d){return d.row;}));
+        read.append("svg:rect")
+             .attr("width", width)
+             .attr("height", 20)
+             .attr("fill", "red")
+             .attr("stroke", "black")
+             .attr("title", function(d)
+                   {return "read(start="+d.start+", len="+d.length+") -> "
+                    +d.bytes_returned+" bytes";})
+        ;
+        read.append("svg:text")
+             .attr("x", middle)
+             .attr("dy", "0.9em")
+             .attr("fill", "black")
+             .text(function(d) {return "["+d.start+":+"+d.length+"]";})
+        ;
+
+        // segment requests
+        chart.select(".segment-label")
+            .attr("x", "20px")
+            .attr("y", y);
+        y += 20;
+        var segment = chart.selectAll("g.segment")
+             .data(data.segment)
+             .attr("transform", function(d) {
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
+            .enter().append("svg:g")
+             .attr("class", "segment")
+             .attr("transform", function(d) {
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
+        ;
+        y += 30*(1+d3.max(data.segment, function(d){return d.row;}));
+        segment.append("svg:rect")
+             .attr("width", width)
+             .attr("height", 20)
+             .attr("fill", function(d){return d.success ? "#cfc" : "#fcc";})
+             .attr("stroke", "black")
+             .attr("stroke-width", 1)
+             .attr("title", function(d) {
+                       return "seg"+d.segment_number+" ["+d.segment_start
+                           +":+"+d.segment_length+"] (took "
+                           +timeformat(d.finish_time-d.start_time)+")";})
+        ;
+        segment.append("svg:text")
+             .attr("x", halfwidth)
+             .attr("text-anchor", "middle")
+             .attr("dy", "0.9em")
+             .attr("fill", "black")
+             .text(function(d) {return d.segment_number;})
+        ;
+
+        var shnum_colors = d3.scale.category10();
+
+        // block requests
+        chart.select(".block-label")
+            .attr("x", "20px")
+            .attr("y", y);
+        y += 20;
+        var block_row_to_y = {};
+        var dummy = function() {
+            var row_y=y;
+            for (var group=0; group < data.block_rownums.length; group++) {
+                for (var row=0; row < data.block_rownums[group]; row++) {
+                    block_row_to_y[group+"-"+row] = row_y;
+                    row_y += 12; y += 12;
+                }
+                row_y += 5; y += 5;
+            }
+        }();
+        var blocks = chart.selectAll("g.block")
+             .data(data.block)
+             .attr("transform", function(d) {
+                       var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
+                       return "translate("+left(d)+"," +ry+")"; })
+            .enter().append("svg:g")
+             .attr("class", "block")
+             .attr("transform", function(d) {
+                       var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
+                       return "translate("+left(d)+"," +ry+")"; })
+        ;
+        // everything appended to blocks starts at the top-left of the
+        // correct per-rect location
+        blocks.append("svg:rect")
+             .attr("width", width)
+             .attr("y", function(d) {return (d.response_length > 100) ? 0:3;})
+             .attr("height",
+                   function(d) {return (d.response_length > 100) ? 10:4;})
+             .attr("fill", color)
+             .attr("stroke", function(d){return shnum_colors(d.shnum);})
+             .attr("stroke-width", 1)
+             .attr("title", function(d){
+                       return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)
+                           +" ["+d.start+":+"+d.length+"] -> "
+                           +d.response_length;})
+        ;
+        blocks.append("svg:text")
+             .attr("x", halfwidth)
+             .attr("dy", "0.9em")
+             .attr("fill", "black")
+             .attr("font-size", "8px")
+             .attr("text-anchor", "middle")
+             .text(function(d) {return "sh"+d.shnum;})
+        ;
+
+        var num = d3.format(".4g");
+        const bottom_y = y; // ignore subsequent changes to y
+
+        //chart.select(".dyhb-label")
+        //    .attr("x", x(0))
+        //    //.attr("y", y)
+        //;
 
         // horizontal scale markers: vertical lines at rational timestamps
         var rules = chart.selectAll("g.rule")
@@ -271,17 +314,15 @@ function onDataReceived(data) {
             .attr("fill", "black")
             .text(x.tickFormat(10));
         rules.exit().remove();
-    }
-    chart.append("svg:text")
-        .attr("x", w/2)
-        .attr("y", y + 35)
-        .attr("text-anchor", "middle")
-        .attr("fill", "black")
-        .text("seconds");
-    y += 45;
+        chart.select(".seconds-label")
+            .attr("x", w/2)
+            .attr("y", y + 35);
+        y += 45;
 
-    d3.select("#outer_chart").attr("height", y);
-    d3.select("#outer_rect").attr("height", y);
+        d3.select("#outer_chart").attr("height", y);
+        d3.select("#outer_rect").attr("height", y);
+    }
+    redraw();
 
     return;
 }
