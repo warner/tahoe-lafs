@@ -95,12 +95,12 @@ function onDataReceived(data) {
             else
                 return x(reltime(d.start_time)) + 1;
         }
-        function color(d) { return data.server_info[d.serverid].color; }
-        function servername(d) { return data.server_info[d.serverid].short; }
-        function timeformat(duration) {
-            // TODO: trim to microseconds, maybe humanize
-            return duration;
-        }
+    function color(d) { return data.server_info[d.serverid].color; }
+    function servername(d) { return data.server_info[d.serverid].short; }
+    function timeformat(duration) {
+        // TODO: trim to microseconds, maybe humanize
+        return duration;
+    }
 
 
     function redraw() {
@@ -179,7 +179,7 @@ function onDataReceived(data) {
         read.select("rect")
              .attr("width", width);
         read.select("text")
-             .attr("x", middle);
+             .attr("x", halfwidth);
         var new_read = read.enter().append("svg:g")
              .attr("class", "read")
              .attr("transform", function(d) {
@@ -196,7 +196,7 @@ function onDataReceived(data) {
                     +d.bytes_returned+" bytes";})
         ;
         new_read.append("svg:text")
-             .attr("x", middle)
+             .attr("x", halfwidth)
              .attr("dy", "0.9em")
              .attr("fill", "black")
              .text(function(d) {return "["+d.start+":+"+d.length+"]";})
@@ -210,14 +210,18 @@ function onDataReceived(data) {
         var segment = chart.selectAll("g.segment")
              .data(data.segment)
              .attr("transform", function(d) {
-                       return "translate("+left(d)+","+(y+30*d.row)+")"; })
-            .enter().append("svg:g")
+                       return "translate("+left(d)+","+(y+30*d.row)+")"; });
+        segment.select("rect")
+             .attr("width", width);
+        segment.select("text")
+             .attr("x", halfwidth);
+        var new_segment = segment.enter().append("svg:g")
              .attr("class", "segment")
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; })
         ;
         y += 30*(1+d3.max(data.segment, function(d){return d.row;}));
-        segment.append("svg:rect")
+        new_segment.append("svg:rect")
              .attr("width", width)
              .attr("height", 20)
              .attr("fill", function(d){return d.success ? "#cfc" : "#fcc";})
@@ -228,7 +232,7 @@ function onDataReceived(data) {
                            +":+"+d.segment_length+"] (took "
                            +timeformat(d.finish_time-d.start_time)+")";})
         ;
-        segment.append("svg:text")
+        new_segment.append("svg:text")
              .attr("x", halfwidth)
              .attr("text-anchor", "middle")
              .attr("dy", "0.9em")
@@ -258,8 +262,12 @@ function onDataReceived(data) {
              .data(data.block)
              .attr("transform", function(d) {
                        var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
-                       return "translate("+left(d)+"," +ry+")"; })
-            .enter().append("svg:g")
+                       return "translate("+left(d)+"," +ry+")"; });
+        blocks.select("rect")
+            .attr("width", width);
+        blocks.select("text")
+            .attr("x", halfwidth);
+        var new_blocks = blocks.enter().append("svg:g")
              .attr("class", "block")
              .attr("transform", function(d) {
                        var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
@@ -267,7 +275,7 @@ function onDataReceived(data) {
         ;
         // everything appended to blocks starts at the top-left of the
         // correct per-rect location
-        blocks.append("svg:rect")
+        new_blocks.append("svg:rect")
              .attr("width", width)
              .attr("y", function(d) {return (d.response_length > 100) ? 0:3;})
              .attr("height",
@@ -280,7 +288,7 @@ function onDataReceived(data) {
                            +" ["+d.start+":+"+d.length+"] -> "
                            +d.response_length;})
         ;
-        blocks.append("svg:text")
+        new_blocks.append("svg:text")
              .attr("x", halfwidth)
              .attr("dy", "0.9em")
              .attr("fill", "black")
@@ -290,12 +298,6 @@ function onDataReceived(data) {
         ;
 
         var num = d3.format(".4g");
-        const bottom_y = y; // ignore subsequent changes to y
-
-        //chart.select(".dyhb-label")
-        //    .attr("x", x(0))
-        //    //.attr("y", y)
-        //;
 
         // horizontal scale markers: vertical lines at rational timestamps
         var rules = chart.selectAll("g.rule")
@@ -309,16 +311,16 @@ function onDataReceived(data) {
         ;
 
         newrules.append("svg:line")
-            .attr("y1", bottom_y)
-            .attr("y2", bottom_y + 6)
+            .attr("y1", y)
+            .attr("y2", y + 6)
             .attr("stroke", "black");
         newrules.append("svg:line")
             .attr("y1", 0)
-            .attr("y2", bottom_y)
+            .attr("y2", y)
             .attr("stroke", "red")
             .attr("stroke-opacity", .3);
         newrules.append("svg:text")
-            .attr("y", bottom_y + 9)
+            .attr("y", y + 9)
             .attr("dy", ".71em")
             .attr("text-anchor", "middle")
             .attr("fill", "black")
