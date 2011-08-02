@@ -4,10 +4,15 @@
 ** scroll events fail on FF5 (work on Chrome)
    - both scroll-up and scroll-down cause zoom-in
    - scroll-up should be zoom-in, -down should be zoom-out
-** some rules get left on screen
-** range of x() changes, ticks narrow to only part of width
-
-
-
-
-
+** DONE some rules get left on screen
+** DONE range of x() changes, ticks narrow to only part of width
+** tooltips (title=) fails on chrome, works on FF
+* new features
+** should clip text to size of rect, to avoid overlap
+** put tick timestamps on top too, not just bottom
+** add landscape (like in d3/examples/zoom/)
+** double-click on box should zoom to make that box 80% of width
+** consider adding vertical scroll? dubious.
+** add zoom/unzoom +/- buttons
+** BIG: live data update, incremental
+** add misc-events, show Coalesce patch is working
