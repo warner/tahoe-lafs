@@ -9,7 +9,7 @@ function onDataReceived(data) {
          .attr("width", w)
          .attr("pointer-events", "all")
         .append("svg:g")
-         .call(d3.behavior.zoom().on("zoom", redraw))
+         .call(d3.behavior.zoom().on("zoom", pan_and_zoom))
     ;
     // this "backboard" rect lets us catch mouse events anywhere in the
     // chart, even between the bars. Without it, we only see events on solid
@@ -62,6 +62,7 @@ function onDataReceived(data) {
         .attr("fill", "black")
         .text("seconds");
 
+
     function reltime(t) {return t-data.bounds.min;}
     var last = data.bounds.max - data.bounds.min;
     //last = reltime(d3.max(data.dyhb, function(d){return d.finish_time;}));
@@ -97,9 +98,33 @@ function onDataReceived(data) {
         return duration;
     }
 
+    function zoomin() {
+        //console.log("zoom in!");
+        //console.log(x.domain());
+        var old = x.domain();
+        var quarterwidth = (old[1] - old[0])/4;
+        x.domain([old[0]+quarterwidth, old[1]-quarterwidth]);
+        //console.log(x.domain());
+        redraw();
+        //d3.event.preventDefault();
+    }
+
+    function zoomout() {
+        //console.log("zoom out!");
+        var old = x.domain();
+        var halfwidth = (old[1] - old[0])/2;
+        x.domain([old[0]-halfwidth, old[1]+halfwidth]);
+        redraw();
+    }
+
+    function pan_and_zoom() {
+        //console.log("P", x.domain());
+        if (d3.event) d3.event.transform(x);
+        //console.log("p", x.domain());
+        redraw();
+    }
 
     function redraw() {
-        if (d3.event) d3.event.transform(x);
         // at this point zoom/pan must be fixed
 
         var y = 0;
@@ -328,7 +353,43 @@ function onDataReceived(data) {
 
         d3.select("#outer_chart").attr("height", y);
         d3.select("#outer_rect").attr("height", y);
+        d3.select("#zoom").attr("transform", "translate("+(w-10)+","+10+")");
     }
+
+    var zoom = chart.append("svg:g")
+        .attr("id", "zoom");
+    zoom.append("svg:rect")
+        .attr("width", "20px")
+        .attr("height", "20px")
+        .attr("stroke", "black")
+        .attr("stroke-width", "1")
+        .attr("fill", "white")
+        .on("click", zoomin)
+    ;
+    zoom.append("svg:text")
+        .attr("x", "10px").attr("y", "0.8em")
+        .attr("font-size", "18px")
+        .attr("text-anchor", "middle")
+        .text("+")
+        .on("click", zoomin)
+    ;
+    zoom.append("svg:rect")
+        .attr("y", "30px")
+        .attr("width", "20px")
+        .attr("height", "20px")
+        .attr("stroke", "black")
+        .attr("stroke-width", "1")
+        .attr("fill", "white")
+        .on("click", zoomout)
+    ;
+    zoom.append("svg:text")
+        .attr("y", "30px")
+        .attr("x", "10px").attr("dy", "0.8em")
+        .attr("font-size", "18px")
+        .attr("text-anchor", "middle")
+        .text("-")
+        .on("click", zoomout)
+    ;
     redraw();
 
     return;
