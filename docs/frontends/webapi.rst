@@ -1938,16 +1938,16 @@ Access Blacklist
 ================
 
 Gateway nodes may find it necessary to prohibit access to certain files. The
-webapi has a facility to block access to filecaps by their storage index,
+web-API has a facility to block access to filecaps by their storage index,
 returning a 403 "Forbidden" error instead of the original file.
 
 This blacklist is recorded in $NODEDIR/access.blacklist, and contains one
-blocked file per line. The first (space-separated) field on each line is the
-storage-index, in the usual base32 format as displayed by the "More Info"
-page, or by the "tahoe debug dump-cap" command. The second field is a reason
-(no spaces allowed), which will be included in the 403 error message. This
-could hold a URL to a page that explains why the file is blocked, for
-example.
+blocked file per line. Comment lines (starting with ``#``) are ignored. Each
+line consists of the storage-index (in the usual base32 format as displayed
+by the "More Info" page, or by the "tahoe debug dump-cap" command), followed
+by whitespace, followed by a reason string, which will be included in the 403
+error message. This could hold a URL to a page that explains why the file is
+blocked, for example.
 
 So for example, if you found a need to block access to a file with filecap
 ``URI:CHK:n7r3m6wmomelk4sep3kw5cvduq:os7ijw5c3maek7pg65e5254k2fzjflavtpejjyhshpsxuqzhcwwq:3:20:14861``,
@@ -1955,25 +1955,28 @@ you could do the following::
 
  tahoe debug dump-cap URI:CHK:n7r3m6wmomelk4sep3kw5cvduq:os7ijw5c3maek7pg65e5254k2fzjflavtpejjyhshpsxuqzhcwwq:3:20:14861
  -> storage index: whpepioyrnff7orecjolvbudeu
- echo "whpepioyrnff7orecjolvbudeu my-puppy-told-me-to" >>$NODEDIR/access.blacklist
+ echo "whpepioyrnff7orecjolvbudeu my puppy told me to" >>$NODEDIR/access.blacklist
  tahoe restart $NODEDIR
  tahoe get URI:CHK:n7r3m6wmomelk4sep3kw5cvduq:os7ijw5c3maek7pg65e5254k2fzjflavtpejjyhshpsxuqzhcwwq:3:20:14861
  -> error, 403 Access Prohibited: my-puppy-told-me-to
 
-If the ``access.blacklist`` file is present at node startup, each webapi
-operation will check it for updates. So adding second, third, or additional
-entries to the blacklist does not require a node restart. To avoid a
-performance penalty for nodes that do not use the blacklist at all, this
-check is not performed when the list did not exist at startup. So be sure to
-restart the node after initially creating the blacklist, or it won't take
-effect.
+The ``access.blacklist`` file will be checked each time a file or directory
+is accessed: the file's ``mtime`` is used to decide whether it need to be
+reloaded. Therefore no node restart is necessary when creating the initial
+blacklist, nor when adding second, third, or additional entries to the list.
+When modifying the file, be careful to update it atomically, otherwise a
+request may arrive while the file is only halfway written, and the partial
+file may be incorrectly parsed.
 
 The blacklist is applied to all access paths (including FTP, SFTP, and CLI
-operations), not just the webapi. The blacklist also applies to directories.
+operations), not just the web-API. The blacklist also applies to directories.
 If a directory is blacklisted, the gateway will refuse access to both that
 directory and any child files/directories underneath it, when accessed via
 "DIRCAP/SUBDIR/FILENAME" -style URLs. Users who go directly to the child
 file/dir will bypass the blacklist.
+
+The node will log the SI of the file being blocked, and the reason code, into
+the ``logs/twistd.log`` file.
 
 
 .. [1] URLs and HTTP and UTF-8, Oh My

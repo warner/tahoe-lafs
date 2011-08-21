@@ -333,10 +333,8 @@ class Client(node.Node, pollmixin.PollMixin):
                      level=log.BAD, umid="OEHq3g")
 
     def init_blacklist(self):
-        self.blacklist = None
         fn = os.path.join(self.basedir, "access.blacklist")
-        if os.path.exists(fn):
-            self.blacklist = Blacklist(fn)
+        self.blacklist = Blacklist(fn)
 
     def init_nodemaker(self):
         self.nodemaker = NodeMaker(self.storage_broker,

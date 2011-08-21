@@ -4468,19 +4468,16 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
             self.si = u.get_storage_index()
         d.addCallback(_stash_uri)
         d.addCallback(lambda ign: self.GET(self.url))
-        def _blacklist_but_dont_restart(ign):
+        def _blacklist(ign):
             f = open(fn, "w")
-            f.write("%s %s\n" % (base32.b2a(self.si), "off-limits"))
+            f.write(" # this is a comment\n")
+            f.write(" \n")
+            f.write("\n") # also exercise blank lines
+            f.write("%s %s\n" % (base32.b2a(self.si), "off-limits to you"))
             f.close()
-            # now we *don't* restart the client: since no blacklist was seen
-            # at startup, the change is ignored. This confirms that the node
-            # behaves as the docs specify, even if that behavior might not be
-            # what you always want. (the intention is to avoid a performance
-            # penalty for the majority of nodes that don't use a blacklist).
-        d.addCallback(_blacklist_but_dont_restart)
-        d.addCallback(lambda ign: self.GET(self.url))
-        d.addCallback(lambda ign: self.restart_client(0)) # c0 now invalid
-        # now the blacklist should be active
+            # clients should be checking the blacklist each time, so we don't
+            # need to restart the client
+        d.addCallback(_blacklist)
         d.addCallback(lambda ign:
                       self.shouldHTTPError("_get_from_blacklisted_uri",
                                            403, "Forbidden",
@@ -4516,7 +4513,7 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
         d.addCallback(lambda ign: self.GET(self.child_url))
         def _block_dir(ign):
             f = open(fn, "w")
-            f.write("%s %s\n" % (base32.b2a(self.si), "dir-off-limits"))
+            f.write("%s %s\n" % (base32.b2a(self.si), "dir-off-limits to you"))
             f.close()
             self.g.clients[0].blacklist.last_mtime -= 2.0
         d.addCallback(_block_dir)
