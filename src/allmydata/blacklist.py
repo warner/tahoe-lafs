@@ -6,19 +6,20 @@ from allmydata.util import base32
 class FileProhibited(Exception):
     """This client has been configured to prohibit access to this object."""
     def __init__(self, reason):
+        Exception.__init__(self, reason)
         self.reason = reason
 
 
 class Blacklist:
-    def __init__(self, blacklist_fn):
-        self.blacklist_fn = blacklist_fn
+    def __init__(self, blacklist_filename):
+        self.blacklist_filename = blacklist_filename
         self.last_mtime = None
         self.entries = {}
         self.read_blacklist() # sets .last_mtime and .entries
 
     def read_blacklist(self):
         try:
-            current_mtime = os.stat(self.blacklist_fn).st_mtime
+            current_mtime = os.stat(self.blacklist_filename).st_mtime
         except EnvironmentError:
             # unreadable blacklist file means no blacklist
             self.entries.clear()
@@ -26,7 +27,7 @@ class Blacklist:
         try:
             if self.last_mtime is None or current_mtime > self.last_mtime:
                 self.entries.clear()
-                for line in open(self.blacklist_fn, "r").readlines():
+                for line in open(self.blacklist_filename, "r").readlines():
                     line = line.lstrip()
                     if not line or line.startswith("#"):
                         continue

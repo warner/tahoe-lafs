@@ -1958,10 +1958,10 @@ you could do the following::
  echo "whpepioyrnff7orecjolvbudeu my puppy told me to" >>$NODEDIR/access.blacklist
  tahoe restart $NODEDIR
  tahoe get URI:CHK:n7r3m6wmomelk4sep3kw5cvduq:os7ijw5c3maek7pg65e5254k2fzjflavtpejjyhshpsxuqzhcwwq:3:20:14861
- -> error, 403 Access Prohibited: my-puppy-told-me-to
+ -> error, 403 Access Prohibited: my puppy told me to
 
 The ``access.blacklist`` file will be checked each time a file or directory
-is accessed: the file's ``mtime`` is used to decide whether it need to be
+is accessed: the file's ``mtime`` is used to decide whether it needs to be
 reloaded. Therefore no node restart is necessary when creating the initial
 blacklist, nor when adding second, third, or additional entries to the list.
 When modifying the file, be careful to update it atomically, otherwise a
