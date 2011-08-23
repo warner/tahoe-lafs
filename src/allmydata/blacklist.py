@@ -24,9 +24,9 @@ class Blacklist:
             # unreadable blacklist file means no blacklist
             self.entries.clear()
             return
-        try:
-            if self.last_mtime is None or current_mtime > self.last_mtime:
-                self.entries.clear()
+        if self.last_mtime is None or current_mtime > self.last_mtime:
+            self.entries.clear()
+            try:
                 for line in open(self.blacklist_filename, "r").readlines():
                     line = line.lstrip()
                     if not line or line.startswith("#"):
@@ -35,9 +35,9 @@ class Blacklist:
                     si = base32.a2b(si_s) # must be valid base32
                     self.entries[si] = reason
                 self.last_mtime = current_mtime
-        except Exception, e:
-            twisted_log.err(e, "unparseable blacklist file")
-            raise
+            except Exception, e:
+                twisted_log.err(e, "unparseable blacklist file")
+                raise
 
     def get_readblocker(self, si):
         self.read_blacklist()
