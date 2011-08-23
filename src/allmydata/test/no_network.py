@@ -208,6 +208,7 @@ class NoNetworkGrid(service.MultiService):
         self.basedir = basedir
         fileutil.make_dirs(basedir)
 
+        self._client_config_hooks = client_config_hooks
         self.servers_by_number = {} # maps to StorageServer instance
         self.wrappers_by_id = {} # maps to wrapped StorageServer instance
         self.proxies_by_id = {} # maps to IServer on which .rref is a wrapped
@@ -231,19 +232,23 @@ class NoNetworkGrid(service.MultiService):
             f.write("[storage]\n")
             f.write("enabled = false\n")
             f.close()
-            c = None
-            if i in client_config_hooks:
-                # this hook can either modify tahoe.cfg, or return an
-                # entirely new Client instance
-                c = client_config_hooks[i](clientdir)
-            if not c:
-                c = NoNetworkClient(clientdir)
-                c.set_default_mutable_keysize(TEST_RSA_KEY_SIZE)
-            c.nodeid = clientid
-            c.short_nodeid = b32encode(clientid).lower()[:8]
-            c._servers = self.all_servers # can be updated later
-            c.setServiceParent(self)
+            c = self._create_client(i, clientdir, clientid)
             self.clients.append(c)
+
+    def _create_client(self, i, clientdir, clientid):
+        c = None
+        if i in self._client_config_hooks:
+            # this hook can either modify tahoe.cfg, or return an
+            # entirely new Client instance
+            c = self._client_config_hooks[i](clientdir)
+        if not c:
+            c = NoNetworkClient(clientdir)
+            c.set_default_mutable_keysize(TEST_RSA_KEY_SIZE)
+        c.nodeid = clientid
+        c.short_nodeid = b32encode(clientid).lower()[:8]
+        c._servers = self.all_servers # can be updated later
+        c.setServiceParent(self)
+        return c
 
     def make_server(self, i, readonly=False):
         serverid = hashutil.tagged_hash("serverid", str(i))[:20]
@@ -275,6 +280,17 @@ class NoNetworkGrid(service.MultiService):
         self.all_servers = frozenset(self.proxies_by_id.values())
         for c in self.clients:
             c._servers = self.all_servers
+
+    def restart_client(self, i):
+        # we must remove the client, then build a new one with the same id
+        # and basedir
+        old_client = self.clients[i]
+        d = defer.maybeDeferred(old_client.disownServiceParent)
+        def _then(ign):
+            c = self._create_client(i, old_client.basedir, old_client.nodeid)
+            self.clients[i] = c
+        d.addCallback(_then)
+        return d
 
     def remove_server(self, serverid):
         # it's enough to remove the server from c._servers (we don't actually
@@ -337,6 +353,15 @@ class GridTestMixin:
         for i in sorted(self.g.servers_by_number.keys()):
             ss = self.g.servers_by_number[i]
             yield (i, ss, ss.storedir)
+
+    def restart_client(self, i=0):
+        d = self.g.restart_client(i)
+        def _then(ign):
+            c = self.g.clients[i]
+            self.client_webports[i] = c.getServiceNamed("webish").getPortnum()
+            self.client_baseurls[i] = c.getServiceNamed("webish").getURL()
+        d.addCallback(_then)
+        return d
 
     def find_uri_shares(self, uri):
         si = tahoe_uri.from_string(uri).get_storage_index()

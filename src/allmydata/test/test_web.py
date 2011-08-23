@@ -170,6 +170,7 @@ class FakeClient(Client):
         self.history = FakeHistory()
         self.uploader = FakeUploader()
         self.uploader.setServiceParent(self)
+        self.blacklist = None
         self.nodemaker = FakeNodeMaker(None, self._secret_holder, None,
                                        self.uploader, None,
                                        None, None)
@@ -5259,6 +5260,90 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
             self.flushLoggedErrors(CompletelyUnhandledError)
             return res
         d.addBoth(_flush_errors)
+
+        return d
+
+    def test_blacklist(self):
+        # download from a blacklisted URI, get an error
+        self.basedir = "web/Grid/blacklist"
+        self.set_up_grid()
+        c0 = self.g.clients[0]
+        c0_basedir = c0.basedir
+        fn = os.path.join(c0_basedir, "access.blacklist")
+        self.uris = {}
+        DATA = "off-limits " * 50
+        d = c0.upload(upload.Data(DATA, convergence=""))
+        def _stash_uri(ur):
+            self.uri = ur.uri
+            self.url = "uri/"+self.uri
+            u = uri.from_string_filenode(self.uri)
+            self.si = u.get_storage_index()
+        d.addCallback(_stash_uri)
+        d.addCallback(lambda ign: self.GET(self.url))
+        def _blacklist(ign):
+            f = open(fn, "w")
+            f.write(" # this is a comment\n")
+            f.write(" \n")
+            f.write("\n") # also exercise blank lines
+            f.write("%s %s\n" % (base32.b2a(self.si), "off-limits to you"))
+            f.close()
+            # clients should be checking the blacklist each time, so we don't
+            # need to restart the client
+        d.addCallback(_blacklist)
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri",
+                                           403, "Forbidden",
+                                           "Access Prohibited: off-limits",
+                                           self.GET, "uri/" + self.uri))
+        def _unblacklist(ign):
+            open(fn, "w").close()
+            # the Blacklist object watches mtime to tell when the file has
+            # changed, but on windows this test will run faster than the
+            # filesystem's mtime resolution. So we edit Blacklist.last_mtime
+            # to force a reload.
+            self.g.clients[0].blacklist.last_mtime -= 2.0
+        d.addCallback(_unblacklist)
+        # now a read should work
+        d.addCallback(lambda ign: self.GET(self.url))
+        # read again to exercise the blacklist-is-unchanged logic
+        d.addCallback(lambda ign: self.GET(self.url))
+
+        # now add a blacklisted directory, and make sure files under it are
+        # refused too
+        def _add_dir(ign):
+            childnode = c0.create_node_from_uri(self.uri, None)
+            return c0.create_dirnode({u"child": (childnode,{}) })
+        d.addCallback(_add_dir)
+        def _get_dircap(dn):
+            self.dir_si_b32 = base32.b2a(dn.get_storage_index())
+            self.dir_url_rw = "uri/"+dn.get_write_uri()+"/?t=json"
+            self.dir_url_ro = "uri/"+dn.get_readonly_uri()+"/?t=json"
+            self.child_url = "uri/"+dn.get_readonly_uri()+"/child"
+        d.addCallback(_get_dircap)
+        d.addCallback(lambda ign: self.GET(self.dir_url_rw))
+        d.addCallback(lambda ign: self.GET(self.dir_url_ro))
+        d.addCallback(lambda ign: self.GET(self.child_url))
+        def _block_dir(ign):
+            f = open(fn, "w")
+            f.write("%s %s\n" % (self.dir_si_b32, "dir-off-limits to you"))
+            f.close()
+            self.g.clients[0].blacklist.last_mtime -= 2.0
+        d.addCallback(_block_dir)
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 2",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.dir_url_rw))
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 3",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.dir_url_ro))
+        d.addCallback(lambda ign:
+                      self.shouldHTTPError("_get_from_blacklisted_uri 4",
+                                           403, "Forbidden",
+                                           "Access Prohibited: dir-off-limits",
+                                           self.GET, self.child_url))
 
         return d
 

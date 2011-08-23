@@ -25,6 +25,7 @@ from allmydata.history import History
 from allmydata.interfaces import IStatsProducer, RIStubClient, \
                                  SDMF_VERSION, MDMF_VERSION
 from allmydata.nodemaker import NodeMaker
+from allmydata.blacklist import Blacklist
 
 
 KiB=1024
@@ -279,6 +280,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.terminator.setServiceParent(self)
         self.add_service(Uploader(helper_furl, self.stats_provider))
         self.init_stub_client()
+        self.init_blacklist()
         self.init_nodemaker()
 
     def init_client_storage_broker(self):
@@ -331,6 +333,10 @@ class Client(node.Node, pollmixin.PollMixin):
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="OEHq3g")
 
+    def init_blacklist(self):
+        fn = os.path.join(self.basedir, "access.blacklist")
+        self.blacklist = Blacklist(fn)
+
     def init_nodemaker(self):
         self.nodemaker = NodeMaker(self.storage_broker,
                                    self._secret_holder,
@@ -338,7 +344,8 @@ class Client(node.Node, pollmixin.PollMixin):
                                    self.getServiceNamed("uploader"),
                                    self.terminator,
                                    self.get_encoding_parameters(),
-                                   self._key_generator)
+                                   self._key_generator,
+                                   self.blacklist)
         default = self.get_config("client", "mutable.format", default="sdmf")
         if default == "mdmf":
             self.mutable_file_default = MDMF_VERSION
@@ -485,11 +492,15 @@ class Client(node.Node, pollmixin.PollMixin):
     # dirnodes. The first takes a URI and produces a filenode or (new-style)
     # dirnode. The other three create brand-new filenodes/dirnodes.
 
-    def create_node_from_uri(self, write_uri, read_uri=None, deep_immutable=False, name="<unknown name>"):
+    def create_node_from_uri(self, write_uri, read_uri=None,
+                             deep_immutable=False, name="<unknown name>"):
         # This returns synchronously.
-        # Note that it does *not* validate the write_uri and read_uri; instead we
-        # may get an opaque node if there were any problems.
-        return self.nodemaker.create_from_cap(write_uri, read_uri, deep_immutable=deep_immutable, name=name)
+        # Note that it does *not* validate the write_uri and read_uri;
+        # instead we may get an opaque node if there were any problems.
+        n = self.nodemaker.create_from_cap(write_uri, read_uri,
+                                           deep_immutable=deep_immutable,
+                                           name=name)
+        return n
 
     def create_dirnode(self, initial_children={}, version=SDMF_VERSION):
         d = self.nodemaker.create_new_mutable_directory(initial_children, version=version)
