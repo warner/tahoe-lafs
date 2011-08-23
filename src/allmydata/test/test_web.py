@@ -4513,7 +4513,7 @@ class Grid(GridTestMixin, WebErrorMixin, ShouldFailMixin, testutil.ReallyEqualMi
         d.addCallback(lambda ign: self.GET(self.child_url))
         def _block_dir(ign):
             f = open(fn, "w")
-            f.write("%s %s\n" % (base32.b2a(self.si), "dir-off-limits to you"))
+            f.write("%s %s\n" % (self.dir_si_b32, "dir-off-limits to you"))
             f.close()
             self.g.clients[0].blacklist.last_mtime -= 2.0
         d.addCallback(_block_dir)

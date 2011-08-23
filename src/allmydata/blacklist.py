@@ -39,11 +39,14 @@ class Blacklist:
             twisted_log.err(e, "unparseable blacklist file")
             raise
 
-    def check_storageindex(self, si):
+    def get_readblocker(self, si):
         self.read_blacklist()
         reason = self.entries.get(si, None)
         if reason:
-            # log this to logs/twistd.log, since web logs go there too
-            twisted_log.msg("blacklist prohibited access to SI %s: %s" %
-                            (base32.b2a(si), reason))
-            raise FileProhibited(reason)
+            def read_prohibited(*args, **kwargs):
+                # log this to logs/twistd.log, since web logs go there too
+                twisted_log.msg("blacklist prohibited access to SI %s: %s" %
+                                (base32.b2a(si), reason))
+                raise FileProhibited(reason)
+            return read_prohibited
+        return None

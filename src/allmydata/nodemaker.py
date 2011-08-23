@@ -75,7 +75,12 @@ class NodeMaker:
                                    deep_immutable=deep_immutable, name=name)
         if self.blacklist:
             si = node.get_storage_index()
-            self.blacklist.check_storageindex(si) # may raise FileProhibited
+            readblocker = self.blacklist.get_readblocker(si)
+            if readblocker:
+                # this read() will raise a FileProhibited exception
+                node.read = readblocker
+                node.download_version = readblocker
+                node.download_best_version = readblocker
         return node
 
     def _create_from_single_cap(self, cap):
