@@ -3457,19 +3457,31 @@ class Update(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
         d.addCallback(_then2)
         return d
 
+    def dolog(self, res, msg):
+        import time
+        print msg, time.time()
+        return res
+
     def _test_replace(self, offset, new_data):
         expected = self.data[:offset]+new_data+self.data[offset+len(new_data):]
+        print
+        self.dolog(None, "start")
         d0 = self.do_upload_mdmf()
+        d0.addCallback(self.dolog, "uploaded")
         def _run(ign):
             d = defer.succeed(None)
             for node in (self.mdmf_node, self.mdmf_max_shares_node):
                 # close over 'node'.
+                d.addCallback(self.dolog, "1")
                 d.addCallback(lambda ign, node=node:
                               node.get_best_mutable_version())
+                d.addCallback(self.dolog, "2")
                 d.addCallback(lambda mv:
                               mv.update(MutableData(new_data), offset))
+                d.addCallback(self.dolog, "3")
                 d.addCallback(lambda ign, node=node:
                               node.download_best_version())
+                d.addCallback(self.dolog, "4")
                 def _check(results):
                     if results != expected:
                         print
