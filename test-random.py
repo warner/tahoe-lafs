@@ -70,8 +70,6 @@ def PUT(offset, data):
 def test():
     old = GET()
     for step in itertools.count(firststep):
-        if step > 10:
-            break
         (offset, data) = make_operation(step)
         print "step %d: write %d bytes at offset %d (%s..%s)" % (
             step, len(data), offset, data[:20], data[-20:])
