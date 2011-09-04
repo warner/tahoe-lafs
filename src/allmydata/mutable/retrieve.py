@@ -173,6 +173,7 @@ class Retrieve:
         data for it to handle. I make the downloader stop producing new
         data until my resumeProducing method is called.
         """
+        print "PAUSING"
         if self._pause_deferred is not None:
             return
 
@@ -188,6 +189,7 @@ class Retrieve:
         I am called by my download target once it is ready to begin
         receiving data again.
         """
+        print "RESUME"
         if self._pause_deferred is None:
             return
 
