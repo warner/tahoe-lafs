@@ -660,6 +660,7 @@ class Publish:
         d.addCallback(self._push_segment, segnum)
         def _increment_segnum(ign):
             self._current_segment += 1
+            return ign
         # XXX: I don't think we need to do addBoth here -- any errBacks
         # should be handled within push_segment.
         d.addCallback(_increment_segnum)
