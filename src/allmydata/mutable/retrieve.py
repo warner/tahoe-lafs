@@ -562,6 +562,7 @@ class Retrieve:
                     if self._need_privkey and not self._node.is_readonly():
                         d = reader.get_encprivkey()
                         d.addCallback(self._try_to_validate_privkey, reader)
+                        # XXX discards Deferred
             if bad_readers:
                 # We do them all at once, or else we screw up list indexing.
                 for (reader, f) in bad_readers:
@@ -681,6 +682,10 @@ class Retrieve:
         assert len(self._active_readers) >= self._required_shares
         if self._current_segment <= self._last_segment:
             d = self._process_segment(self._current_segment)
+            # XXX if an exception is thrown during _process_segment, this
+            # throws synchronously. Even if it were to cause an errback,
+            # _check_for_done is not invoked. There needs to be an addErrback
+            # on this, or higher up
         else:
             d = defer.succeed(None)
         d.addBoth(self._turn_barrier)
