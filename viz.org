@@ -170,3 +170,11 @@ index ae94af9..ba3c68d 100644
 * a scatter plot that shows segnum-tree-height versus finish-start
   - a local download showed segments that needed a lot of hash nodes taking
     way more time than others
+
+* misc-events:
+  - process_block
+  - decode
+  - crypttext_hash_tree.set_hashes ("CThash")
+  - satisfy/desire
+  - check-desire
+  - AES
