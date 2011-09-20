@@ -1,4 +1,50 @@
 # -*- org -*-
+* plan:
+** DONE port viz-d3 to current trunk
+** add misc-events (frontend should switch on presence of .misc in data)
+** add ?data=URL
+***  build server to render pre-generated datasets
+***  tell people about it, show them how to save datasets
+***  add misc-event to /down-N/timeline?misc=true , maybe
+** get trace of atlasperf LAN k=60, analyze for slowdowns
+** add immutable-share readv API, see if it improves speed
+***  find a way to fake/remove specific potential slowdowns and measure results
+     like replace foolscap fetch with pre-fetched RAM
+     (copy whole share into ram, fetch spans from ram)
+** measure WAN speeds, see if k matters
+** add summary timing (AES, zfec, waiting, fetching) back to list page
+** clamp zoom/pan to avoid negatives
+** make SVG fill page, add y-scrolling
+** glue axis to bottom and top of page
+** implement HTTP-based readv, see if reduced marshalling helps
+** determine why blockreads for second share don't appear to happen before
+   first share's blockreads have returned
+   - sometimes. Maybe there's actually just a lot of computation happening
+     before sending out the first blockreads. That computation could be moved
+     up, before the DHYB responses return, at least the blockhashtree part.
+     (the sharehashtree part depends upon which shnum we end up using). Find
+     a way to measure and display it.
+   - on a 13MB file on my laptop grid, the first blockread was sent 14ms
+     after the first DYHB response
+   - on a 1MB file, that delay was 5ms
+     - maybe just the kernel giving time to the other 9 servers, need more
+       realistic hardware and slower/longer pipes to really test it
+*** processing time *is* significant, sometimes knowledge of a better server
+    arrives *before* we send multiple-blockreads-per-server, but yet somehow
+    it's too late to avoid it.
+**** reduce requests and loops
+     - generic way to avoid leap-before-look is to merge Share.loop()-type
+       calls (get all the responses that are pending before taking any
+       action), and to combine as many requests as possible (to reduce the
+       number of things that need merging)
+** add data-is-fetching/data-is-rendering spinner
+** find way to make zoom/pan faster with lots of elements but when most are
+   off-screen (probably winnowing dataset to overlapping events)
+** make zoom buttons work properly
+** live update, Server-Sent Events
+** record timestamps on server too, return in a bundle after download
+   finishes, add to timeline. Actually accumulate them in the BucketReader
+
 
 * bugs
 ** scroll events fail on FF5 (work on Chrome)
@@ -27,3 +73,42 @@
 ** add misc-events, show Coalesce patch is working
 ** BIG: live data update, incremental
 ** consider adding vertical scroll? dubious.
+
+* d3 current: v2.2.0
+** I was working with v1.29.1 before
+** hm, d3.behavior.js is gone .. now in d3.js? yes, same import name though
+** fixed firefox mousewheel zoom
+** d3 v2.0.0 moved 'axis' into core (from d3.chart), looks handy for tickmarks
+   xAxis = d3.svg.axis .scale(x) .tickSize(-4)
+   major ticks, minor ticks, tickFormat, orient=top/bottom/left/right, .scale,
+   svg.append("svg:g").attr("transform", "translate(0,h)").call(xAxis)
+** stringifies numbers for uniqueness, but stores original
+   (probably no longer necessary to stringify myself)
+** remember svg origin is top-left, so y=d3.scale.linear().range([h,0])
+
+
+
+* layout
+** read() requests
+   - possibly overlapping: code should find minimum number of rows
+** segment events (request/delivery/error)
+   - also possibly overlapping, use minimum rows
+   - might be nice to show which is active at any given time
+** DYHB queries+responses
+   - completely overlapping, use exactly one row per server
+** server block-read requests (send/receive/error)
+   - use one cluster per server
+   - lots of overlapping reads
+   - within a cluster, use lowest available row
+   - 3-tuple Y axis: (serverid, shnum, overlaps)
+** ideally, tahoe should serve raw data and let JS do the sorting
+   - but my JS is not that good
+   - maybe just provide a hint: include a row number in each event, which
+     tells you how to overlap them
+   - multiple parts, joined with "-", use as JS dict keys
+
+* a graph that shows Y=segment-offset, X=start/finish time
+
+* a scatter plot that shows segnum-tree-height versus finish-start
+  - a local download showed segments that needed a lot of hash nodes taking
+    way more time than others
