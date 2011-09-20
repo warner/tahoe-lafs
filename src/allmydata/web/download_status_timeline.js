@@ -48,6 +48,13 @@ function onDataReceived(data) {
         .attr("dy", ".71em")
         .attr("fill", "black")
         .text("segment() requests");
+    if ("misc" in data)
+        chart.append("svg:text")
+            .attr("class", "misc-label")
+            .attr("text-anchor", "start") // anchor at top-left
+            .attr("dy", ".71em")
+            .attr("fill", "black")
+            .text("misc requests");
     chart.append("svg:text")
         .attr("class", "block-label")
         //.attr("x", "20px").attr("y", y)
@@ -262,6 +269,44 @@ function onDataReceived(data) {
 
         var shnum_colors = d3.scale.category10();
 
+        if ("misc" in data) {
+            // misc requests
+            chart.select(".misc-label")
+                .attr("x", "20px")
+                .attr("y", y);
+            y += 20;
+            var misc = chart.selectAll("g.misc")
+                .data(data.misc)
+                .attr("transform", function(d) {
+                          return "translate("+left(d)+","+(y+30*d.row)+")"; });
+            misc.select("rect")
+                .attr("width", width);
+            misc.select("text")
+                .attr("x", halfwidth);
+            var new_misc = misc.enter().append("svg:g")
+                .attr("class", "misc")
+                .attr("transform", function(d) {
+                          return "translate("+left(d)+","+(y+30*d.row)+")"; })
+            ;
+            y += 30*(1+d3.max(data.misc, function(d){return d.row;}));
+            new_misc.append("svg:rect")
+                .attr("width", width)
+                .attr("height", 20)
+                .attr("fill", "white")
+                .attr("stroke", "black")
+                .attr("stroke-width", 1)
+                .attr("title", function(d) {
+                          return d.what+" (took "
+                              +timeformat(d.finish_time-d.start_time)+")";})
+            ;
+            new_misc.append("svg:text")
+                .attr("x", halfwidth)
+                .attr("text-anchor", "middle")
+                .attr("dy", "0.9em")
+                .attr("fill", "black")
+                .text(function(d) {return d.what;})
+            ;
+        }
         // block requests
         chart.select(".block-label")
             .attr("x", "20px")
