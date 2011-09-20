@@ -549,7 +549,7 @@ class Share:
                 o.notify(state=COMPLETE, block=block)
             # now clear our received data, to dodge the #1170 spans.py
             # complexity bug
-            self._received = DataSpans()
+            #self._received = DataSpans()
         except (BadHashError, NotEnoughHashesError), e:
             # rats, we have a corrupt block. Notify our clients that they
             # need to look elsewhere, and advise the server. Unlike
@@ -683,6 +683,12 @@ class Share:
 
     def _desire_block_hashes(self, desire, o, segnum):
         (want_it, need_it, gotta_gotta_have_it) = desire
+
+        # I WANT IT ALL
+        if segnum == 1:
+            want_it.add(o["block_hashes"], o["share_hashes"]-o["block_hashes"])
+            want_it.add(o["crypttext_hash_tree"], o["block_hashes"]-o["crypttext_hash_tree"])
+            return
 
         # block hash chain
         for hashnum in self._commonshare.get_desired_block_hashes(segnum):
