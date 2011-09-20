@@ -274,6 +274,9 @@ class Client(node.Node, pollmixin.PollMixin):
         DEP["k"] = int(self.get_config("client", "shares.needed", DEP["k"]))
         DEP["n"] = int(self.get_config("client", "shares.total", DEP["n"]))
         DEP["happy"] = int(self.get_config("client", "shares.happy", DEP["happy"]))
+        DEP["max_segment_size"] = int(self.get_config("client",
+                                                      "max_segment_size",
+                                                      DEP["max_segment_size"]))
 
         self.init_client_storage_broker()
         self.history = History(self.stats_provider)
