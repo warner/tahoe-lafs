@@ -1043,10 +1043,10 @@ class Servermap(unittest.TestCase, PublishMixin):
         self.failUnlessEqual(sm.recoverable_versions(), set([best]))
         self.failUnlessEqual(len(sm.shares_available()), 1)
         self.failUnlessEqual(sm.shares_available()[best], (num_shares, 3, 10))
-        shnum, peerids = sm.make_sharemap().items()[0]
-        peerid = list(peerids)[0]
-        self.failUnlessEqual(sm.version_on_peer(peerid, shnum), best)
-        self.failUnlessEqual(sm.version_on_peer(peerid, 666), None)
+        shnum, serverids = sm.make_sharemap().items()[0]
+        serverid = list(serverids)[0]
+        self.failUnlessEqual(sm.version_on_server(serverid, shnum), best)
+        self.failUnlessEqual(sm.version_on_server(serverid, 666), None)
         return sm
 
     def test_basic(self):
@@ -1127,10 +1127,10 @@ class Servermap(unittest.TestCase, PublishMixin):
             v = sm.best_recoverable_version()
             vm = sm.make_versionmap()
             shares = list(vm[v])
-            for (peerid, shnum) in self._corrupted:
-                peer_shares = sm.shares_on_peer(peerid)
-                self.failIf(shnum in peer_shares,
-                            "%d was in %s" % (shnum, peer_shares))
+            for (serverid, shnum) in self._corrupted:
+                server_shares = sm.shares_on_server(serverid)
+                self.failIf(shnum in server_shares,
+                            "%d was in %s" % (shnum, server_shares))
             self.failUnlessEqual(len(shares), 5)
         d.addCallback(_check_map)
         return d
@@ -1336,7 +1336,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
             self.failUnlessEqual(servermap.best_recoverable_version(), None)
             self.failIf(servermap.recoverable_versions())
             self.failIf(servermap.unrecoverable_versions())
-            self.failIf(servermap.all_peers())
+            self.failIf(servermap.all_servers())
         d.addCallback(_check_servermap)
         return d
 

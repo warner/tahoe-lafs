@@ -110,7 +110,7 @@ class MutableChecker:
         counters["count-shares-good"] = num_distinct_shares
         counters["count-shares-needed"] = k
         counters["count-shares-expected"] = N
-        good_hosts = smap.all_peers_for_version(version)
+        good_hosts = smap.all_servers_for_version(version)
         counters["count-good-share-hosts"] = len(good_hosts)
         vmap = smap.make_versionmap()
         counters["count-wrong-shares"] = sum([len(shares)
@@ -170,7 +170,7 @@ class MutableChecker:
                 report.append("Unhealthy: best version has only %d shares "
                               "(encoding is %d-of-%d)" % (s, k, N))
                 summary.append("%d shares (enc %d-of-%d)" % (s, k, N))
-            hosts = smap.all_peers_for_version(best_version)
+            hosts = smap.all_servers_for_version(best_version)
             needs_rebalancing = bool( len(hosts) < N )
         elif unrecoverable:
             healthy = False
@@ -193,21 +193,21 @@ class MutableChecker:
             data["list-corrupt-shares"] = locators = []
             report.append("Corrupt Shares:")
             summary.append("Corrupt Shares:")
-            for (peerid, shnum, f) in sorted(self.bad_shares):
-                locators.append( (peerid, self._storage_index, shnum) )
-                s = "%s-sh%d" % (idlib.shortnodeid_b2a(peerid), shnum)
+            for (serverid, shnum, f) in sorted(self.bad_shares):
+                locators.append( (serverid, self._storage_index, shnum) )
+                s = "%s-sh%d" % (idlib.shortnodeid_b2a(serverid), shnum)
                 if f.check(CorruptShareError):
                     ft = f.value.reason
                 else:
                     ft = str(f)
                 report.append(" %s: %s" % (s, ft))
                 summary.append(s)
-                p = (peerid, self._storage_index, shnum, f)
+                p = (serverid, self._storage_index, shnum, f)
                 r.problems.append(p)
                 msg = ("CorruptShareError during mutable verify, "
-                       "peerid=%(peerid)s, si=%(si)s, shnum=%(shnum)d, "
+                       "serverid=%(serverid)s, si=%(si)s, shnum=%(shnum)d, "
                        "where=%(where)s")
-                log.msg(format=msg, peerid=idlib.nodeid_b2a(peerid),
+                log.msg(format=msg, serverid=idlib.nodeid_b2a(serverid),
                         si=base32.b2a(self._storage_index),
                         shnum=shnum,
                         where=ft,
@@ -218,13 +218,13 @@ class MutableChecker:
 
         sharemap = {}
         for verinfo in vmap:
-            for (shnum, peerid, timestamp) in vmap[verinfo]:
+            for (shnum, serverid, timestamp) in vmap[verinfo]:
                 shareid = "%s-sh%d" % (smap.summarize_version(verinfo), shnum)
                 if shareid not in sharemap:
                     sharemap[shareid] = []
-                sharemap[shareid].append(peerid)
+                sharemap[shareid].append(serverid)
         data["sharemap"] = sharemap
-        data["servers-responding"] = list(smap.reachable_peers)
+        data["servers-responding"] = list(smap.reachable_servers)
 
         r.set_healthy(healthy)
         r.set_recoverable(bool(recoverable))
