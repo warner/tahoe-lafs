@@ -3,6 +3,7 @@ var globals = {};
 
 function onDataReceived(data) {
     //console.log("got data, now rendering");
+    var show_misc = false;
     //delete data.misc;
     var timeline = d3.select("#timeline");
     var w = Number(timeline.style("width").slice(0,-2));
@@ -52,13 +53,6 @@ function onDataReceived(data) {
         .attr("dy", ".71em")
         .attr("fill", "black")
         .text("segment() requests");
-    if ("misc" in data)
-        chart.append("svg:text")
-            .attr("class", "misc-label")
-            .attr("text-anchor", "start") // anchor at top-left
-            .attr("dy", ".71em")
-            .attr("fill", "black")
-            .text("misc requests");
     chart.append("svg:text")
         .attr("class", "block-label")
         //.attr("x", "20px").attr("y", y)
@@ -152,7 +146,7 @@ function onDataReceived(data) {
         clipped.read = data.read.filter(inside);
         clipped.segment = data.segment.filter(inside);
         clipped.block = data.block.filter(inside);
-        if (data.misc)
+        if (show_misc && data.misc)
             clipped.misc = data.misc.filter(inside);
         return clipped;
     }
@@ -299,11 +293,22 @@ function onDataReceived(data) {
 
         var shnum_colors = d3.scale.category10();
 
-        if ("misc" in clipped) {
+        if (show_misc && "misc" in clipped) {
             // misc requests
-            chart.select(".misc-label")
+            var misc_label = chart.select("text.misc-label");
+            if (!misc_label.node()) {
+                chart.append("svg:text")
+                    .attr("class", "misc-label");
+                misc_label = chart.select("text.misc-label");
+            }
+            misc_label
+                .attr("text-anchor", "start") // anchor at top-left
+                .attr("dy", ".71em")
+                .attr("fill", "black")
+                .text("misc requests")
                 .attr("x", "20px")
-                .attr("y", y);
+                .attr("y", y)
+            ;
             y += 20;
             var misc = chart.selectAll("g.misc")
                 .data(clipped.misc, function(d) { return d.start_time; })
@@ -337,6 +342,9 @@ function onDataReceived(data) {
                 .attr("fill", "black")
                 .text(function(d) {return d.what;})
             ;
+        } else {
+            chart.select("text.misc-label").remove();
+            chart.selectAll("g.misc").remove();
         }
         // block requests
         chart.select(".block-label")
@@ -408,20 +416,26 @@ function onDataReceived(data) {
         ;
 
         newrules.append("svg:line")
-            .attr("y1", y)
-            .attr("y2", y + 6)
+            .attr("class", "rule-tick")
             .attr("stroke", "black");
+        chart.selectAll("line.rule-tick")
+            .attr("y1", y)
+            .attr("y2", y + 6);
         newrules.append("svg:line")
-            .attr("y1", 0)
-            .attr("y2", y)
+            .attr("class", "rule-red")
             .attr("stroke", "red")
             .attr("stroke-opacity", .3);
+        chart.selectAll("line.rule-red")
+            .attr("y1", 0)
+            .attr("y2", y);
         newrules.append("svg:text")
-            .attr("y", y + 9)
+            .attr("class", "rule-text")
             .attr("dy", ".71em")
             .attr("text-anchor", "middle")
             .attr("fill", "black")
             .text(x.tickFormat(10));
+        chart.selectAll("text.rule-text")
+            .attr("y", y + 9);
         rules.exit().remove();
         chart.select(".seconds-label")
             .attr("x", w/2)
@@ -470,6 +484,15 @@ function onDataReceived(data) {
         .on("click", zoomout)
     ;
     redraw();
+
+    globals.toggle_misc = function() {
+        show_misc = !show_misc;
+        redraw();
+    };
+}
+
+function toggle_misc() {
+    globals.toggle_misc();
 }
 
 $(function() {
