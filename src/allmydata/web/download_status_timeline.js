@@ -467,7 +467,11 @@ function onDataReceived(data) {
 }
 
 $(function() {
-      $.ajax({url: "event_json",
+      var datafile = "event_json";
+      if (location.hash)
+          datafile = location.hash.slice(1);
+      //console.log("fetching data from "+datafile);
+      $.ajax({url: datafile,
               method: 'GET',
               dataType: 'json',
               success: onDataReceived });
