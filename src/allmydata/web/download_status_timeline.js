@@ -449,50 +449,20 @@ function onDataReceived(data) {
     globals.x = x;
     globals.redraw = redraw;
 
-    var zoom = chart.append("svg:g")
-        .attr("id", "zoom");
-    zoom.append("svg:rect")
-        .attr("width", "20px")
-        .attr("height", "20px")
-        .attr("stroke", "black")
-        .attr("stroke-width", "1")
-        .attr("fill", "white")
-        .on("click", zoomin)
-    ;
-    zoom.append("svg:text")
-        .attr("x", "10px").attr("y", "0.8em")
-        .attr("font-size", "18px")
-        .attr("text-anchor", "middle")
-        .text("+")
-        .on("click", zoomin)
-    ;
-    zoom.append("svg:rect")
-        .attr("y", "30px")
-        .attr("width", "20px")
-        .attr("height", "20px")
-        .attr("stroke", "black")
-        .attr("stroke-width", "1")
-        .attr("fill", "white")
-        .on("click", zoomout)
-    ;
-    zoom.append("svg:text")
-        .attr("y", "30px")
-        .attr("x", "10px").attr("dy", "0.8em")
-        .attr("font-size", "18px")
-        .attr("text-anchor", "middle")
-        .text("-")
-        .on("click", zoomout)
-    ;
+    d3.select("#zoom_in_button").on("click", zoomin);
+    d3.select("#zoom_out_button").on("click", zoomout);
+    d3.select("#toggle_misc_button").on("click",
+                                        function() {
+                                            show_misc = !show_misc;
+                                            redraw();
+                                        });
+    d3.select("#reset_button").on("click",
+                                  function() {
+                                      x.domain([-last*0.05, last]).range([0,w]);
+                                      redraw();
+                                      });
+
     redraw();
-
-    globals.toggle_misc = function() {
-        show_misc = !show_misc;
-        redraw();
-    };
-}
-
-function toggle_misc() {
-    globals.toggle_misc();
 }
 
 $(function() {
