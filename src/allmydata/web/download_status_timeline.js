@@ -74,6 +74,9 @@ function onDataReceived(data) {
     var last = data.bounds.max - data.bounds.min;
     //last = reltime(d3.max(data.dyhb, function(d){return d.finish_time;}));
     last = last * 1.05;
+    // long downloads are likely to have too much info, start small
+    if (last > 10.0)
+        last = 10.0;
     // d3.time.scale() has no support for ms or us.
     var xOFF = d3.time.scale().domain([data.bounds.min, data.bounds.max])
                  .range([0,w]);
@@ -131,8 +134,28 @@ function onDataReceived(data) {
         redraw();
     }
 
+    function clip() {
+        var clipped = {};
+        var min = data.bounds.min + x.domain()[0];
+        var max = data.bounds.min + x.domain()[1];
+        function inside(d) {
+            var finish_time = d.finish_time || d.start_time;
+            if (Math.max(d.start_time, min) < Math.min(finish_time, max))
+                return true;
+            return false;
+        }
+        clipped.dyhb = data.dyhb.filter(inside);
+        clipped.read = data.read.filter(inside);
+        clipped.segment = data.segment.filter(inside);
+        clipped.block = data.block.filter(inside);
+        if (data.misc)
+            clipped.misc = data.misc.filter(inside);
+        return clipped;
+    }
+
     function redraw() {
         // at this point zoom/pan must be fixed
+        var clipped = clip(data);
 
         var y = 0;
         //chart.select(".dyhb-label")
@@ -146,7 +169,7 @@ function onDataReceived(data) {
                         .rangeBands([y, y+data.dyhb.length*20], .2);
         y += data.dyhb.length*20;
         var dyhb = chart.selectAll("g.dyhb") // one per row
-             .data(data.dyhb)
+             .data(clipped.dyhb, function(d) { return d.start_time; })
              .attr("transform", function(d,i) {
                        return "translate("+x(reltime(d.start_time))+","
                            +dyhb_y(i)+")";
@@ -158,6 +181,7 @@ function onDataReceived(data) {
                            +dyhb_y(i)+")";
                    })
         ;
+        dyhb.exit().remove();
         dyhb.select("rect")
              .attr("width", width)
         ;
@@ -200,7 +224,7 @@ function onDataReceived(data) {
             .attr("y", y);
         y += 20;
         var read = chart.selectAll("g.read")
-             .data(data.read)
+             .data(clipped.read, function(d) { return d.start_time; })
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; });
         read.select("rect")
@@ -212,6 +236,7 @@ function onDataReceived(data) {
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; })
         ;
+        read.exit().remove();
         y += 30*(1+d3.max(data.read, function(d){return d.row;}));
         new_read.append("svg:rect")
              .attr("width", width)
@@ -235,7 +260,7 @@ function onDataReceived(data) {
             .attr("y", y);
         y += 20;
         var segment = chart.selectAll("g.segment")
-             .data(data.segment)
+             .data(clipped.segment, function(d) { return d.start_time; })
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; });
         segment.select("rect")
@@ -247,6 +272,7 @@ function onDataReceived(data) {
              .attr("transform", function(d) {
                        return "translate("+left(d)+","+(y+30*d.row)+")"; })
         ;
+        segment.exit().remove();
         y += 30*(1+d3.max(data.segment, function(d){return d.row;}));
         new_segment.append("svg:rect")
              .attr("width", width)
@@ -269,14 +295,14 @@ function onDataReceived(data) {
 
         var shnum_colors = d3.scale.category10();
 
-        if ("misc" in data) {
+        if ("misc" in clipped) {
             // misc requests
             chart.select(".misc-label")
                 .attr("x", "20px")
                 .attr("y", y);
             y += 20;
             var misc = chart.selectAll("g.misc")
-                .data(data.misc)
+                .data(clipped.misc, function(d) { return d.start_time; })
                 .attr("transform", function(d) {
                           return "translate("+left(d)+","+(y+30*d.row)+")"; });
             misc.select("rect")
@@ -288,6 +314,7 @@ function onDataReceived(data) {
                 .attr("transform", function(d) {
                           return "translate("+left(d)+","+(y+30*d.row)+")"; })
             ;
+            misc.exit().remove();
             y += 30*(1+d3.max(data.misc, function(d){return d.row;}));
             new_misc.append("svg:rect")
                 .attr("width", width)
@@ -324,7 +351,7 @@ function onDataReceived(data) {
             }
         }();
         var blocks = chart.selectAll("g.block")
-             .data(data.block)
+             .data(clipped.block, function(d) { return d.start_time; })
              .attr("transform", function(d) {
                        var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
                        return "translate("+left(d)+"," +ry+")"; });
@@ -338,6 +365,7 @@ function onDataReceived(data) {
                        var ry = block_row_to_y[d.row[0]+"-"+d.row[1]];
                        return "translate("+left(d)+"," +ry+")"; })
         ;
+        blocks.exit().remove();
         // everything appended to blocks starts at the top-left of the
         // correct per-rect location
         new_blocks.append("svg:rect")
