@@ -1,5 +1,9 @@
 
+var globals = {};
+
 function onDataReceived(data) {
+    //console.log("got data, now rendering");
+    //delete data.misc;
     var timeline = d3.select("#timeline");
     var w = Number(timeline.style("width").slice(0,-2));
     // the SVG fills the width of the whole div, but it will extend
@@ -428,6 +432,8 @@ function onDataReceived(data) {
         d3.select("#outer_rect").attr("height", y);
         d3.select("#zoom").attr("transform", "translate("+(w-10)+","+10+")");
     }
+    globals.x = x;
+    globals.redraw = redraw;
 
     var zoom = chart.append("svg:g")
         .attr("id", "zoom");
