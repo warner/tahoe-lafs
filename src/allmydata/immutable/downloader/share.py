@@ -731,6 +731,31 @@ class Share:
         # Reconsider the removal: maybe bring it back.
         ds = self._download_status
 
+        v = self._server.get_version()
+        if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
+            ["has-immutable-readv"]):
+            # new-style readv() form
+            readv = list(ask)
+            if not readv:
+                return # nothing to do
+            lp = log.msg(format="%(share)s send_readv [%(span)s]",
+                         share=repr(self), span=ask.dump(),
+                         level=log.NOISY, parent=self._lp, umid="nByhWA")
+            block_ev = ds.add_block_request(self._server, self._shnum,
+                                            readv[0][0], readv[0][1], now())
+            for (start, length) in readv:
+                self._pending.add(start, length)
+            d = self._rref.callRemote("readv", readv)
+            d.addCallback(self._got_datav, readv, lp)
+            d.addErrback(self._got_error, readv[0][0], readv[0][1], block_ev, lp)
+            d.addCallback(self._trigger_loop)
+            d.addErrback(lambda f:
+                         log.err(format="unhandled error during send_request",
+                                 failure=f, parent=self._lp,
+                                 level=log.WEIRD, umid="qZu0wg"))
+            return d
+
+        # old-style lots-of-read() form
         for (start, length) in ask:
             # TODO: quantize to reasonably-large blocks
             self._pending.add(start, length)
@@ -752,6 +777,14 @@ class Share:
 
     def _send_request(self, start, length):
         return self._rref.callRemote("read", start, length)
+
+    def _got_datav(self, datav, readv, lp):
+        for i,(start,length) in enumerate(readv):
+            data = datav[i]
+            self._pending.remove(start, length)
+            self._received.add(start, data)
+            if len(data) < length:
+                self._unavailable.add(start+len(data), length-len(data))
 
     def _got_data(self, data, start, length, block_ev, lp):
         block_ev.finished(len(data), now())

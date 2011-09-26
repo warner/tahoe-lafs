@@ -314,6 +314,15 @@ class BucketReader(Referenceable):
         self.ss.count("read")
         return data
 
+    def remote_readv(self, readv):
+        start = time.time()
+        datav = []
+        for (offset, length) in readv:
+            datav.append(self._share_file.read_share_data(offset, length))
+        self.ss.add_latency("immutable-readv", time.time() - start)
+        self.ss.count("immutable-readv")
+        return datav
+
     def remote_advise_corrupt_share(self, reason):
         return self.ss.remote_advise_corrupt_share("immutable",
                                                    self.storage_index,

@@ -182,6 +182,9 @@ class NativeStorageServer:
           "maximum-mutable-share-size": 2*1000*1000*1000, # maximum prior to v1.9.2
           "tolerates-immutable-read-overrun": False,
           "delete-mutable-shares-with-zero-length-writev": False,
+          "fills-holes-with-zero-bytes": False,
+          "prevents-read-past-end-of-share-data": False,
+          "has-immutable-readv": False,
           },
         "application-version": "unknown: no get_version()",
         }
