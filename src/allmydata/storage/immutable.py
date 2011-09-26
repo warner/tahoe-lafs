@@ -321,6 +321,7 @@ class BucketReader(Referenceable):
             datav.append(self._share_file.read_share_data(offset, length))
         self.ss.add_latency("immutable-readv", time.time() - start)
         self.ss.count("immutable-readv")
+        self.ss.count("immutable-vectors", len(readv))
         return datav
 
     def remote_advise_corrupt_share(self, reason):

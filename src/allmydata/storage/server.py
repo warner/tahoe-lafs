@@ -500,6 +500,7 @@ class StorageServer(service.MultiService, Referenceable):
     def remote_slot_readv(self, storage_index, shares, readv):
         start = time.time()
         self.count("readv")
+        self.count("mutable-vectors", len(shares)*len(readv))
         si_s = si_b2a(storage_index)
         lp = log.msg("storage: slot_readv %s %s" % (si_s, shares),
                      facility="tahoe.storage", level=log.OPERATIONAL)
