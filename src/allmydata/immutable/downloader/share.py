@@ -821,7 +821,7 @@ class Share:
             (datalen,) = struct.unpack(">Q", snippet.tobytes())
             data = datav2[offset:offset+datalen]
             self._pending.remove(start, length)
-            self._received.add(start, data)
+            self._received.add(start, data.tobytes()) # ugh copy
             if len(data) < length:
                 self._unavailable.add(start+len(data), length-len(data))
             offset += datalen
