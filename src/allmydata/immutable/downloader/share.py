@@ -733,7 +733,7 @@ class Share:
 
         v = self._server.get_version()
         if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
-            ["has-immutable-readv2"]):
+            .get("has-immutable-readv2", False)):
             # new-style readv2() form
             readv = list(ask)
             if not readv:
