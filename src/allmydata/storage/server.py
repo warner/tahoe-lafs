@@ -79,6 +79,7 @@ class StorageServer(service.MultiService, Referenceable):
                           "close": [],
                           "read": [],
                           "immutable-readv": [],
+                          "immutable-readv2": [],
                           "get": [],
                           "writev": [], # mutable
                           "readv": [],
@@ -233,6 +234,7 @@ class StorageServer(service.MultiService, Referenceable):
                       "fills-holes-with-zero-bytes": True,
                       "prevents-read-past-end-of-share-data": True,
                       "has-immutable-readv": True,
+                      "has-immutable-readv2": True,
                       },
                     "application-version": str(allmydata.__full_version__),
                     }

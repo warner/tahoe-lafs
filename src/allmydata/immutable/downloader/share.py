@@ -2,6 +2,7 @@
 import struct
 import time
 now = time.time
+import memoryview
 
 from twisted.python.failure import Failure
 from foolscap.api import eventually
@@ -733,6 +734,31 @@ class Share:
 
         v = self._server.get_version()
         if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
+            ["has-immutable-readv2"]):
+            # new-style readv2() form
+            readv = list(ask)
+            if not readv:
+                return # nothing to do
+            lp = log.msg(format="%(share)s send_readv [%(span)s]",
+                         share=repr(self), span=ask.dump(),
+                         level=log.NOISY, parent=self._lp, umid="nByhWA")
+            block_ev = ds.add_block_request(self._server, self._shnum,
+                                            readv[0][0], readv[0][1], now())
+            for (start, length) in readv:
+                self._pending.add(start, length)
+            readv2 = "".join([struct.pack(">QQ", start, length)
+                              for (start, length) in readv])
+            d = self._rref.callRemote("readv2", readv2)
+            d.addCallback(self._got_datav2, readv, lp)
+            d.addErrback(self._got_error, readv[0][0], readv[0][1], block_ev, lp)
+            d.addCallback(self._trigger_loop)
+            d.addErrback(lambda f:
+                         log.err(format="unhandled error during send_request",
+                                 failure=f, parent=self._lp,
+                                 level=log.WEIRD, umid="qZu0wg"))
+            return d
+
+        if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
             ["has-immutable-readv"]):
             # new-style readv() form
             readv = list(ask)
@@ -785,6 +811,19 @@ class Share:
             self._received.add(start, data)
             if len(data) < length:
                 self._unavailable.add(start+len(data), length-len(data))
+
+    def _got_datav2(self, datav2, readv, lp):
+        datav2 = memoryview(datav2)
+        datastart = 8*len(readv)
+        offset = datastart
+        for i,(start,length) in enumerate(readv):
+            datalen = struct.unpack(">Q", datav2[8*i:8*i+8])
+            data = datav2[offset:offset+datalen]
+            self._pending.remove(start, length)
+            self._received.add(start, data)
+            if len(data) < length:
+                self._unavailable.add(start+len(data), length-len(data))
+            offset += datalen
 
     def _got_data(self, data, start, length, block_ev, lp):
         block_ev.finished(len(data), now())

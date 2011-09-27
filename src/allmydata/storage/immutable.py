@@ -324,6 +324,20 @@ class BucketReader(Referenceable):
         self.ss.count("immutable-vectors", len(readv))
         return datav
 
+    def remote_readv2(self, readv2):
+        start = time.time()
+        datav = []
+        assert len(readv2) % 16 == 0
+        for i in range(0, len(readv2), 16):
+            (offset, length) = struct.unpack(">QQ", readv2[i:i+16])
+            datav.append(self._share_file.read_share_data(offset, length))
+        ret = ("".join([struct.pack(">Q", len(data)) for data in datav])
+               + "".join(datav))
+        self.ss.add_latency("immutable-readv2", time.time() - start)
+        self.ss.count("immutable-readv2")
+        self.ss.count("immutable-vectors", len(readv))
+        return ret
+
     def remote_advise_corrupt_share(self, reason):
         return self.ss.remote_advise_corrupt_share("immutable",
                                                    self.storage_index,

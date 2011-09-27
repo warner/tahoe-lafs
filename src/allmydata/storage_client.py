@@ -185,6 +185,7 @@ class NativeStorageServer:
           "fills-holes-with-zero-bytes": False,
           "prevents-read-past-end-of-share-data": False,
           "has-immutable-readv": False,
+          "has-immutable-readv2": False,
           },
         "application-version": "unknown: no get_version()",
         }
