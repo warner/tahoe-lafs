@@ -70,6 +70,8 @@ class RIBucketReader(RemoteInterface):
         return ShareData
     def readv(readv=ReadVector):
         return ReadData
+    def readv2(readv2=ShareData):
+        return ShareData
 
     def advise_corrupt_share(reason=str):
         """Clients who discover hash failures in shares that they have
