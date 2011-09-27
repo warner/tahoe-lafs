@@ -2,7 +2,6 @@
 import struct
 import time
 now = time.time
-import memoryview
 
 from twisted.python.failure import Failure
 from foolscap.api import eventually
