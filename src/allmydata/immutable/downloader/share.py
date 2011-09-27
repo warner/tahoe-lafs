@@ -816,7 +816,9 @@ class Share:
         datastart = 8*len(readv)
         offset = datastart
         for i,(start,length) in enumerate(readv):
-            datalen = struct.unpack(">Q", datav2[8*i:8*i+8])
+            snippet = datav2[8*i:8*i+8]
+            assert len(snippet) == 8, (type(snippet), len(snippet))
+            datalen = struct.unpack(">Q", snippet)
             data = datav2[offset:offset+datalen]
             self._pending.remove(start, length)
             self._received.add(start, data)
