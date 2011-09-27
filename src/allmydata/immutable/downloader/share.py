@@ -818,7 +818,7 @@ class Share:
         for i,(start,length) in enumerate(readv):
             snippet = datav2[8*i:8*i+8]
             assert len(snippet) == 8, (type(snippet), len(snippet))
-            datalen = struct.unpack(">Q", snippet)
+            datalen = struct.unpack(">Q", snippet.tobytes())
             data = datav2[offset:offset+datalen]
             self._pending.remove(start, length)
             self._received.add(start, data)
