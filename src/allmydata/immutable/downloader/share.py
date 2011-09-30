@@ -318,26 +318,26 @@ class Share:
                 # can't check block_hash_tree without a root
                 return False
 
-        if self._commonshare.need_block_hash_root():
-            block_hash_root = self._node.share_hash_tree.get_leaf(self._shnum)
-            self._commonshare.set_block_hash_root(block_hash_root)
+        #if self._commonshare.need_block_hash_root():
+        #    block_hash_root = self._node.share_hash_tree.get_leaf(self._shnum)
+        #    self._commonshare.set_block_hash_root(block_hash_root)
 
         if segnum is None:
             return False # we don't want any particular segment right now
 
         # block_hash_tree
-        needed_hashes = self._commonshare.get_needed_block_hashes(segnum)
-        if needed_hashes:
-            if not self._satisfy_block_hash_tree(needed_hashes):
-                # can't check block without block_hash_tree
-                return False
+        #needed_hashes = self._commonshare.get_needed_block_hashes(segnum)
+        #if needed_hashes:
+        #    if not self._satisfy_block_hash_tree(needed_hashes):
+        #        # can't check block without block_hash_tree
+        #        return False
 
         # ciphertext_hash_tree
-        needed_hashes = self._node.get_needed_ciphertext_hashes(segnum)
-        if needed_hashes:
-            if not self._satisfy_ciphertext_hash_tree(needed_hashes):
-                # can't check decoded blocks without ciphertext_hash_tree
-                return False
+        #needed_hashes = self._node.get_needed_ciphertext_hashes(segnum)
+        #if needed_hashes:
+        #    if not self._satisfy_ciphertext_hash_tree(needed_hashes):
+        #        # can't check decoded blocks without ciphertext_hash_tree
+        #        return False
 
         # data blocks
         return self._satisfy_data_block(segnum, observers)
@@ -542,7 +542,7 @@ class Share:
         # no further data reads will help
         assert self._requested_blocks[0][0] == segnum
         try:
-            self._commonshare.check_block(segnum, block)
+            #self._commonshare.check_block(segnum, block)
             # hurrah, we have a valid block. Deliver it.
             for o in observers:
                 # goes to SegmentFetcher._block_request_activity
@@ -610,7 +610,7 @@ class Share:
                 # They might be asking for a segment number that is beyond
                 # what we guess the file contains, but _desire_block_hashes
                 # and _desire_data will tolerate that.
-                self._desire_block_hashes(desire, o, segnum)
+                #self._desire_block_hashes(desire, o, segnum)
                 self._desire_data(desire, o, r, segnum, segsize)
 
         log.msg("end _desire: want_it=%s need_it=%s gotta=%s"
@@ -732,7 +732,7 @@ class Share:
         ds = self._download_status
 
         v = self._server.get_version()
-        if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
+        if False and (v["http://allmydata.org/tahoe/protocols/storage/v1"]
             .get("has-immutable-readv2", False)):
             # new-style readv2() form
             readv = list(ask)
@@ -757,7 +757,7 @@ class Share:
                                  level=log.WEIRD, umid="qZu0wg"))
             return d
 
-        if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
+        if False and (v["http://allmydata.org/tahoe/protocols/storage/v1"]
             ["has-immutable-readv"]):
             # new-style readv() form
             readv = list(ask)
