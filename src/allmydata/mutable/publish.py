@@ -258,7 +258,7 @@ class Publish:
         # do a repair to repair and recreate these.
         for (serverid, shnum) in self._servermap.servermap:
             self.goal.add( (serverid, shnum) )
-            self.connections[serverid] = self._servermap.connections[serverid]
+            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         self.writers = {}
 
         # SDMF files are updated differently.
@@ -453,14 +453,14 @@ class Publish:
         # try to update each existing share in place.
         for (serverid, shnum) in self._servermap.servermap:
             self.goal.add( (serverid, shnum) )
-            self.connections[serverid] = self._servermap.connections[serverid]
+            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         # then we add in all the shares that were bad (corrupted, bad
         # signatures, etc). We want to replace these.
         for key, old_checkstring in self._servermap.bad_shares.items():
             (serverid, shnum) = key
             self.goal.add(key)
             self.bad_share_checkstrings[key] = old_checkstring
-            self.connections[serverid] = self._servermap.connections[serverid]
+            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
 
         # TODO: Make this part do server selection.
         self.update_goal()

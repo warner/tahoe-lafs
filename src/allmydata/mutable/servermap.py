@@ -171,6 +171,11 @@ class ServerMap:
                 print >>out, str(f)
         return out
 
+    def add_rref_for_serverid(self, serverid, rref):
+        self.connections[serverid] = rref
+    def get_rref_for_serverid(self, serverid):
+        return self.connections[serverid]
+
     def all_servers(self):
         return set([serverid
                     for (serverid, shnum)
@@ -529,9 +534,9 @@ class ServermapUpdater:
         initial_servers_to_query = {}
         must_query = set()
         for serverid in self._servermap.all_servers():
-            ss = self._servermap.connections[serverid]
+            rref = self._servermap.get_rref_for_serverid(serverid)
             # we send queries to everyone who was already in the sharemap
-            initial_servers_to_query[serverid] = ss
+            initial_servers_to_query[serverid] = rref
             # and we must wait for responses from them
             must_query.add(serverid)
 
@@ -566,7 +571,7 @@ class ServermapUpdater:
                  serverid=idlib.shortnodeid_b2a(serverid),
                  readsize=readsize,
                  level=log.NOISY)
-        self._servermap.connections[serverid] = ss
+        self._servermap.add_rref_for_serverid(serverid, ss)
         started = time.time()
         self._queries_outstanding.add(serverid)
         d = self._do_read(ss, serverid, storage_index, [], [(0, readsize)])
@@ -788,9 +793,9 @@ class ServermapUpdater:
 
 
     def notify_server_corruption(self, serverid, shnum, reason):
-        ss = self._servermap.connections[serverid]
-        ss.callRemoteOnly("advise_corrupt_share",
-                          "mutable", self._storage_index, shnum, reason)
+        rref = self._servermap.get_rref_for_serverid(serverid)
+        rref.callRemoteOnly("advise_corrupt_share",
+                            "mutable", self._storage_index, shnum, reason)
 
 
     def _got_signature_one_share(self, results, shnum, serverid, lp):

@@ -285,8 +285,8 @@ class Retrieve:
             # data that they have, then change this method to do that.
             any_cache = self._node._read_from_cache(self.verinfo, shnum,
                                                     0, 1000)
-            ss = self.servermap.connections[peerid]
-            reader = MDMFSlotReadProxy(ss,
+            rref = self.servermap.get_rref_for_serverid(peerid)
+            reader = MDMFSlotReadProxy(rref,
                                        self._storage_index,
                                        shnum,
                                        any_cache)
@@ -932,9 +932,9 @@ class Retrieve:
 
 
     def notify_server_corruption(self, peerid, shnum, reason):
-        ss = self.servermap.connections[peerid]
-        ss.callRemoteOnly("advise_corrupt_share",
-                          "mutable", self._storage_index, shnum, reason)
+        rref = self.servermap.get_rref_for_serverid(peerid)
+        rref.callRemoteOnly("advise_corrupt_share",
+                            "mutable", self._storage_index, shnum, reason)
 
 
     def _try_to_validate_privkey(self, enc_privkey, reader):
