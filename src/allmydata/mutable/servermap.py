@@ -117,7 +117,7 @@ class ServerMap:
         self.servermap = {}
         self.connections = {} # XXX this will go away
         self.unreachable_servers = set() # servers that didn't respond to queries
-        self.reachable_servers = set() # serverids that did respond to queries
+        self.reachable_servers = set() # servers that did respond to queries
         self.problems = [] # mostly for debugging
         self.bad_shares = {} # maps (serverid,shnum) to old checkstring
         self.last_update_mode = None
@@ -135,6 +135,14 @@ class ServerMap:
         s.last_update_mode = self.last_update_mode
         s.last_update_time = self.last_update_time
         return s
+
+    def get_reachable_servers(self):
+        return self.reachable_servers
+
+    def mark_server_reachable(self, serverid):
+        # XXX this will change to take an IServer, not serverid
+        server = self._storage_broker.get_server_for_id(serverid)
+        self.reachable_servers.add(server)
 
     def mark_server_unreachable(self, serverid):
         # XXX this will change to take an IServer, not serverid
@@ -654,7 +662,7 @@ class ServermapUpdater:
         elapsed = now - started
         def _done_processing(ignored=None):
             self._queries_outstanding.discard(serverid)
-            self._servermap.reachable_servers.add(serverid)
+            self._servermap.mark_server_reachable(serverid)
             self._must_query.discard(serverid)
             self._queries_completed += 1
         if not self._running:

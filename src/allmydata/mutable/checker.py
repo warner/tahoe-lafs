@@ -224,7 +224,8 @@ class MutableChecker:
                     sharemap[shareid] = []
                 sharemap[shareid].append(serverid)
         data["sharemap"] = sharemap
-        data["servers-responding"] = list(smap.reachable_servers)
+        data["servers-responding"] = [s.get_serverid() for s in
+                                      list(smap.get_reachable_servers())]
 
         r.set_healthy(healthy)
         r.set_recoverable(bool(recoverable))
