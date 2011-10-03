@@ -141,9 +141,7 @@ class ServerMap:
     def get_reachable_servers(self):
         return self.reachable_servers
 
-    def mark_server_reachable(self, serverid):
-        # XXX this will change to take an IServer, not serverid
-        server = self._storage_broker.get_server_for_id(serverid)
+    def mark_server_reachable(self, server):
         self.reachable_servers.add(server)
 
     def mark_server_unreachable(self, server):
@@ -681,12 +679,11 @@ class ServermapUpdater:
                       name=server.get_name(),
                       numshares=len(datavs))
         ss = server.get_rref()
-        serverid = server.get_serverid()
         now = time.time()
         elapsed = now - started
         def _done_processing(ignored=None):
             self._queries_outstanding.discard(server)
-            self._servermap.mark_server_reachable(serverid)
+            self._servermap.mark_server_reachable(server)
             self._must_query.discard(server)
             self._queries_completed += 1
         if not self._running:
