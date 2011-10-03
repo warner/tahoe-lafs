@@ -146,9 +146,7 @@ class ServerMap:
         server = self._storage_broker.get_server_for_id(serverid)
         self.reachable_servers.add(server)
 
-    def mark_server_unreachable(self, serverid):
-        # XXX this will change to take an IServer, not serverid
-        server = self._storage_broker.get_server_for_id(serverid)
+    def mark_server_unreachable(self, server):
         self.unreachable_servers.add(server)
 
     def mark_bad_share(self, serverid, shnum, checkstring):
@@ -1018,7 +1016,6 @@ class ServermapUpdater:
     def _query_failed(self, f, server):
         if not self._running:
             return
-        serverid = server.get_serverid()
         level = log.WEIRD
         if f.check(DeadReferenceError):
             level = log.UNUSUAL
@@ -1029,10 +1026,10 @@ class ServermapUpdater:
         self._queries_outstanding.discard(server)
         self._bad_servers.add(server)
         self._servermap.add_problem(f)
-        # a serverid could be in both ServerMap.reachable_servers and
+        # a server could be in both ServerMap.reachable_servers and
         # .unreachable_servers if they responded to our query, but then an
         # exception was raised in _got_results.
-        self._servermap.mark_server_unreachable(serverid)
+        self._servermap.mark_server_unreachable(server)
         self._queries_completed += 1
         self._last_failure = f
 
