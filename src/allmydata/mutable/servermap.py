@@ -642,7 +642,7 @@ class ServermapUpdater:
             d2 = ss.callRemote("add_lease", storage_index,
                                renew_secret, cancel_secret)
             # we ignore success
-            d2.addErrback(self._add_lease_failed, serverid, storage_index)
+            d2.addErrback(self._add_lease_failed, server, storage_index)
         d = ss.callRemote("slot_readv", storage_index, shnums, readv)
         return d
 
@@ -991,7 +991,7 @@ class ServermapUpdater:
         self._status.set_privkey_from(serverid)
 
 
-    def _add_lease_failed(self, f, serverid, storage_index):
+    def _add_lease_failed(self, f, server, storage_index):
         # Older versions of Tahoe didn't handle the add-lease message very
         # well: <=1.1.0 throws a NameError because it doesn't implement
         # remote_add_lease(), 1.2.0/1.3.0 throw IndexError on unknown buckets
@@ -1012,7 +1012,7 @@ class ServermapUpdater:
                 # during debugging
                 return
             self.log(format="error in add_lease from [%(serverid)s]: %(f_value)s",
-                     serverid=idlib.shortnodeid_b2a(serverid),
+                     serverid=server.get_name(),
                      f_value=str(f.value),
                      failure=f,
                      level=log.WEIRD, umid="iqg3mw")
@@ -1020,7 +1020,7 @@ class ServermapUpdater:
         # local errors are cause for alarm
         log.err(f,
                 format="local error in add_lease to [%(serverid)s]: %(f_value)s",
-                serverid=idlib.shortnodeid_b2a(serverid),
+                serverid=server.get_name(),
                 f_value=str(f.value),
                 level=log.WEIRD, umid="ZWh6HA")
 
