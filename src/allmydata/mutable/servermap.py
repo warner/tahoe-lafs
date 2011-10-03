@@ -202,9 +202,7 @@ class ServerMap:
         return self._storage_broker.get_server_for_id(serverid).get_rref()
 
     def all_servers(self):
-        return set([server.get_serverid()
-                    for (server, shnum)
-                    in self._known_shares])
+        return set([server for (server, shnum) in self._known_shares])
 
     def all_servers_for_version(self, verinfo):
         """Return a set of serverids that hold shares for the given version."""
@@ -555,19 +553,14 @@ class ServermapUpdater:
         return self._done_deferred
 
     def _build_initial_querylist(self):
-        initial_servers_to_query = set()
-        must_query = set()
-        for serverid in self._servermap.all_servers():
-            s = self._storage_broker.get_server_for_id(serverid)
-            # we send queries to everyone who was already in the sharemap
-            initial_servers_to_query.add(s)
-            # and we must wait for responses from them
-            must_query.add(s)
+        # we send queries to everyone who was already in the sharemap
+        initial_servers_to_query = set(self._servermap.all_servers())
+        # and we must wait for responses from them
+        must_query = set(initial_servers_to_query)
 
         while ((self.num_servers_to_query > len(initial_servers_to_query))
                and self.extra_servers):
-            s = self.extra_servers.pop(0)
-            initial_servers_to_query.add(s)
+            initial_servers_to_query.add(self.extra_servers.pop(0))
 
         return initial_servers_to_query, must_query
 
