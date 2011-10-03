@@ -665,7 +665,7 @@ class ServermapUpdater:
         # happen to find a valid version string amongst those
         # shares, we'll keep track of it so that we don't need
         # to validate the signature on those again.
-        self._bad_servers.add(serverid)
+        self._bad_servers.add(server)
         self._last_failure = f
         # XXX: Use the reader for this?
         checkstring = data[:SIGNED_PREFIX_LENGTH]
@@ -1039,7 +1039,7 @@ class ServermapUpdater:
                  level=level, umid="IHXuQg")
         self._must_query.discard(serverid)
         self._queries_outstanding.discard(serverid)
-        self._bad_servers.add(serverid)
+        self._bad_servers.add(server)
         self._servermap.add_problem(f)
         # a serverid could be in both ServerMap.reachable_servers and
         # .unreachable_servers if they responded to our query, but then an
@@ -1172,14 +1172,14 @@ class ServermapUpdater:
 
             for i,server in enumerate(self.full_serverlist):
                 serverid = server.get_serverid()
-                if serverid in self._bad_servers:
+                if server in self._bad_servers:
                     # query failed
                     states.append("x")
-                    #self.log("loop [%s]: x" % idlib.shortnodeid_b2a(serverid))
+                    #self.log("loop [%s]: x" % server.get_name()
                 elif serverid in self._empty_servers:
                     # no shares
                     states.append("0")
-                    #self.log("loop [%s]: 0" % idlib.shortnodeid_b2a(serverid))
+                    #self.log("loop [%s]: 0" % server.get_name()
                     if last_found != -1:
                         num_not_found += 1
                         if num_not_found >= self.EPSILON:
@@ -1192,13 +1192,13 @@ class ServermapUpdater:
                 elif serverid in self._good_servers:
                     # yes shares
                     states.append("1")
-                    #self.log("loop [%s]: 1" % idlib.shortnodeid_b2a(serverid))
+                    #self.log("loop [%s]: 1" % server.get_name()
                     last_found = i
                     num_not_found = 0
                 else:
                     # not responded yet
                     states.append("?")
-                    #self.log("loop [%s]: ?" % idlib.shortnodeid_b2a(serverid))
+                    #self.log("loop [%s]: ?" % server.get_name()
                     last_not_responded = i
                     num_not_responded += 1
 
