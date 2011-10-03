@@ -210,8 +210,7 @@ class Publish:
         self._encprivkey = self._node.get_encprivkey()
 
         sb = self._storage_broker
-        full_serverlist = [(s.get_serverid(), s.get_rref())
-                           for s in sb.get_servers_for_psi(self._storage_index)]
+        full_serverlist = list(sb.get_servers_for_psi(self._storage_index))
         self.full_serverlist = full_serverlist # for use later, immutable
         self.bad_servers = set() # serverids who have errbacked/refused requests
 
@@ -409,8 +408,7 @@ class Publish:
         self._encprivkey = self._node.get_encprivkey()
 
         sb = self._storage_broker
-        full_serverlist = [(s.get_serverid(), s.get_rref())
-                         for s in sb.get_servers_for_psi(self._storage_index)]
+        full_serverlist = list(sb.get_servers_for_psi(self._storage_index))
         self.full_serverlist = full_serverlist # for use later, immutable
         self.bad_servers = set() # serverids who have errbacked/refused requests
 
@@ -943,7 +941,9 @@ class Publish:
             old_assignments.add(serverid, shnum)
 
         serverlist = []
-        for i, (serverid, ss) in enumerate(self.full_serverlist):
+        for i, server in enumerate(self.full_serverlist):
+            serverid = server.get_serverid()
+            ss = server.get_rref()
             if serverid in self.bad_servers:
                 continue
             entry = (len(old_assignments.get(serverid, [])), i, serverid, ss)
