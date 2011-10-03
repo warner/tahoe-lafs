@@ -618,7 +618,7 @@ class ServermapUpdater:
         started = time.time()
         self._queries_outstanding.add(serverid)
         d = self._do_read(server, storage_index, [], [(0, readsize)])
-        d.addCallback(self._got_results, serverid, readsize, (ss, storage_index),
+        d.addCallback(self._got_results, server, readsize, storage_index,
                       started)
         d.addErrback(self._query_failed, server)
         # errors that aren't handled by _query_failed (and errors caused by
@@ -685,10 +685,12 @@ class ServermapUpdater:
             self._node._add_to_cache(verinfo, shnum, 0, data)
 
 
-    def _got_results(self, datavs, serverid, readsize, stuff, started):
+    def _got_results(self, datavs, server, readsize, storage_index, started):
         lp = self.log(format="got result from [%(serverid)s], %(numshares)d shares",
-                      serverid=idlib.shortnodeid_b2a(serverid),
+                      serverid=server.get_name(),
                       numshares=len(datavs))
+        ss = server.get_rref()
+        serverid = server.get_serverid()
         now = time.time()
         elapsed = now - started
         def _done_processing(ignored=None):
@@ -708,7 +710,6 @@ class ServermapUpdater:
         else:
             self._empty_servers.add(serverid)
 
-        ss, storage_index = stuff
         ds = []
 
         for shnum,datav in datavs.items():
