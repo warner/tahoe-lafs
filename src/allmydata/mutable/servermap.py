@@ -511,8 +511,6 @@ class ServermapUpdater:
         self._good_servers = set() # servers who had some shares
         self._empty_servers = set() # servers who don't have any shares
         self._bad_servers = set() # servers to whom our queries failed
-        self._readers = {} # serverid -> dict(sharewriters), filled in
-                           # after responses come in.
 
         k = self._node.get_required_shares()
         # For what cases can these conditions work?
@@ -717,7 +715,6 @@ class ServermapUpdater:
                                        storage_index,
                                        shnum,
                                        data)
-            self._readers.setdefault(serverid, dict())[shnum] = reader
             # our goal, with each response, is to validate the version
             # information and share data as best we can at this point --
             # we do this by validating the signature. To do this, we
