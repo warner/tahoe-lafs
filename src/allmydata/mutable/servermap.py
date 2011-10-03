@@ -34,7 +34,8 @@ class UpdateStatus:
         self.started = time.time()
         self.finished = None
 
-    def add_per_server_time(self, serverid, op, sent, elapsed):
+    def add_per_server_time(self, server, op, sent, elapsed):
+        serverid = server.get_serverid()
         assert op in ("query", "late", "privkey")
         if serverid not in self.timings["per_server"]:
             self.timings["per_server"][serverid] = []
@@ -693,9 +694,9 @@ class ServermapUpdater:
         if not self._running:
             self.log("but we're not running, so we'll ignore it", parent=lp)
             _done_processing()
-            self._status.add_per_server_time(serverid, "late", started, elapsed)
+            self._status.add_per_server_time(server, "late", started, elapsed)
             return
-        self._status.add_per_server_time(serverid, "query", started, elapsed)
+        self._status.add_per_server_time(server, "query", started, elapsed)
 
         if datavs:
             self._good_servers.add(server)
