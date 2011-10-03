@@ -792,8 +792,8 @@ class ServermapUpdater:
 
             dl = defer.DeferredList([d, d2, d3, d4, d5])
             dl.addBoth(self._turn_barrier)
-            dl.addCallback(lambda results, shnum=shnum, serverid=serverid:
-                           self._got_signature_one_share(results, shnum, serverid, lp))
+            dl.addCallback(lambda results, shnum=shnum:
+                           self._got_signature_one_share(results, shnum, server, lp))
             dl.addErrback(lambda error, shnum=shnum, data=data:
                           self._got_corrupt_share(error, shnum, server, data, lp))
             dl.addCallback(lambda verinfo, shnum=shnum, serverid=serverid, data=data:
@@ -845,13 +845,13 @@ class ServermapUpdater:
                             "mutable", self._storage_index, shnum, reason)
 
 
-    def _got_signature_one_share(self, results, shnum, serverid, lp):
+    def _got_signature_one_share(self, results, shnum, server, lp):
         # It is our job to give versioninfo to our caller. We need to
         # raise CorruptShareError if the share is corrupt for any
         # reason, something that our caller will handle.
         self.log(format="_got_results: got shnum #%(shnum)d from serverid %(serverid)s",
                  shnum=shnum,
-                 serverid=idlib.shortnodeid_b2a(serverid),
+                 serverid=server.get_name(),
                  level=log.NOISY,
                  parent=lp)
         if not self._running:
@@ -859,6 +859,7 @@ class ServermapUpdater:
             # servermap anymore.
             self.log("but we're not running anymore.")
             return None
+        serverid = server.get_serverid()
 
         _, verinfo, signature, __, ___ = results
         (seqnum,
