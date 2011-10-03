@@ -729,8 +729,8 @@ class ServermapUpdater:
             if not self._node.get_pubkey():
                 # fetch and set the public key.
                 d = reader.get_verification_key()
-                d.addCallback(lambda results, shnum=shnum, serverid=serverid:
-                              self._try_to_set_pubkey(results, serverid, shnum, lp))
+                d.addCallback(lambda results, shnum=shnum:
+                              self._try_to_set_pubkey(results, server, shnum, lp))
                 # XXX: Make self._pubkey_query_failed?
                 d.addErrback(lambda error, shnum=shnum, data=data:
                              self._got_corrupt_share(error, shnum, server, data, lp))
@@ -827,7 +827,8 @@ class ServermapUpdater:
         return fireEventually(result)
 
 
-    def _try_to_set_pubkey(self, pubkey_s, serverid, shnum, lp):
+    def _try_to_set_pubkey(self, pubkey_s, server, shnum, lp):
+        serverid = server.get_serverid()
         if self._node.get_pubkey():
             return # don't go through this again if we don't have to
         fingerprint = hashutil.ssk_pubkey_fingerprint_hash(pubkey_s)
