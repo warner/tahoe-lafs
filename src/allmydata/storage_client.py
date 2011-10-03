@@ -137,6 +137,8 @@ class StorageFarmBroker:
             return self.servers[serverid].get_nickname()
         return None
 
+    def get_server_for_id(self, serverid):
+        return self.servers[serverid]
 
 class IServer(Interface):
     """I live in the client, and represent a single server."""

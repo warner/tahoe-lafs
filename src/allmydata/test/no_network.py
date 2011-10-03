@@ -144,6 +144,8 @@ class NoNetworkServer:
 
 class NoNetworkStorageBroker:
     implements(IStorageBroker)
+    def __init__(self):
+        self._known_servers = {}
     def get_servers_for_psi(self, peer_selection_index):
         def _permuted(server):
             seed = server.get_permutation_seed()
@@ -153,6 +155,17 @@ class NoNetworkStorageBroker:
         return self.client._servers
     def get_nickname_for_serverid(self, serverid):
         return None
+    def get_server_for_id(self, serverid):
+        # this cache lets tests pretend to remove-servers, in particular so
+        # test_mutable.Problems.test_unexpected_shares cal use an
+        # intentionally out-of-date ServerMap
+        if serverid in self._known_servers:
+            return self._known_servers[serverid]
+        for s in self.get_connected_servers():
+            self._known_servers[s.serverid] = s
+            if s.serverid == serverid:
+                return s
+        raise KeyError("unable to find server")
 
 class NoNetworkClient(Client):
     def create_tub(self):
