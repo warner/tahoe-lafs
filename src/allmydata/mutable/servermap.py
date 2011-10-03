@@ -764,9 +764,9 @@ class ServermapUpdater:
             # fetch it here.
             if self._need_privkey:
                 d4 = reader.get_encprivkey()
-                d4.addCallback(lambda results, shnum=shnum, serverid=serverid:
-                               self._try_to_validate_privkey(results, serverid, shnum, lp))
-                d4.addErrback(lambda error, shnum=shnum, serverid=serverid, data=data:
+                d4.addCallback(lambda results, shnum=shnum:
+                               self._try_to_validate_privkey(results, server, shnum, lp))
+                d4.addErrback(lambda error, shnum=shnum:
                               self._privkey_query_failed(error, server, shnum, lp))
             else:
                 d4 = defer.succeed(None)
@@ -966,12 +966,13 @@ class ServermapUpdater:
         return verifier
 
 
-    def _try_to_validate_privkey(self, enc_privkey, serverid, shnum, lp):
+    def _try_to_validate_privkey(self, enc_privkey, server, shnum, lp):
         """
         Given a writekey from a remote server, I validate it against the
         writekey stored in my node. If it is valid, then I set the
         privkey and encprivkey properties of the node.
         """
+        serverid = server.get_serverid()
         alleged_privkey_s = self._node._decrypt_privkey(enc_privkey)
         alleged_writekey = hashutil.ssk_writekey_hash(alleged_privkey_s)
         if alleged_writekey != self._node.get_writekey():
