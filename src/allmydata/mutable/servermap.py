@@ -102,14 +102,14 @@ class ServerMap:
 
     @var connections: maps serverid to a RemoteReference
 
-    @ivar _bad_shares: dict with keys of (serverid, shnum) tuples, describing
+    @ivar _bad_shares: dict with keys of (server, shnum) tuples, describing
                        shares that I should ignore (because a previous user
                        of the servermap determined that they were invalid).
                        The updater only locates a certain number of shares:
                        if some of these turn out to have integrity problems
                        and are unusable, the caller will need to mark those
                        shares as bad, then re-update the servermap, then try
-                       again. The dict maps (serverid, shnum) tuple to old
+                       again. The dict maps (server, shnum) tuple to old
                        checkstring.
     """
 
@@ -120,7 +120,7 @@ class ServerMap:
         self.unreachable_servers = set() # servers that didn't respond to queries
         self.reachable_servers = set() # servers that did respond to queries
         self._problems = [] # mostly for debugging
-        self._bad_shares = {} # maps (serverid,shnum) to old checkstring
+        self._bad_shares = {} # maps (server,shnum) to old checkstring
         self._last_update_mode = None
         self._last_update_time = 0
         self.update_data = {} # (verinfo,shnum) => data
@@ -160,23 +160,23 @@ class ServerMap:
         test-and-set using it as a reference.
         """
         server = self._storage_broker.get_server_for_id(serverid)
-        key = (serverid, shnum) # record checkstring
+        key = (server, shnum) # record checkstring
         self._bad_shares[key] = checkstring
-        key2 = (server, shnum)
-        self._known_shares.pop(key2, None)
+        self._known_shares.pop(key, None)
 
     def get_bad_shares(self):
-        return self._bad_shares # key=(serverid,shnum) -> checkstring
+        # key=(serverid,shnum) -> checkstring
+        return dict([((s.get_serverid(),shnum), checkstring)
+                     for ((s,shnum),checkstring) in self._bad_shares.items()])
 
     def add_new_share(self, serverid, shnum, verinfo, timestamp):
         """We've written a new share out, replacing any that was there
         before."""
         # XXX this will change to take an IServer
         server = self._storage_broker.get_server_for_id(serverid)
-        key = (serverid, shnum)
+        key = (server, shnum)
         self._bad_shares.pop(key, None)
-        key2 = (server, shnum)
-        self._known_shares[key2] = (verinfo, timestamp)
+        self._known_shares[key] = (verinfo, timestamp)
 
     def add_problem(self, f):
         self._problems.append(f)
