@@ -709,7 +709,7 @@ class ServermapUpdater:
         if datavs:
             self._good_servers.add(server)
         else:
-            self._empty_servers.add(serverid)
+            self._empty_servers.add(server)
 
         ds = []
 
@@ -1171,12 +1171,11 @@ class ServermapUpdater:
             found_boundary = False
 
             for i,server in enumerate(self.full_serverlist):
-                serverid = server.get_serverid()
                 if server in self._bad_servers:
                     # query failed
                     states.append("x")
                     #self.log("loop [%s]: x" % server.get_name()
-                elif serverid in self._empty_servers:
+                elif server in self._empty_servers:
                     # no shares
                     states.append("0")
                     #self.log("loop [%s]: 0" % server.get_name()
