@@ -707,7 +707,7 @@ class ServermapUpdater:
         self._status.add_per_server_time(serverid, "query", started, elapsed)
 
         if datavs:
-            self._good_servers.add(serverid)
+            self._good_servers.add(server)
         else:
             self._empty_servers.add(serverid)
 
@@ -1189,7 +1189,7 @@ class ServermapUpdater:
                             found_boundary = True
                             break
 
-                elif serverid in self._good_servers:
+                elif server in self._good_servers:
                     # yes shares
                     states.append("1")
                     #self.log("loop [%s]: 1" % server.get_name()
