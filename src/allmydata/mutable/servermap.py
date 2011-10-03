@@ -491,11 +491,6 @@ class ServermapUpdater:
         # avoid re-checking the signatures for each share.
         self._valid_versions = set()
 
-        # self.versionmap maps verinfo tuples to sets of (shnum, serverid,
-        # timestamp) tuples. This is used to figure out which versions might
-        # be retrievable, and to make the eventual data download faster.
-        self.versionmap = DictOfSets()
-
         self._done_deferred = defer.Deferred()
 
         # first, which servers should be talk to? Any that were in our old
@@ -917,8 +912,6 @@ class ServermapUpdater:
         # Add the info to our servermap.
         timestamp = time.time()
         self._servermap.add_new_share(serverid, shnum, verinfo, timestamp)
-        # and the versionmap
-        self.versionmap.add(verinfo, (shnum, serverid, timestamp))
 
         return verinfo
 
