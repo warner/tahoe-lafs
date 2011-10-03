@@ -70,8 +70,8 @@ class UpdateStatus:
         self.storage_index = si
     def set_mode(self, mode):
         self.mode = mode
-    def set_privkey_from(self, serverid):
-        self.privkey_from = serverid
+    def set_privkey_from(self, server):
+        self.privkey_from = server.get_serverid()
     def set_status(self, status):
         self.status = status
     def set_progress(self, value):
@@ -963,7 +963,6 @@ class ServermapUpdater:
         writekey stored in my node. If it is valid, then I set the
         privkey and encprivkey properties of the node.
         """
-        serverid = server.get_serverid()
         alleged_privkey_s = self._node._decrypt_privkey(enc_privkey)
         alleged_writekey = hashutil.ssk_writekey_hash(alleged_privkey_s)
         if alleged_writekey != self._node.get_writekey():
@@ -980,7 +979,7 @@ class ServermapUpdater:
         self._node._populate_encprivkey(enc_privkey)
         self._node._populate_privkey(privkey)
         self._need_privkey = False
-        self._status.set_privkey_from(serverid)
+        self._status.set_privkey_from(server)
 
 
     def _add_lease_failed(self, f, server, storage_index):
