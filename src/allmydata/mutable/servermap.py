@@ -95,12 +95,12 @@ class ServerMap:
     has changed since I last retrieved this data'. This reduces the chances
     of clobbering a simultaneous (uncoordinated) write.
 
-    @ivar servermap: a dictionary, mapping a (serverid, shnum) tuple to a
-                     (versionid, timestamp) tuple. Each 'versionid' is a
-                     tuple of (seqnum, root_hash, IV, segsize, datalength,
-                     k, N, signed_prefix, offsets)
+    @var _known_shares: a dictionary, mapping a (serverid, shnum) tuple to a
+                        (versionid, timestamp) tuple. Each 'versionid' is a
+                        tuple of (seqnum, root_hash, IV, segsize, datalength,
+                        k, N, signed_prefix, offsets)
 
-    @ivar connections: maps serverid to a RemoteReference
+    @var connections: maps serverid to a RemoteReference
 
     @ivar bad_shares: dict with keys of (serverid, shnum) tuples, describing
                       shares that I should ignore (because a previous user of
@@ -114,7 +114,7 @@ class ServerMap:
 
     def __init__(self, storage_broker):
         self._storage_broker = storage_broker
-        self.servermap = {}
+        self._known_shares = {}
         self.connections = {} # XXX this will go away
         self.unreachable_servers = set() # servers that didn't respond to queries
         self.reachable_servers = set() # servers that did respond to queries
@@ -126,7 +126,7 @@ class ServerMap:
 
     def copy(self):
         s = ServerMap(self._storage_broker)
-        s.servermap = self.servermap.copy() # tuple->tuple
+        s._known_shares = self._known_shares.copy() # tuple->tuple
         s.connections = self.connections.copy() # str->RemoteReference
         s.unreachable_servers = set(self.unreachable_servers)
         s.reachable_servers = set(self.reachable_servers)
@@ -160,19 +160,19 @@ class ServerMap:
         """
         key = (serverid, shnum) # record checkstring
         self.bad_shares[key] = checkstring
-        self.servermap.pop(key, None)
+        self._known_shares.pop(key, None)
 
     def add_new_share(self, serverid, shnum, verinfo, timestamp):
         """We've written a new share out, replacing any that was there
         before."""
         key = (serverid, shnum)
         self.bad_shares.pop(key, None)
-        self.servermap[key] = (verinfo, timestamp)
+        self._known_shares[key] = (verinfo, timestamp)
 
     def dump(self, out=sys.stdout):
         print >>out, "servermap:"
 
-        for ( (serverid, shnum), (verinfo, timestamp) ) in self.servermap.items():
+        for ( (serverid, shnum), (verinfo, timestamp) ) in self._known_shares.items():
             (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
              offsets_tuple) = verinfo
             print >>out, ("[%s]: sh#%d seq%d-%s %d-of-%d len%d" %
@@ -193,19 +193,23 @@ class ServerMap:
     def all_servers(self):
         return set([serverid
                     for (serverid, shnum)
-                    in self.servermap])
+                    in self._known_shares])
 
     def all_servers_for_version(self, verinfo):
         """Return a set of serverids that hold shares for the given version."""
         return set([serverid
                     for ( (serverid, shnum), (verinfo2, timestamp) )
-                    in self.servermap.items()
+                    in self._known_shares.items()
                     if verinfo == verinfo2])
+
+    def get_known_shares(self):
+        # maps (serverid,shnum) to (versionid,timestamp)
+        return self._known_shares
 
     def make_sharemap(self):
         """Return a dict that maps shnum to a set of serverids that hold it."""
         sharemap = DictOfSets()
-        for (serverid, shnum) in self.servermap:
+        for (serverid, shnum) in self._known_shares:
             sharemap.add(shnum, serverid)
         return sharemap
 
@@ -213,20 +217,20 @@ class ServerMap:
         """Return a dict that maps versionid to sets of (shnum, serverid,
         timestamp) tuples."""
         versionmap = DictOfSets()
-        for ( (serverid, shnum), (verinfo, timestamp) ) in self.servermap.items():
+        for ( (serverid, shnum), (verinfo, timestamp) ) in self._known_shares.items():
             versionmap.add(verinfo, (shnum, serverid, timestamp))
         return versionmap
 
     def shares_on_server(self, serverid):
         return set([shnum
                     for (s_serverid, shnum)
-                    in self.servermap
+                    in self._known_shares
                     if s_serverid == serverid])
 
     def version_on_server(self, serverid, shnum):
         key = (serverid, shnum)
-        if key in self.servermap:
-            (verinfo, timestamp) = self.servermap[key]
+        if key in self._known_shares:
+            (verinfo, timestamp) = self._known_shares[key]
             return verinfo
         return None
 
