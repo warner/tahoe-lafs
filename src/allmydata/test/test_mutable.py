@@ -1378,7 +1378,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
                 # no recoverable versions == not succeeding. The problem
                 # should be noted in the servermap's list of problems.
                 if substring:
-                    allproblems = [str(f) for f in servermap.problems]
+                    allproblems = [str(f) for f in servermap.get_problems()]
                     self.failUnlessIn(substring, "".join(allproblems))
                 return servermap
             if should_succeed:
@@ -1540,9 +1540,9 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
                       shnums_to_corrupt=range(0, N-k))
         d.addCallback(lambda res: self.make_servermap())
         def _do_retrieve(servermap):
-            self.failUnless(servermap.problems)
+            self.failUnless(servermap.get_problems())
             self.failUnless("pubkey doesn't match fingerprint"
-                            in str(servermap.problems[0]))
+                            in str(servermap.get_problems()[0]))
             ver = servermap.best_recoverable_version()
             r = Retrieve(self._fn, servermap, ver)
             c = consumer.MemoryConsumer()
