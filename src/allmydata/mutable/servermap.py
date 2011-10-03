@@ -505,8 +505,7 @@ class ServermapUpdater:
 
         sb = self._storage_broker
         # All of the servers, permuted by the storage index, as usual.
-        full_serverlist = [(s.get_serverid(), s.get_rref())
-                           for s in sb.get_servers_for_psi(self._storage_index)]
+        full_serverlist = list(sb.get_servers_for_psi(self._storage_index))
         self.full_serverlist = full_serverlist # for use later, immutable
         self.extra_servers = full_serverlist[:] # servers are removed as we use them
         self._good_servers = set() # servers who had some shares
@@ -530,8 +529,8 @@ class ServermapUpdater:
 
         if self.mode == MODE_CHECK:
             # We want to query all of the servers.
-            initial_servers_to_query = dict(full_serverlist)
-            must_query = set(initial_servers_to_query.keys())
+            initial_servers_to_query = list(full_serverlist)
+            must_query = set(initial_servers_to_query)
             self.extra_servers = []
         elif self.mode == MODE_WRITE:
             # we're planning to replace all the shares, so we want a good
@@ -551,12 +550,12 @@ class ServermapUpdater:
             # 2*k servers is good enough.
             initial_servers_to_query, must_query = self._build_initial_querylist()
 
-        # this is a set of servers that we are required to get responses
+        # this is a set of serverids that we are required to get responses
         # from: they are servers who used to have a share, so we need to know
         # where they currently stand, even if that means we have to wait for
         # a silently-lost TCP connection to time out. We remove servers from
         # this set as we get responses.
-        self._must_query = must_query
+        self._must_query = set([s.get_serverid() for s in must_query])
 
         # now initial_servers_to_query contains the servers that we should
         # ask, self.must_query contains the servers that we must have heard
@@ -565,26 +564,26 @@ class ServermapUpdater:
         # tap if we don't get enough responses)
         # I guess that self._must_query is a subset of
         # initial_servers_to_query?
-        assert set(must_query).issubset(set(initial_servers_to_query))
+        assert must_query.issubset(initial_servers_to_query)
 
         self._send_initial_requests(initial_servers_to_query)
         self._status.timings["initial_queries"] = time.time() - self._started
         return self._done_deferred
 
     def _build_initial_querylist(self):
-        initial_servers_to_query = {}
+        initial_servers_to_query = set()
         must_query = set()
         for serverid in self._servermap.all_servers():
-            rref = self._servermap.get_rref_for_serverid(serverid)
+            s = self._storage_broker.get_server_for_id(serverid)
             # we send queries to everyone who was already in the sharemap
-            initial_servers_to_query[serverid] = rref
+            initial_servers_to_query.add(s)
             # and we must wait for responses from them
-            must_query.add(serverid)
+            must_query.add(s)
 
         while ((self.num_servers_to_query > len(initial_servers_to_query))
                and self.extra_servers):
-            (serverid, ss) = self.extra_servers.pop(0)
-            initial_servers_to_query[serverid] = ss
+            s = self.extra_servers.pop(0)
+            initial_servers_to_query.add(s)
 
         return initial_servers_to_query, must_query
 
@@ -592,7 +591,9 @@ class ServermapUpdater:
         self._status.set_status("Sending %d initial queries" % len(serverlist))
         self._queries_outstanding = set()
         self._sharemap = DictOfSets() # shnum -> [(serverid, seqnum, R)..]
-        for (serverid, ss) in serverlist.items():
+        for s in serverlist:
+            ss = s.get_rref()
+            serverid = s.get_serverid()
             self._queries_outstanding.add(serverid)
             self._do_query(ss, serverid, self._storage_index, self._read_size)
 
@@ -1159,7 +1160,8 @@ class ServermapUpdater:
             states = []
             found_boundary = False
 
-            for i,(serverid,ss) in enumerate(self.full_serverlist):
+            for i,server in enumerate(self.full_serverlist):
+                serverid = server.get_serverid()
                 if serverid in self._bad_servers:
                     # query failed
                     states.append("x")
@@ -1239,11 +1241,12 @@ class ServermapUpdater:
 
         self.log(format="sending %(more)d more queries: %(who)s",
                  more=len(more_queries),
-                 who=" ".join(["[%s]" % idlib.shortnodeid_b2a(serverid)
-                               for (serverid,ss) in more_queries]),
+                 who=" ".join(["[%s]" % s.get_name() for s in more_queries]),
                  level=log.NOISY)
 
-        for (serverid, ss) in more_queries:
+        for s in more_queries:
+            ss = s.get_rref()
+            serverid = s.get_serverid()
             self._do_query(ss, serverid, self._storage_index, self._read_size)
             # we'll retrigger when those queries come back
 
