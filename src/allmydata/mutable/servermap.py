@@ -112,7 +112,8 @@ class ServerMap:
                       The dict maps (serverid, shnum) tuple to old checkstring.
     """
 
-    def __init__(self):
+    def __init__(self, storage_broker):
+        self._storage_broker = storage_broker
         self.servermap = {}
         self.connections = {}
         self.unreachable_servers = set() # serverids that didn't respond to queries
@@ -124,7 +125,7 @@ class ServerMap:
         self.update_data = {} # (verinfo,shnum) => data
 
     def copy(self):
-        s = ServerMap()
+        s = ServerMap(self._storage_broker)
         s.servermap = self.servermap.copy() # tuple->tuple
         s.connections = self.connections.copy() # str->RemoteReference
         s.unreachable_servers = set(self.unreachable_servers)

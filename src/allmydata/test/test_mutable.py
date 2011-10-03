@@ -1025,7 +1025,7 @@ class Servermap(unittest.TestCase, PublishMixin):
         if sb is None:
             sb = self._storage_broker
         smu = ServermapUpdater(fn, sb, Monitor(),
-                               ServerMap(), mode, update_range=update_range)
+                               ServerMap(sb), mode, update_range=update_range)
         d = smu.update()
         return d
 
@@ -1247,10 +1247,10 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
         return self.publish_one()
 
     def make_servermap(self, mode=MODE_READ, oldmap=None, sb=None):
-        if oldmap is None:
-            oldmap = ServerMap()
         if sb is None:
             sb = self._storage_broker
+        if oldmap is None:
+            oldmap = ServerMap(sb)
         smu = ServermapUpdater(self._fn, sb, Monitor(), oldmap, mode)
         d = smu.update()
         return d
@@ -2177,7 +2177,7 @@ class MultipleEncodings(unittest.TestCase):
 
     def make_servermap(self, mode=MODE_READ, oldmap=None):
         if oldmap is None:
-            oldmap = ServerMap()
+            oldmap = ServerMap(self._storage_broker)
         smu = ServermapUpdater(self._fn, self._storage_broker, Monitor(),
                                oldmap, mode)
         d = smu.update()

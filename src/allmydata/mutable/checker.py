@@ -21,7 +21,7 @@ class MutableChecker:
         self.responded = set() # set of (binary) nodeids
 
     def check(self, verify=False, add_lease=False):
-        servermap = ServerMap()
+        servermap = ServerMap(self._storage_broker)
         # Updating the servermap in MODE_CHECK will stand a good chance
         # of finding all of the shares, and getting a good idea of
         # recoverability, etc, without verifying.
