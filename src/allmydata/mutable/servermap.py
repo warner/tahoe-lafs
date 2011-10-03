@@ -767,7 +767,7 @@ class ServermapUpdater:
                 d4.addCallback(lambda results, shnum=shnum, serverid=serverid:
                                self._try_to_validate_privkey(results, serverid, shnum, lp))
                 d4.addErrback(lambda error, shnum=shnum, serverid=serverid, data=data:
-                              self._privkey_query_failed(error, shnum, data, lp))
+                              self._privkey_query_failed(error, serverid, shnum, lp))
             else:
                 d4 = defer.succeed(None)
 
