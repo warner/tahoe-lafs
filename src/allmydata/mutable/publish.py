@@ -457,7 +457,7 @@ class Publish:
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         # then we add in all the shares that were bad (corrupted, bad
         # signatures, etc). We want to replace these.
-        for key, old_checkstring in self._servermap.bad_shares.items():
+        for key, old_checkstring in self._servermap.get_bad_shares().items():
             (serverid, shnum) = key
             self.goal.add(key)
             self.bad_share_checkstrings[key] = old_checkstring

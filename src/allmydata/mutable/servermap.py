@@ -102,14 +102,15 @@ class ServerMap:
 
     @var connections: maps serverid to a RemoteReference
 
-    @ivar bad_shares: dict with keys of (serverid, shnum) tuples, describing
-                      shares that I should ignore (because a previous user of
-                      the servermap determined that they were invalid). The
-                      updater only locates a certain number of shares: if
-                      some of these turn out to have integrity problems and
-                      are unusable, the caller will need to mark those shares
-                      as bad, then re-update the servermap, then try again.
-                      The dict maps (serverid, shnum) tuple to old checkstring.
+    @ivar _bad_shares: dict with keys of (serverid, shnum) tuples, describing
+                       shares that I should ignore (because a previous user
+                       of the servermap determined that they were invalid).
+                       The updater only locates a certain number of shares:
+                       if some of these turn out to have integrity problems
+                       and are unusable, the caller will need to mark those
+                       shares as bad, then re-update the servermap, then try
+                       again. The dict maps (serverid, shnum) tuple to old
+                       checkstring.
     """
 
     def __init__(self, storage_broker):
@@ -119,7 +120,7 @@ class ServerMap:
         self.unreachable_servers = set() # servers that didn't respond to queries
         self.reachable_servers = set() # servers that did respond to queries
         self.problems = [] # mostly for debugging
-        self.bad_shares = {} # maps (serverid,shnum) to old checkstring
+        self._bad_shares = {} # maps (serverid,shnum) to old checkstring
         self.last_update_mode = None
         self.last_update_time = 0
         self.update_data = {} # (verinfo,shnum) => data
@@ -131,7 +132,7 @@ class ServerMap:
         s.unreachable_servers = set(self.unreachable_servers)
         s.reachable_servers = set(self.reachable_servers)
         s.problems = self.problems[:]
-        s.bad_shares = self.bad_shares.copy() # tuple->str
+        s._bad_shares = self._bad_shares.copy() # tuple->str
         s.last_update_mode = self.last_update_mode
         s.last_update_time = self.last_update_time
         return s
@@ -159,14 +160,17 @@ class ServerMap:
         test-and-set using it as a reference.
         """
         key = (serverid, shnum) # record checkstring
-        self.bad_shares[key] = checkstring
+        self._bad_shares[key] = checkstring
         self._known_shares.pop(key, None)
+
+    def get_bad_shares(self):
+        return self._bad_shares # key=(serverid,shnum) -> checkstring
 
     def add_new_share(self, serverid, shnum, verinfo, timestamp):
         """We've written a new share out, replacing any that was there
         before."""
         key = (serverid, shnum)
-        self.bad_shares.pop(key, None)
+        self._bad_shares.pop(key, None)
         self._known_shares[key] = (verinfo, timestamp)
 
     def dump(self, out=sys.stdout):
@@ -881,7 +885,7 @@ class ServermapUpdater:
         # we're okay to skip the signature-checking step.
 
         # (serverid, shnum) are bound in the method invocation.
-        if (serverid, shnum) in self._servermap.bad_shares:
+        if (serverid, shnum) in self._servermap.get_bad_shares():
             # we've been told that the rest of the data in this share is
             # unusable, so don't add it to the servermap.
             self.log("but we've been told this is a bad share",
