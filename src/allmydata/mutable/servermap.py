@@ -620,7 +620,7 @@ class ServermapUpdater:
         d = self._do_read(server, storage_index, [], [(0, readsize)])
         d.addCallback(self._got_results, serverid, readsize, (ss, storage_index),
                       started)
-        d.addErrback(self._query_failed, serverid)
+        d.addErrback(self._query_failed, server)
         # errors that aren't handled by _query_failed (and errors caused by
         # _query_failed) get logged, but we still want to check for doneness.
         d.addErrback(log.err)
@@ -1022,9 +1022,10 @@ class ServermapUpdater:
                 f_value=str(f.value),
                 level=log.WEIRD, umid="ZWh6HA")
 
-    def _query_failed(self, f, serverid):
+    def _query_failed(self, f, server):
         if not self._running:
             return
+        serverid = server.get_serverid()
         level = log.WEIRD
         if f.check(DeadReferenceError):
             level = log.UNUSUAL
