@@ -550,12 +550,12 @@ class ServermapUpdater:
             # 2*k servers is good enough.
             initial_servers_to_query, must_query = self._build_initial_querylist()
 
-        # this is a set of serverids that we are required to get responses
+        # this is a set of servers that we are required to get responses
         # from: they are servers who used to have a share, so we need to know
         # where they currently stand, even if that means we have to wait for
         # a silently-lost TCP connection to time out. We remove servers from
         # this set as we get responses.
-        self._must_query = set([s.get_serverid() for s in must_query])
+        self._must_query = set(must_query)
 
         # now initial_servers_to_query contains the servers that we should
         # ask, self.must_query contains the servers that we must have heard
@@ -696,7 +696,7 @@ class ServermapUpdater:
         def _done_processing(ignored=None):
             self._queries_outstanding.discard(server)
             self._servermap.mark_server_reachable(serverid)
-            self._must_query.discard(serverid)
+            self._must_query.discard(server)
             self._queries_completed += 1
         if not self._running:
             self.log("but we're not running, so we'll ignore it", parent=lp)
@@ -1036,7 +1036,7 @@ class ServermapUpdater:
         self.log(format="error during query: %(f_value)s",
                  f_value=str(f.value), failure=f,
                  level=level, umid="IHXuQg")
-        self._must_query.discard(serverid)
+        self._must_query.discard(server)
         self._queries_outstanding.discard(server)
         self._bad_servers.add(server)
         self._servermap.add_problem(f)
