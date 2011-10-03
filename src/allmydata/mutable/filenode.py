@@ -387,7 +387,7 @@ class MutableFileNode:
         recoverable version that I can find in there.
         """
         # XXX: wording ^^^^
-        if servermap and servermap.last_update_mode == mode:
+        if servermap and servermap.get_last_update()[0] == mode:
             d = defer.succeed(servermap)
         else:
             d = self._get_servermap(mode)
@@ -780,7 +780,7 @@ class MutableFileVersion:
 
     def _overwrite(self, new_contents):
         assert IMutableUploadable.providedBy(new_contents)
-        assert self._servermap.last_update_mode == MODE_WRITE
+        assert self._servermap.get_last_update()[0] == MODE_WRITE
 
         return self._upload(new_contents)
 
@@ -874,7 +874,7 @@ class MutableFileVersion:
         I attempt to apply a modifier to the contents of the mutable
         file.
         """
-        assert self._servermap.last_update_mode != MODE_READ
+        assert self._servermap.get_last_update()[0] != MODE_READ
 
         # download_to_data is serialized, so we have to call this to
         # avoid deadlock.

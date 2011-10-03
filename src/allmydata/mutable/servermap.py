@@ -121,8 +121,8 @@ class ServerMap:
         self.reachable_servers = set() # servers that did respond to queries
         self._problems = [] # mostly for debugging
         self._bad_shares = {} # maps (serverid,shnum) to old checkstring
-        self.last_update_mode = None
-        self.last_update_time = 0
+        self._last_update_mode = None
+        self._last_update_time = 0
         self.update_data = {} # (verinfo,shnum) => data
 
     def copy(self):
@@ -133,8 +133,8 @@ class ServerMap:
         s.reachable_servers = set(self.reachable_servers)
         s._problems = self._problems[:]
         s._bad_shares = self._bad_shares.copy() # tuple->str
-        s.last_update_mode = self.last_update_mode
-        s.last_update_time = self.last_update_time
+        s._last_update_mode = self._last_update_mode
+        s._last_update_time = self._last_update_time
         return s
 
     def get_reachable_servers(self):
@@ -177,6 +177,12 @@ class ServerMap:
         self._problems.append(f)
     def get_problems(self):
         return self._problems
+
+    def set_last_update(self, mode, when):
+        self._last_update_mode = mode
+        self._last_update_time = when
+    def get_last_update(self):
+        return (self._last_update_mode, self._last_update_time)
 
     def dump(self, out=sys.stdout):
         print >>out, "servermap:"
@@ -1246,8 +1252,7 @@ class ServermapUpdater:
         self._status.set_status("Finished")
         self._status.set_active(False)
 
-        self._servermap.last_update_mode = self.mode
-        self._servermap.last_update_time = self._started
+        self._servermap.set_last_update(self.mode, self._started)
         # the servermap will not be touched after this
         self.log("servermap: %s" % self._servermap.summarize_versions())
 
