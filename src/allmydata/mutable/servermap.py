@@ -617,7 +617,7 @@ class ServermapUpdater:
         self._servermap.add_rref_for_serverid(serverid, ss)
         started = time.time()
         self._queries_outstanding.add(serverid)
-        d = self._do_read(ss, serverid, storage_index, [], [(0, readsize)])
+        d = self._do_read(server, storage_index, [], [(0, readsize)])
         d.addCallback(self._got_results, serverid, readsize, (ss, storage_index),
                       started)
         d.addErrback(self._query_failed, serverid)
@@ -628,7 +628,9 @@ class ServermapUpdater:
         d.addCallback(self._check_for_done)
         return d
 
-    def _do_read(self, ss, serverid, storage_index, shnums, readv):
+    def _do_read(self, server, storage_index, shnums, readv):
+        ss = server.get_rref()
+        serverid = server.get_serverid()
         if self._add_lease:
             # send an add-lease message in parallel. The results are handled
             # separately. This is sent before the slot_readv() so that we can
