@@ -659,7 +659,7 @@ class ServermapUpdater:
         self.log(format="bad share: %(f_value)s", f_value=str(f),
                  failure=f, parent=lp, level=log.WEIRD, umid="h5llHg")
         # Notify the server that its share is corrupt.
-        self.notify_server_corruption(serverid, shnum, str(e))
+        self.notify_server_corruption(server, shnum, str(e))
         # By flagging this as a bad server, we won't count any of
         # the other shares on that server as valid, though if we
         # happen to find a valid version string amongst those
@@ -839,8 +839,8 @@ class ServermapUpdater:
         assert self._node.get_pubkey()
 
 
-    def notify_server_corruption(self, serverid, shnum, reason):
-        rref = self._servermap.get_rref_for_serverid(serverid)
+    def notify_server_corruption(self, server, shnum, reason):
+        rref = server.get_rref()
         rref.callRemoteOnly("advise_corrupt_share",
                             "mutable", self._storage_index, shnum, reason)
 
