@@ -591,10 +591,9 @@ class ServermapUpdater:
         self._status.set_status("Sending %d initial queries" % len(serverlist))
         self._queries_outstanding = set()
         self._sharemap = DictOfSets() # shnum -> [(serverid, seqnum, R)..]
-        for s in serverlist:
-            serverid = s.get_serverid()
-            self._queries_outstanding.add(serverid)
-            self._do_query(s, self._storage_index, self._read_size)
+        for server in serverlist:
+            self._queries_outstanding.add(server)
+            self._do_query(server, self._storage_index, self._read_size)
 
         if not serverlist:
             # there is nobody to ask, so we need to short-circuit the state
@@ -616,7 +615,7 @@ class ServermapUpdater:
         serverid = server.get_serverid()
         self._servermap.add_rref_for_serverid(serverid, ss)
         started = time.time()
-        self._queries_outstanding.add(serverid)
+        self._queries_outstanding.add(server)
         d = self._do_read(server, storage_index, [], [(0, readsize)])
         d.addCallback(self._got_results, server, readsize, storage_index,
                       started)
@@ -695,7 +694,7 @@ class ServermapUpdater:
         now = time.time()
         elapsed = now - started
         def _done_processing(ignored=None):
-            self._queries_outstanding.discard(serverid)
+            self._queries_outstanding.discard(server)
             self._servermap.mark_server_reachable(serverid)
             self._must_query.discard(serverid)
             self._queries_completed += 1
@@ -1038,7 +1037,7 @@ class ServermapUpdater:
                  f_value=str(f.value), failure=f,
                  level=level, umid="IHXuQg")
         self._must_query.discard(serverid)
-        self._queries_outstanding.discard(serverid)
+        self._queries_outstanding.discard(server)
         self._bad_servers.add(server)
         self._servermap.add_problem(f)
         # a serverid could be in both ServerMap.reachable_servers and
@@ -1050,8 +1049,7 @@ class ServermapUpdater:
 
 
     def _privkey_query_failed(self, f, server, shnum, lp):
-        serverid = server.get_serverid()
-        self._queries_outstanding.discard(serverid)
+        self._queries_outstanding.discard(server)
         if not self._running:
             return
         level = log.WEIRD
