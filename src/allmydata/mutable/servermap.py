@@ -101,8 +101,6 @@ class ServerMap:
                         tuple of (seqnum, root_hash, IV, segsize, datalength,
                         k, N, signed_prefix, offsets)
 
-    @var connections: maps serverid to a RemoteReference
-
     @ivar _bad_shares: dict with keys of (server, shnum) tuples, describing
                        shares that I should ignore (because a previous user
                        of the servermap determined that they were invalid).
@@ -117,7 +115,6 @@ class ServerMap:
     def __init__(self, storage_broker):
         self._storage_broker = storage_broker
         self._known_shares = {}
-        self.connections = {} # XXX this will go away
         self.unreachable_servers = set() # servers that didn't respond to queries
         self.reachable_servers = set() # servers that did respond to queries
         self._problems = [] # mostly for debugging
@@ -129,7 +126,6 @@ class ServerMap:
     def copy(self):
         s = ServerMap(self._storage_broker)
         s._known_shares = self._known_shares.copy() # tuple->tuple
-        s.connections = self.connections.copy() # str->RemoteReference
         s.unreachable_servers = set(self.unreachable_servers)
         s.reachable_servers = set(self.reachable_servers)
         s._problems = self._problems[:]
@@ -202,10 +198,8 @@ class ServerMap:
                 print >>out, str(f)
         return out
 
-    def add_rref_for_serverid(self, serverid, rref):
-        self.connections[serverid] = rref
     def get_rref_for_serverid(self, serverid):
-        return self.connections[serverid]
+        return self._storage_broker.get_server_for_id(serverid).get_rref()
 
     def all_servers(self):
         return set([server.get_serverid()
@@ -600,9 +594,6 @@ class ServermapUpdater:
                  name=server.get_name(),
                  readsize=readsize,
                  level=log.NOISY)
-        ss = server.get_rref()
-        serverid = server.get_serverid()
-        self._servermap.add_rref_for_serverid(serverid, ss)
         started = time.time()
         self._queries_outstanding.add(server)
         d = self._do_read(server, storage_index, [], [(0, readsize)])
