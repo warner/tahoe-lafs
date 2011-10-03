@@ -6,7 +6,7 @@ from twisted.internet import defer
 from twisted.python import failure
 from foolscap.api import DeadReferenceError, RemoteException, eventually, \
                          fireEventually
-from allmydata.util import base32, hashutil, idlib, log, deferredutil
+from allmydata.util import base32, hashutil, log, deferredutil
 from allmydata.util.dictutil import DictOfSets
 from allmydata.storage.server import si_b2a
 from allmydata.interfaces import IServermapUpdaterStatus
@@ -604,8 +604,8 @@ class ServermapUpdater:
         return None
 
     def _do_query(self, server, storage_index, readsize):
-        self.log(format="sending query to [%(serverid)s], readsize=%(readsize)d",
-                 serverid=server.get_name(),
+        self.log(format="sending query to [%(name)s], readsize=%(readsize)d",
+                 name=server.get_name(),
                  readsize=readsize,
                  level=log.NOISY)
         ss = server.get_rref()
@@ -683,8 +683,8 @@ class ServermapUpdater:
 
 
     def _got_results(self, datavs, server, readsize, storage_index, started):
-        lp = self.log(format="got result from [%(serverid)s], %(numshares)d shares",
-                      serverid=server.get_name(),
+        lp = self.log(format="got result from [%(name)s], %(numshares)d shares",
+                      name=server.get_name(),
                       numshares=len(datavs))
         ss = server.get_rref()
         serverid = server.get_serverid()
@@ -791,7 +791,7 @@ class ServermapUpdater:
                            self._got_signature_one_share(results, shnum, server, lp))
             dl.addErrback(lambda error, shnum=shnum, data=data:
                           self._got_corrupt_share(error, shnum, server, data, lp))
-            dl.addCallback(lambda verinfo, shnum=shnum, serverid=serverid, data=data:
+            dl.addCallback(lambda verinfo, shnum=shnum, data=data:
                            self._cache_good_sharedata(verinfo, shnum, now, data))
             ds.append(dl)
         # dl is a deferred list that will fire when all of the shares
@@ -845,9 +845,9 @@ class ServermapUpdater:
         # It is our job to give versioninfo to our caller. We need to
         # raise CorruptShareError if the share is corrupt for any
         # reason, something that our caller will handle.
-        self.log(format="_got_results: got shnum #%(shnum)d from serverid %(serverid)s",
+        self.log(format="_got_results: got shnum #%(shnum)d from serverid %(name)s",
                  shnum=shnum,
-                 serverid=server.get_name(),
+                 name=server.get_name(),
                  level=log.NOISY,
                  parent=lp)
         if not self._running:
@@ -896,7 +896,7 @@ class ServermapUpdater:
         # versions.
         self.log(" found valid version %d-%s from %s-sh%d: %d-%d/%d/%d"
                  % (seqnum, base32.b2a(root_hash)[:4],
-                    idlib.shortnodeid_b2a(serverid), shnum,
+                    server.get_name(), shnum,
                     k, n, segsize, datalen),
                     parent=lp)
         self._valid_versions.add(verinfo)
@@ -974,13 +974,13 @@ class ServermapUpdater:
         alleged_writekey = hashutil.ssk_writekey_hash(alleged_privkey_s)
         if alleged_writekey != self._node.get_writekey():
             self.log("invalid privkey from %s shnum %d" %
-                     (idlib.nodeid_b2a(serverid)[:8], shnum),
+                     (server.get_name(), shnum),
                      parent=lp, level=log.WEIRD, umid="aJVccw")
             return
 
         # it's good
         self.log("got valid privkey from shnum %d on serverid %s" %
-                 (shnum, idlib.shortnodeid_b2a(serverid)),
+                 (shnum, server.get_name()),
                  parent=lp)
         privkey = rsa.create_signing_key_from_string(alleged_privkey_s)
         self._node._populate_encprivkey(enc_privkey)
@@ -1009,16 +1009,16 @@ class ServermapUpdater:
                 # this may ignore a bit too much, but that only hurts us
                 # during debugging
                 return
-            self.log(format="error in add_lease from [%(serverid)s]: %(f_value)s",
-                     serverid=server.get_name(),
+            self.log(format="error in add_lease from [%(name)s]: %(f_value)s",
+                     name=server.get_name(),
                      f_value=str(f.value),
                      failure=f,
                      level=log.WEIRD, umid="iqg3mw")
             return
         # local errors are cause for alarm
         log.err(f,
-                format="local error in add_lease to [%(serverid)s]: %(f_value)s",
-                serverid=server.get_name(),
+                format="local error in add_lease to [%(name)s]: %(f_value)s",
+                name=server.get_name(),
                 f_value=str(f.value),
                 level=log.WEIRD, umid="ZWh6HA")
 
