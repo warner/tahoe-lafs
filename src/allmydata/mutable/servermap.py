@@ -592,10 +592,9 @@ class ServermapUpdater:
         self._queries_outstanding = set()
         self._sharemap = DictOfSets() # shnum -> [(serverid, seqnum, R)..]
         for s in serverlist:
-            ss = s.get_rref()
             serverid = s.get_serverid()
             self._queries_outstanding.add(serverid)
-            self._do_query(ss, serverid, self._storage_index, self._read_size)
+            self._do_query(s, self._storage_index, self._read_size)
 
         if not serverlist:
             # there is nobody to ask, so we need to short-circuit the state
@@ -608,11 +607,13 @@ class ServermapUpdater:
         # might produce a result.
         return None
 
-    def _do_query(self, ss, serverid, storage_index, readsize):
+    def _do_query(self, server, storage_index, readsize):
         self.log(format="sending query to [%(serverid)s], readsize=%(readsize)d",
-                 serverid=idlib.shortnodeid_b2a(serverid),
+                 serverid=server.get_name(),
                  readsize=readsize,
                  level=log.NOISY)
+        ss = server.get_rref()
+        serverid = server.get_serverid()
         self._servermap.add_rref_for_serverid(serverid, ss)
         started = time.time()
         self._queries_outstanding.add(serverid)
@@ -1244,10 +1245,8 @@ class ServermapUpdater:
                  who=" ".join(["[%s]" % s.get_name() for s in more_queries]),
                  level=log.NOISY)
 
-        for s in more_queries:
-            ss = s.get_rref()
-            serverid = s.get_serverid()
-            self._do_query(ss, serverid, self._storage_index, self._read_size)
+        for server in more_queries:
+            self._do_query(server, self._storage_index, self._read_size)
             # we'll retrigger when those queries come back
 
     def _done(self):
