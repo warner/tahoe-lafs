@@ -647,13 +647,14 @@ class ServermapUpdater:
         return d
 
 
-    def _got_corrupt_share(self, e, shnum, serverid, data, lp):
+    def _got_corrupt_share(self, e, shnum, server, data, lp):
         """
         I am called when a remote server returns a corrupt share in
         response to one of our queries. By corrupt, I mean a share
         without a valid signature. I then record the failure, notify the
         server of the corruption, and record the share as bad.
         """
+        serverid = server.get_serverid()
         f = failure.Failure(e)
         self.log(format="bad share: %(f_value)s", f_value=str(f),
                  failure=f, parent=lp, level=log.WEIRD, umid="h5llHg")
@@ -731,8 +732,8 @@ class ServermapUpdater:
                 d.addCallback(lambda results, shnum=shnum, serverid=serverid:
                               self._try_to_set_pubkey(results, serverid, shnum, lp))
                 # XXX: Make self._pubkey_query_failed?
-                d.addErrback(lambda error, shnum=shnum, serverid=serverid, data=data:
-                             self._got_corrupt_share(error, shnum, serverid, data, lp))
+                d.addErrback(lambda error, shnum=shnum, data=data:
+                             self._got_corrupt_share(error, shnum, server, data, lp))
             else:
                 # we already have the public key.
                 d = defer.succeed(None)
@@ -746,16 +747,16 @@ class ServermapUpdater:
             #   bytes of the share on the storage server, so we
             #   shouldn't need to fetch anything at this step.
             d2 = reader.get_verinfo()
-            d2.addErrback(lambda error, shnum=shnum, serverid=serverid, data=data:
-                          self._got_corrupt_share(error, shnum, serverid, data, lp))
+            d2.addErrback(lambda error, shnum=shnum, data=data:
+                          self._got_corrupt_share(error, shnum, server, data, lp))
             # - Next, we need the signature. For an SDMF share, it is
             #   likely that we fetched this when doing our initial fetch
             #   to get the version information. In MDMF, this lives at
             #   the end of the share, so unless the file is quite small,
             #   we'll need to do a remote fetch to get it.
             d3 = reader.get_signature()
-            d3.addErrback(lambda error, shnum=shnum, serverid=serverid, data=data:
-                          self._got_corrupt_share(error, shnum, serverid, data, lp))
+            d3.addErrback(lambda error, shnum=shnum, data=data:
+                          self._got_corrupt_share(error, shnum, server, data, lp))
             #  Once we have all three of these responses, we can move on
             #  to validating the signature
 
@@ -794,7 +795,7 @@ class ServermapUpdater:
             dl.addCallback(lambda results, shnum=shnum, serverid=serverid:
                            self._got_signature_one_share(results, shnum, serverid, lp))
             dl.addErrback(lambda error, shnum=shnum, data=data:
-                          self._got_corrupt_share(error, shnum, serverid, data, lp))
+                          self._got_corrupt_share(error, shnum, server, data, lp))
             dl.addCallback(lambda verinfo, shnum=shnum, serverid=serverid, data=data:
                            self._cache_good_sharedata(verinfo, shnum, now, data))
             ds.append(dl)
