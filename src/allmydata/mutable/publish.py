@@ -255,7 +255,8 @@ class Publish:
         # try to update each existing share in place. Since we're
         # updating, we ignore damaged and missing shares -- callers must
         # do a repair to repair and recreate these.
-        for (serverid, shnum) in self._servermap.get_known_shares():
+        for (server, shnum) in self._servermap.get_known_shares():
+            serverid = server.get_serverid()
             self.goal.add( (serverid, shnum) )
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         self.writers = {}
@@ -284,9 +285,10 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
+            server = self._storage_broker.get_server_for_id(serverid)
             known_shares = self._servermap.get_known_shares()
-            assert (serverid, shnum) in known_shares
-            old_versionid, old_timestamp = known_shares[key]
+            assert (server, shnum) in known_shares
+            old_versionid, old_timestamp = known_shares[(server,shnum)]
             (old_seqnum, old_root_hash, old_salt, old_segsize,
              old_datalength, old_k, old_N, old_prefix,
              old_offsets_tuple) = old_versionid
@@ -450,7 +452,8 @@ class Publish:
 
         # we use the servermap to populate the initial goal: this way we will
         # try to update each existing share in place.
-        for (serverid, shnum) in self._servermap.get_known_shares():
+        for (server, shnum) in self._servermap.get_known_shares():
+            serverid = server.get_serverid()
             self.goal.add( (serverid, shnum) )
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         # then we add in all the shares that were bad (corrupted, bad
@@ -489,9 +492,10 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
+            server = self._storage_broker.get_server_for_id(serverid)
             known_shares = self._servermap.get_known_shares()
-            if (serverid, shnum) in known_shares:
-                old_versionid, old_timestamp = known_shares[key]
+            if (server, shnum) in known_shares:
+                old_versionid, old_timestamp = known_shares[(server,shnum)]
                 (old_seqnum, old_root_hash, old_salt, old_segsize,
                  old_datalength, old_k, old_N, old_prefix,
                  old_offsets_tuple) = old_versionid

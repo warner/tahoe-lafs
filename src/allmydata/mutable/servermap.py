@@ -212,11 +212,8 @@ class ServerMap:
                     if verinfo == verinfo2])
 
     def get_known_shares(self):
-        # maps (serverid,shnum) to (versionid,timestamp)
-        result = {}
-        for (server,shnum),value in self._known_shares.items():
-            result[(server.get_serverid(),shnum)] = value
-        return result
+        # maps (server,shnum) to (versionid,timestamp)
+        return self._known_shares
 
     def make_sharemap(self):
         """Return a dict that maps shnum to a set of serverids that hold it."""
