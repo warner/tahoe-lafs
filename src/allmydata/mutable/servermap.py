@@ -590,7 +590,6 @@ class ServermapUpdater:
     def _send_initial_requests(self, serverlist):
         self._status.set_status("Sending %d initial queries" % len(serverlist))
         self._queries_outstanding = set()
-        self._sharemap = DictOfSets() # shnum -> [(serverid, seqnum, R)..]
         for server in serverlist:
             self._queries_outstanding.add(server)
             self._do_query(server, self._storage_index, self._read_size)
