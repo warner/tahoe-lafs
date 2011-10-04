@@ -634,7 +634,7 @@ class Retrieve:
             d = reader.get_block_and_salt(segnum)
             d2 = self._get_needed_hashes(reader, segnum)
             dl = defer.DeferredList([d, d2], consumeErrors=True)
-            dl.addCallback(self._validate_block, segnum, reader, started)
+            dl.addCallback(self._validate_block, segnum, reader, reader.server, started)
             dl.addErrback(self._validation_or_decoding_failed, [reader])
             ds.append(dl)
         dl = defer.DeferredList(ds)
@@ -737,7 +737,7 @@ class Retrieve:
         return
 
 
-    def _validate_block(self, results, segnum, reader, started):
+    def _validate_block(self, results, segnum, reader, server, started):
         """
         I validate a block from one share on a remote server.
         """
@@ -746,7 +746,7 @@ class Retrieve:
         self.log("validating share %d for segment %d" % (reader.shnum,
                                                              segnum))
         elapsed = time.time() - started
-        self._status.add_fetch_timing(reader.server, elapsed)
+        self._status.add_fetch_timing(server, elapsed)
         self._set_current_status("validating blocks")
         # Did we fail to fetch either of the things that we were
         # supposed to? Fail if so.
@@ -759,7 +759,7 @@ class Retrieve:
             assert isinstance(results[0][1], failure.Failure)
 
             f = results[0][1]
-            raise CorruptShareError(reader.server,
+            raise CorruptShareError(server,
                                     reader.shnum,
                                     "Connection error: %s" % str(f))
 
@@ -779,7 +779,7 @@ class Retrieve:
                 bht.set_hashes(blockhashes)
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.server,
+                raise CorruptShareError(server,
                                         reader.shnum,
                                         "block hash tree failure: %s" % e)
 
@@ -793,7 +793,7 @@ class Retrieve:
            bht.set_hashes(leaves={segnum: blockhash})
         except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                 IndexError), e:
-            raise CorruptShareError(reader.server,
+            raise CorruptShareError(server,
                                     reader.shnum,
                                     "block hash tree failure: %s" % e)
 
@@ -814,7 +814,7 @@ class Retrieve:
                                             leaves={reader.shnum: bht[0]})
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.server,
+                raise CorruptShareError(server,
                                         reader.shnum,
                                         "corrupt hashes: %s" % e)
 
