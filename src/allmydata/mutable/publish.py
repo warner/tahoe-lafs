@@ -1027,9 +1027,7 @@ class Publish:
 
             else:
                 # the new shares are of a different version
-                reachable_serverids = set([s.get_serverid()
-                                           for s in self._servermap.get_reachable_servers()])
-                if serverid in reachable_serverids:
+                if server in self._servermap.get_reachable_servers():
                     # we asked them about their shares, so we had knowledge
                     # of what they used to have. Any surprising shares must
                     # have come from someone else, so UCW.
