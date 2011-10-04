@@ -50,7 +50,8 @@ class PublishStatus:
         self.counter = self.statusid_counter.next()
         self.started = time.time()
 
-    def add_per_server_time(self, serverid, elapsed):
+    def add_per_server_time(self, server, elapsed):
+        serverid = server.get_serverid()
         if serverid not in self.timings["send_per_server"]:
             self.timings["send_per_server"][serverid] = []
         self.timings["send_per_server"][serverid].append(elapsed)
@@ -980,7 +981,7 @@ class Publish:
         now = time.time()
         elapsed = now - started
 
-        self._status.add_per_server_time(serverid, elapsed)
+        self._status.add_per_server_time(server, elapsed)
 
         wrote, read_data = answer
 
