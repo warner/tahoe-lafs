@@ -279,6 +279,7 @@ class Retrieve:
         # this sharemap is consumed as we decide to send requests
         self.remaining_sharemap = DictOfSets()
         for (shnum, serverid, timestamp) in shares:
+            server = self._storage_broker.get_server_for_id(serverid)
             self.remaining_sharemap.add(shnum, serverid)
             # If the servermap update fetched anything, it fetched at least 1
             # KiB, so we ask for that much.
@@ -286,11 +287,11 @@ class Retrieve:
             # data that they have, then change this method to do that.
             any_cache = self._node._read_from_cache(self.verinfo, shnum,
                                                     0, 1000)
-            rref = self.servermap.get_rref_for_serverid(serverid)
-            reader = MDMFSlotReadProxy(rref,
+            reader = MDMFSlotReadProxy(server.get_rref(),
                                        self._storage_index,
                                        shnum,
                                        any_cache)
+            reader.server = server
             reader.serverid = serverid
             self.readers[shnum] = reader
         assert len(self.remaining_sharemap) >= k
