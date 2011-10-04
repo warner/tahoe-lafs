@@ -1119,7 +1119,7 @@ class Servermap(unittest.TestCase, PublishMixin):
             for (shnum, server, timestamp) in shares:
                 serverid = server.get_serverid()
                 if shnum < 5:
-                    self._corrupted.add( (serverid, shnum) )
+                    self._corrupted.add( (server, shnum) )
                     sm.mark_bad_share(serverid, shnum, "")
             return self.update_servermap(sm, MODE_WRITE)
         d.addCallback(_made_map)
@@ -1128,8 +1128,8 @@ class Servermap(unittest.TestCase, PublishMixin):
             v = sm.best_recoverable_version()
             vm = sm.make_versionmap()
             shares = list(vm[v])
-            for (serverid, shnum) in self._corrupted:
-                server_shares = sm.shares_on_server(serverid)
+            for (server, shnum) in self._corrupted:
+                server_shares = sm.debug_shares_on_server(server)
                 self.failIf(shnum in server_shares,
                             "%d was in %s" % (shnum, server_shares))
             self.failUnlessEqual(len(shares), 5)

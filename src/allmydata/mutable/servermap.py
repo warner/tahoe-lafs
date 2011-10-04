@@ -227,11 +227,8 @@ class ServerMap:
             versionmap.add(verinfo, (shnum, server, timestamp))
         return versionmap
 
-    def shares_on_server(self, serverid):
-        return set([shnum
-                    for (server, shnum)
-                    in self._known_shares
-                    if server.get_serverid() == serverid])
+    def debug_shares_on_server(self, server): # used by tests
+        return set([shnum for (s, shnum) in self._known_shares if s == server])
 
     def version_on_server(self, server, shnum):
         key = (server, shnum)
