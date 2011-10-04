@@ -592,7 +592,7 @@ class Retrieve:
                                       reader.shnum,
                                       prefix)
         self._remove_reader(reader)
-        self._bad_shares.add((reader.serverid, reader.shnum, f))
+        self._bad_shares.add((reader.server, reader.shnum, f))
         self._status.add_problem(reader.server, f)
         self._last_failure = f
         self.notify_server_corruption(reader.server, reader.shnum,
@@ -957,7 +957,7 @@ class Retrieve:
                                       reader.shnum,
                                       "invalid privkey")
                 f = failure.Failure(e)
-                self._bad_shares.add((reader.serverid, reader.shnum, f))
+                self._bad_shares.add((reader.server, reader.shnum, f))
             return
 
         # it's good
@@ -992,7 +992,8 @@ class Retrieve:
         self._node._populate_total_shares(N)
 
         if self._verify:
-            ret = list(self._bad_shares)
+            ret = [(server.get_serverid(), shnum, f)
+                   for (server, shnum, f) in self._bad_shares]
             self.log("done verifying, found %d bad shares" % len(ret))
         else:
             # TODO: upload status here?
