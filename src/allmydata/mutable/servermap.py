@@ -194,9 +194,6 @@ class ServerMap:
                 print >>out, str(f)
         return out
 
-    def get_rref_for_serverid(self, serverid):
-        return self._storage_broker.get_server_for_id(serverid).get_rref()
-
     def all_servers(self):
         return set([server for (server, shnum) in self._known_shares])
 
