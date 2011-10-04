@@ -219,11 +219,11 @@ class MutableChecker:
 
         sharemap = {}
         for verinfo in vmap:
-            for (shnum, serverid, timestamp) in vmap[verinfo]:
+            for (shnum, server, timestamp) in vmap[verinfo]:
                 shareid = "%s-sh%d" % (smap.summarize_version(verinfo), shnum)
                 if shareid not in sharemap:
                     sharemap[shareid] = []
-                sharemap[shareid].append(serverid)
+                sharemap[shareid].append(server.get_serverid())
         data["sharemap"] = sharemap
         data["servers-responding"] = [s.get_serverid() for s in
                                       list(smap.get_reachable_servers())]

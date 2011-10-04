@@ -220,11 +220,11 @@ class ServerMap:
         return sharemap
 
     def make_versionmap(self):
-        """Return a dict that maps versionid to sets of (shnum, serverid,
+        """Return a dict that maps versionid to sets of (shnum, server,
         timestamp) tuples."""
         versionmap = DictOfSets()
         for ( (server, shnum), (verinfo, timestamp) ) in self._known_shares.items():
-            versionmap.add(verinfo, (shnum, server.get_serverid(), timestamp))
+            versionmap.add(verinfo, (shnum, server, timestamp))
         return versionmap
 
     def _make_versionmap2(self):

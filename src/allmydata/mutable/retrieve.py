@@ -283,8 +283,7 @@ class Retrieve:
         shares = versionmap[self.verinfo]
         # this sharemap is consumed as we decide to send requests
         self.remaining_sharemap = DictOfSets()
-        for (shnum, serverid, timestamp) in shares:
-            server = self._storage_broker.get_server_for_id(serverid)
+        for (shnum, server, timestamp) in shares:
             self.remaining_sharemap.add(shnum, server)
             # If the servermap update fetched anything, it fetched at least 1
             # KiB, so we ask for that much.
@@ -297,7 +296,7 @@ class Retrieve:
                                        shnum,
                                        any_cache)
             reader.server = server
-            reader.serverid = serverid
+            reader.serverid = server.get_serverid()
             self.readers[shnum] = reader
         assert len(self.remaining_sharemap) >= k
 

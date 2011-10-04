@@ -1116,10 +1116,11 @@ class Servermap(unittest.TestCase, PublishMixin):
             # mark the first 5 shares as corrupt, then update the servermap.
             # The map should not have the marked shares it in any more, and
             # new shares should be found to replace the missing ones.
-            for (shnum, peerid, timestamp) in shares:
+            for (shnum, server, timestamp) in shares:
+                serverid = server.get_serverid()
                 if shnum < 5:
-                    self._corrupted.add( (peerid, shnum) )
-                    sm.mark_bad_share(peerid, shnum, "")
+                    self._corrupted.add( (serverid, shnum) )
+                    sm.mark_bad_share(serverid, shnum, "")
             return self.update_servermap(sm, MODE_WRITE)
         d.addCallback(_made_map)
         def _check_map(sm):
