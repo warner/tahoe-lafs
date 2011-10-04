@@ -567,7 +567,7 @@ class Retrieve:
 
     def _mark_bad_share(self, reader, f):
         """
-        I mark the (serverid, shnum) encapsulated by my reader argument as
+        I mark the (server, shnum) encapsulated by my reader argument as
         a bad share, which means that it will not be used anywhere else.
 
         There are several reasons to want to mark something as a bad
@@ -588,7 +588,7 @@ class Retrieve:
         self.log("marking share %d on server %s as bad" % \
                  (reader.shnum, reader))
         prefix = self.verinfo[-2]
-        self.servermap.mark_bad_share(reader.serverid,
+        self.servermap.mark_bad_share(reader.server,
                                       reader.shnum,
                                       prefix)
         self._remove_reader(reader)
@@ -951,7 +951,7 @@ class Retrieve:
                      (reader, reader.shnum),
                      level=log.WEIRD, umid="YIw4tA")
             if self._verify:
-                self.servermap.mark_bad_share(reader.serverid, reader.shnum,
+                self.servermap.mark_bad_share(reader.server, reader.shnum,
                                               self.verinfo[-2])
                 e = CorruptShareError(reader.serverid,
                                       reader.shnum,

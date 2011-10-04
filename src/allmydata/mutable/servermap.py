@@ -143,7 +143,7 @@ class ServerMap:
     def mark_server_unreachable(self, server):
         self.unreachable_servers.add(server)
 
-    def mark_bad_share(self, serverid, shnum, checkstring):
+    def mark_bad_share(self, server, shnum, checkstring):
         """This share was found to be bad, either in the checkstring or
         signature (detected during mapupdate), or deeper in the share
         (detected at retrieve time). Remove it from our list of useful
@@ -152,7 +152,6 @@ class ServerMap:
         corrupted or badly signed) so that a repair operation can do the
         test-and-set using it as a reference.
         """
-        server = self._storage_broker.get_server_for_id(serverid)
         key = (server, shnum) # record checkstring
         self._bad_shares[key] = checkstring
         self._known_shares.pop(key, None)
@@ -617,7 +616,6 @@ class ServermapUpdater:
         without a valid signature. I then record the failure, notify the
         server of the corruption, and record the share as bad.
         """
-        serverid = server.get_serverid()
         f = failure.Failure(e)
         self.log(format="bad share: %(f_value)s", f_value=str(f),
                  failure=f, parent=lp, level=log.WEIRD, umid="h5llHg")
@@ -632,7 +630,7 @@ class ServermapUpdater:
         self._last_failure = f
         # XXX: Use the reader for this?
         checkstring = data[:SIGNED_PREFIX_LENGTH]
-        self._servermap.mark_bad_share(serverid, shnum, checkstring)
+        self._servermap.mark_bad_share(server, shnum, checkstring)
         self._servermap.add_problem(f)
 
 

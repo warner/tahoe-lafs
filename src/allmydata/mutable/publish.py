@@ -1050,7 +1050,7 @@ class Publish:
                     # self._servermap.add_new_share(server, shnum, verinfo, now)
                     #  but that requires fetching/validating/parsing the whole
                     #  version string, and all we have is the checkstring
-                    # self._servermap.mark_bad_share(serverid, shnum, checkstring)
+                    # self._servermap.mark_bad_share(server, shnum, checkstring)
                     #  that will make publish overwrite the share next time,
                     #  but it won't re-query the server, and it won't make
                     #  mapupdate search further
