@@ -1,6 +1,6 @@
 
 from allmydata.uri import from_string
-from allmydata.util import base32, idlib, log
+from allmydata.util import base32, log
 from allmydata.check_results import CheckAndRepairResults, CheckResults
 
 from allmydata.mutable.common import MODE_CHECK, CorruptShareError
@@ -14,7 +14,7 @@ class MutableChecker:
         self._storage_broker = storage_broker
         self._history = history
         self._monitor = monitor
-        self.bad_shares = [] # list of (nodeid,shnum,failure)
+        self.bad_shares = [] # list of (server,shnum,failure)
         self._storage_index = self._node.get_storage_index()
         self.results = CheckResults(from_string(node.get_uri()), self._storage_index)
         self.need_repair = False
@@ -194,9 +194,10 @@ class MutableChecker:
             data["list-corrupt-shares"] = locators = []
             report.append("Corrupt Shares:")
             summary.append("Corrupt Shares:")
-            for (serverid, shnum, f) in sorted(self.bad_shares):
+            for (server, shnum, f) in sorted(self.bad_shares):
+                serverid = server.get_serverid()
                 locators.append( (serverid, self._storage_index, shnum) )
-                s = "%s-sh%d" % (idlib.shortnodeid_b2a(serverid), shnum)
+                s = "%s-sh%d" % (server.get_name(), shnum)
                 if f.check(CorruptShareError):
                     ft = f.value.reason
                 else:
@@ -208,7 +209,7 @@ class MutableChecker:
                 msg = ("CorruptShareError during mutable verify, "
                        "serverid=%(serverid)s, si=%(si)s, shnum=%(shnum)d, "
                        "where=%(where)s")
-                log.msg(format=msg, serverid=idlib.nodeid_b2a(serverid),
+                log.msg(format=msg, serverid=server.get_name(),
                         si=base32.b2a(self._storage_index),
                         shnum=shnum,
                         where=ft,

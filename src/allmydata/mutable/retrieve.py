@@ -992,8 +992,7 @@ class Retrieve:
         self._node._populate_total_shares(N)
 
         if self._verify:
-            ret = [(server.get_serverid(), shnum, f)
-                   for (server, shnum, f) in self._bad_shares]
+            ret = self._bad_shares
             self.log("done verifying, found %d bad shares" % len(ret))
         else:
             # TODO: upload status here?
