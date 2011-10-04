@@ -188,16 +188,18 @@ class MutableFileNode:
     def get_write_enabler(self, peerid):
         assert len(peerid) == 20
         return hashutil.ssk_write_enabler_hash(self._writekey, peerid)
-    def get_renewal_secret(self, peerid):
-        assert len(peerid) == 20
+    def get_renewal_secret(self, server):
         crs = self._secret_holder.get_renewal_secret()
         frs = hashutil.file_renewal_secret_hash(crs, self._storage_index)
-        return hashutil.bucket_renewal_secret_hash(frs, peerid)
-    def get_cancel_secret(self, peerid):
-        assert len(peerid) == 20
+        lease_seed = server.get_lease_seed()
+        assert len(lease_seed) == 20
+        return hashutil.bucket_renewal_secret_hash(frs, lease_seed)
+    def get_cancel_secret(self, server):
         ccs = self._secret_holder.get_cancel_secret()
         fcs = hashutil.file_cancel_secret_hash(ccs, self._storage_index)
-        return hashutil.bucket_cancel_secret_hash(fcs, peerid)
+        lease_seed = server.get_lease_seed()
+        assert len(lease_seed) == 20
+        return hashutil.bucket_cancel_secret_hash(fcs, lease_seed)
 
     def get_writekey(self):
         return self._writekey

@@ -592,15 +592,14 @@ class ServermapUpdater:
 
     def _do_read(self, server, storage_index, shnums, readv):
         ss = server.get_rref()
-        serverid = server.get_serverid()
         if self._add_lease:
             # send an add-lease message in parallel. The results are handled
             # separately. This is sent before the slot_readv() so that we can
             # be sure the add_lease is retired by the time slot_readv comes
             # back (this relies upon our knowledge that the server code for
             # add_lease is synchronous).
-            renew_secret = self._node.get_renewal_secret(serverid)
-            cancel_secret = self._node.get_cancel_secret(serverid)
+            renew_secret = self._node.get_renewal_secret(server)
+            cancel_secret = self._node.get_cancel_secret(server)
             d2 = ss.callRemote("add_lease", storage_index,
                                renew_secret, cancel_secret)
             # we ignore success

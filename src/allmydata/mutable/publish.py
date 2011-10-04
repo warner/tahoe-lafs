@@ -266,8 +266,8 @@ class Publish:
         for (server,shnum) in self.goal:
             serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(serverid)
-            renew_secret = self._node.get_renewal_secret(serverid)
-            cancel_secret = self._node.get_cancel_secret(serverid)
+            renew_secret = self._node.get_renewal_secret(server)
+            cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
 
             self.writers[shnum] =  writer_class(shnum,
@@ -465,8 +465,8 @@ class Publish:
         for (server,shnum) in self.goal:
             serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(serverid)
-            renew_secret = self._node.get_renewal_secret(serverid)
-            cancel_secret = self._node.get_cancel_secret(serverid)
+            renew_secret = self._node.get_renewal_secret(server)
+            cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
 
             self.writers[shnum] =  writer_class(shnum,
