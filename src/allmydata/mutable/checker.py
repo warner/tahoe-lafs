@@ -91,7 +91,8 @@ class MutableChecker:
         if not self.best_version:
             return
 
-        r = Retrieve(self._node, servermap, self.best_version, verify=True)
+        r = Retrieve(self._node, self._storage_broker, servermap,
+                     self.best_version, verify=True)
         d = r.download()
         d.addCallback(self._process_bad_shares)
         return d

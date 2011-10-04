@@ -1280,7 +1280,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
     def do_download(self, servermap, version=None):
         if version is None:
             version = servermap.best_recoverable_version()
-        r = Retrieve(self._fn, servermap, version)
+        r = Retrieve(self._fn, self._storage_broker, servermap, version)
         c = consumer.MemoryConsumer()
         d = r.download(consumer=c)
         d.addCallback(lambda mc: "".join(mc.chunks))
@@ -1544,7 +1544,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
             self.failUnless("pubkey doesn't match fingerprint"
                             in str(servermap.get_problems()[0]))
             ver = servermap.best_recoverable_version()
-            r = Retrieve(self._fn, servermap, ver)
+            r = Retrieve(self._fn, self._storage_broker, servermap, ver)
             c = consumer.MemoryConsumer()
             return r.download(c)
         d.addCallback(_do_retrieve)

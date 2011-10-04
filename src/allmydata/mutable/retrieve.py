@@ -91,10 +91,11 @@ class Retrieve:
     # will use a single ServerMap instance.
     implements(IPushProducer)
 
-    def __init__(self, filenode, servermap, verinfo, fetch_privkey=False,
-                 verify=False):
+    def __init__(self, filenode, storage_broker, servermap, verinfo,
+                 fetch_privkey=False, verify=False):
         self._node = filenode
         assert self._node.get_pubkey()
+        self._storage_broker = storage_broker
         self._storage_index = filenode.get_storage_index()
         assert self._node.get_readkey()
         self._last_failure = None

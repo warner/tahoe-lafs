@@ -974,7 +974,8 @@ class MutableFileVersion:
         """
         I am the serialized companion of read.
         """
-        r = Retrieve(self._node, self._servermap, self._version, fetch_privkey)
+        r = Retrieve(self._node, self._storage_broker, self._servermap,
+                     self._version, fetch_privkey)
         if self._history:
             self._history.notify_retrieve(r.get_status())
         d = r.download(consumer, offset, size)
@@ -1122,7 +1123,8 @@ class MutableFileVersion:
         used by the new uploadable. I return a Deferred that fires with
         the segments.
         """
-        r = Retrieve(self._node, self._servermap, self._version)
+        r = Retrieve(self._node, self._storage_broker, self._servermap,
+                     self._version)
         # decode: takes in our blocks and salts from the servermap,
         # returns a Deferred that fires with the corresponding plaintext
         # segments. Does not download -- simply takes advantage of
