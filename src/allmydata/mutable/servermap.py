@@ -158,9 +158,8 @@ class ServerMap:
         self._known_shares.pop(key, None)
 
     def get_bad_shares(self):
-        # key=(serverid,shnum) -> checkstring
-        return dict([((s.get_serverid(),shnum), checkstring)
-                     for ((s,shnum),checkstring) in self._bad_shares.items()])
+        # key=(server,shnum) -> checkstring
+        return self._bad_shares
 
     def add_new_share(self, serverid, shnum, verinfo, timestamp):
         """We've written a new share out, replacing any that was there
@@ -878,8 +877,8 @@ class ServermapUpdater:
         # version info again, that its signature checks out and that
         # we're okay to skip the signature-checking step.
 
-        # (serverid, shnum) are bound in the method invocation.
-        if (serverid, shnum) in self._servermap.get_bad_shares():
+        # (server, shnum) are bound in the method invocation.
+        if (server, shnum) in self._servermap.get_bad_shares():
             # we've been told that the rest of the data in this share is
             # unusable, so don't add it to the servermap.
             self.log("but we've been told this is a bad share",

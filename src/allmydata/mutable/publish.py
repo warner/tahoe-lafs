@@ -444,8 +444,7 @@ class Publish:
         # then we add in all the shares that were bad (corrupted, bad
         # signatures, etc). We want to replace these.
         for key, old_checkstring in self._servermap.get_bad_shares().items():
-            (serverid, shnum) = key
-            server = self._storage_broker.get_server_for_id(serverid)
+            (server, shnum) = key
             self.goal.add( (server,shnum) )
             self.bad_share_checkstrings[(server,shnum)] = old_checkstring
 
