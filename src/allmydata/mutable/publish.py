@@ -926,15 +926,14 @@ class Publish:
         # their permutation order.
         old_assignments = DictOfSets()
         for (server, shnum) in self.goal:
-            old_assignments.add(server.get_serverid(), shnum)
+            old_assignments.add(server, shnum)
 
         serverlist = []
         for i, server in enumerate(self.full_serverlist):
             serverid = server.get_serverid()
-            ss = server.get_rref()
             if server in self.bad_servers:
                 continue
-            entry = (len(old_assignments.get(serverid, [])), i, serverid, ss)
+            entry = (len(old_assignments.get(server, [])), i, serverid, server)
             serverlist.append(entry)
         serverlist.sort()
 
@@ -948,7 +947,7 @@ class Publish:
         # to wrap. We update the goal as we go.
         i = 0
         for shnum in homeless_shares:
-            (ignored1, ignored2, serverid, ss) = serverlist[i]
+            (ignored1, ignored2, ignored3, server) = serverlist[i]
             # if we are forced to send a share to a server that already has
             # one, we may have two write requests in flight, and the
             # servermap (which was computed before either request was sent)
@@ -957,7 +956,6 @@ class Publish:
             # this, otherwise it would cause the publish to fail with an
             # UncoordinatedWriteError. See #546 for details of the trouble
             # this used to cause.
-            server = self._storage_broker.get_server_for_id(serverid)
             self.goal.add( (server, shnum) )
             i += 1
             if i >= len(serverlist):
