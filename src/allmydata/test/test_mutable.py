@@ -1043,8 +1043,9 @@ class Servermap(unittest.TestCase, PublishMixin):
         self.failUnlessEqual(sm.recoverable_versions(), set([best]))
         self.failUnlessEqual(len(sm.shares_available()), 1)
         self.failUnlessEqual(sm.shares_available()[best], (num_shares, 3, 10))
-        shnum, serverids = sm.make_sharemap().items()[0]
-        serverid = list(serverids)[0]
+        shnum, servers = sm.make_sharemap().items()[0]
+        server = list(servers)[0]
+        serverid = server.get_serverid()
         self.failUnlessEqual(sm.version_on_server(serverid, shnum), best)
         self.failUnlessEqual(sm.version_on_server(serverid, 666), None)
         return sm
@@ -2515,7 +2516,7 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
                 # stash the old state of the file
                 self.old_map = smap
                 # now shut down one of the servers
-                peer0 = list(smap.make_sharemap()[0])[0]
+                peer0 = list(smap.make_sharemap()[0])[0].get_serverid()
                 self.g.remove_server(peer0)
                 # then modify the file, leaving the old map untouched
                 log.msg("starting winning write")

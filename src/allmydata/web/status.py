@@ -814,8 +814,8 @@ class PublishStatusPage(rend.Page, RateAndTimeMixin):
         sharemap = servermap.make_sharemap()
         for shnum in sorted(sharemap.keys()):
             l[T.li["%d -> Placed on " % shnum,
-                   ", ".join(["[%s]" % idlib.shortnodeid_b2a(peerid)
-                              for peerid in sharemap[shnum]])]]
+                   ", ".join(["[%s]" % server.get_name()
+                              for server in sharemap[shnum]])]]
         return ctx.tag["Sharemap:", l]
 
     def render_problems(self, ctx, data):

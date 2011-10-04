@@ -213,10 +213,10 @@ class ServerMap:
         return self._known_shares
 
     def make_sharemap(self):
-        """Return a dict that maps shnum to a set of serverids that hold it."""
+        """Return a dict that maps shnum to a set of servers that hold it."""
         sharemap = DictOfSets()
         for (server, shnum) in self._known_shares:
-            sharemap.add(shnum, server.get_serverid())
+            sharemap.add(shnum, server)
         return sharemap
 
     def make_versionmap(self):
