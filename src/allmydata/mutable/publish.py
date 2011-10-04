@@ -8,7 +8,7 @@ from twisted.internet import defer
 from twisted.python import failure
 from allmydata.interfaces import IPublishStatus, SDMF_VERSION, MDMF_VERSION, \
                                  IMutableUploadable
-from allmydata.util import base32, hashutil, mathutil, idlib, log
+from allmydata.util import base32, hashutil, mathutil, log
 from allmydata.util.dictutil import DictOfSets
 from allmydata import hashtree, codec
 from allmydata.storage.server import si_b2a
@@ -973,9 +973,10 @@ class Publish:
             # bother checking it.
             return
 
+        server = writer.server
         serverid = writer.serverid
         lp = self.log("_got_write_answer from %s, share %d" %
-                      (idlib.shortnodeid_b2a(serverid), writer.shnum))
+                      (server.get_name(), writer.shnum))
 
         now = time.time()
         elapsed = now - started
@@ -1012,7 +1013,6 @@ class Publish:
             if checkstring == self._checkstring:
                 # they have the right share, somehow
 
-                server = self._storage_broker.get_server_for_id(serverid)
                 if (server,shnum) in self.goal:
                     # and we want them to have it, so we probably sent them a
                     # copy in an earlier write. This is ok, and avoids the
