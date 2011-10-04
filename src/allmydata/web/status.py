@@ -823,6 +823,8 @@ class PublishStatusPage(rend.Page, RateAndTimeMixin):
         if not problems:
             return ""
         l = T.ul()
+        # XXX: is this exercised? I don't think PublishStatus.problems is
+        # ever populated
         for peerid in sorted(problems.keys()):
             peerid_s = idlib.shortnodeid_b2a(peerid)
             l[T.li["[%s]: %s" % (peerid_s, problems[peerid])]]
