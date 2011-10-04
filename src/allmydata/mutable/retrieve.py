@@ -501,7 +501,7 @@ class Retrieve:
             # segment decoding, then we'll take more drastic measures.
             if self._need_privkey and not self._node.is_readonly():
                 d = reader.get_encprivkey()
-                d.addCallback(self._try_to_validate_privkey, reader)
+                d.addCallback(self._try_to_validate_privkey, reader, reader.server)
                 # XXX: don't just drop the Deferred. We need error-reporting
                 # but not flow-control here.
         assert len(self._active_readers) >= self._required_shares
@@ -939,7 +939,7 @@ class Retrieve:
                             "mutable", self._storage_index, shnum, reason)
 
 
-    def _try_to_validate_privkey(self, enc_privkey, reader):
+    def _try_to_validate_privkey(self, enc_privkey, reader, server):
         alleged_privkey_s = self._node._decrypt_privkey(enc_privkey)
         alleged_writekey = hashutil.ssk_writekey_hash(alleged_privkey_s)
         if alleged_writekey != self._node.get_writekey():
@@ -947,13 +947,13 @@ class Retrieve:
                      (reader, reader.shnum),
                      level=log.WEIRD, umid="YIw4tA")
             if self._verify:
-                self.servermap.mark_bad_share(reader.server, reader.shnum,
+                self.servermap.mark_bad_share(server, reader.shnum,
                                               self.verinfo[-2])
-                e = CorruptShareError(reader.server,
+                e = CorruptShareError(server,
                                       reader.shnum,
                                       "invalid privkey")
                 f = failure.Failure(e)
-                self._bad_shares.add((reader.server, reader.shnum, f))
+                self._bad_shares.add((server, reader.shnum, f))
             return
 
         # it's good
