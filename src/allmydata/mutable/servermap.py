@@ -202,8 +202,8 @@ class ServerMap:
         return set([server for (server, shnum) in self._known_shares])
 
     def all_servers_for_version(self, verinfo):
-        """Return a set of serverids that hold shares for the given version."""
-        return set([server.get_serverid()
+        """Return a set of servers that hold shares for the given version."""
+        return set([server
                     for ( (server, shnum), (verinfo2, timestamp) )
                     in self._known_shares.items()
                     if verinfo == verinfo2])
