@@ -285,6 +285,7 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
+            self.writers[shnum].server = server
             known_shares = self._servermap.get_known_shares()
             assert (server, shnum) in known_shares
             old_versionid, old_timestamp = known_shares[(server,shnum)]
@@ -492,6 +493,7 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
+            self.writers[shnum].server = server
             known_shares = self._servermap.get_known_shares()
             if (server, shnum) in known_shares:
                 old_versionid, old_timestamp = known_shares[(server,shnum)]
