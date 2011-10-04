@@ -1045,9 +1045,8 @@ class Servermap(unittest.TestCase, PublishMixin):
         self.failUnlessEqual(sm.shares_available()[best], (num_shares, 3, 10))
         shnum, servers = sm.make_sharemap().items()[0]
         server = list(servers)[0]
-        serverid = server.get_serverid()
-        self.failUnlessEqual(sm.version_on_server(serverid, shnum), best)
-        self.failUnlessEqual(sm.version_on_server(serverid, 666), None)
+        self.failUnlessEqual(sm.version_on_server(server, shnum), best)
+        self.failUnlessEqual(sm.version_on_server(server, 666), None)
         return sm
 
     def test_basic(self):

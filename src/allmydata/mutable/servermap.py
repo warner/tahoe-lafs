@@ -233,8 +233,8 @@ class ServerMap:
                     in self._known_shares
                     if server.get_serverid() == serverid])
 
-    def version_on_server(self, serverid, shnum):
-        key = (self._storage_broker.get_server_for_id(serverid), shnum)
+    def version_on_server(self, server, shnum):
+        key = (server, shnum)
         if key in self._known_shares:
             (verinfo, timestamp) = self._known_shares[key]
             return verinfo

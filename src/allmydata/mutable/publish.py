@@ -1105,7 +1105,7 @@ class Publish:
                      other_IV) = unpack_sdmf_checkstring(checkstring)
                 else:
                     unknown_format = True
-                expected_version = self._servermap.version_on_server(serverid,
+                expected_version = self._servermap.version_on_server(server,
                                                                      shnum)
                 if expected_version:
                     (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
