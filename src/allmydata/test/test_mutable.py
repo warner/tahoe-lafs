@@ -1321,7 +1321,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
                 shares.clear()
             d1 = self.shouldFail(NotEnoughSharesError,
                                  "test_all_shares_vanished",
-                                 "ran out of peers",
+                                 "ran out of servers",
                                  self.do_download, servermap)
             return d1
         d.addCallback(_remove_shares)
@@ -1502,7 +1502,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
             f = res[0]
             self.failUnless(f.check(NotEnoughSharesError))
             self.failUnless("uncoordinated write" in str(f))
-        return self._test_corrupt_all(1, "ran out of peers",
+        return self._test_corrupt_all(1, "ran out of servers",
                                       corrupt_early=False,
                                       failure_checker=_check)
 
@@ -2488,7 +2488,7 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
             d.addCallback(lambda res:
                           self.shouldFail(NotEnoughSharesError,
                                           "test_retrieve_surprise",
-                                          "ran out of peers: have 0 of 1",
+                                          "ran out of servers: have 0 of 1",
                                           n.download_version,
                                           self.old_map,
                                           self.old_map.best_recoverable_version(),

@@ -57,10 +57,10 @@ class RetrieveStatus:
     def get_counter(self):
         return self.counter
 
-    def add_fetch_timing(self, peerid, elapsed):
-        if peerid not in self.timings["fetch_per_server"]:
-            self.timings["fetch_per_server"][peerid] = []
-        self.timings["fetch_per_server"][peerid].append(elapsed)
+    def add_fetch_timing(self, serverid, elapsed):
+        if serverid not in self.timings["fetch_per_server"]:
+            self.timings["fetch_per_server"][serverid] = []
+        self.timings["fetch_per_server"][serverid].append(elapsed)
     def accumulate_decode_time(self, elapsed):
         self.timings["decode"] += elapsed
     def accumulate_decrypt_time(self, elapsed):
@@ -100,7 +100,7 @@ class Retrieve:
         self._last_failure = None
         prefix = si_b2a(self._storage_index)[:5]
         self._log_number = log.msg("Retrieve(%s): starting" % prefix)
-        self._outstanding_queries = {} # maps (peerid,shnum) to start_time
+        self._outstanding_queries = {} # maps (serverid,shnum) to start_time
         self._running = True
         self._decoding = False
         self._bad_shares = set()
@@ -239,11 +239,11 @@ class Retrieve:
         self.log("starting download")
         self._started_fetching = time.time()
         # The download process beyond this is a state machine.
-        # _add_active_peers will select the peers that we want to use
+        # _add_active_servers will select the servers that we want to use
         # for the download, and then attempt to start downloading. After
         # each segment, it will check for doneness, reacting to broken
-        # peers and corrupt shares as necessary. If it runs out of good
-        # peers before downloading all of the segments, _done_deferred
+        # servers and corrupt shares as necessary. If it runs out of good
+        # servers before downloading all of the segments, _done_deferred
         # will errback.  Otherwise, it will eventually callback with the
         # contents of the mutable file.
         self.loop()
@@ -251,7 +251,7 @@ class Retrieve:
 
     def loop(self):
         d = fireEventually(None) # avoid #237 recursion limit problem
-        d.addCallback(lambda ign: self._activate_enough_peers())
+        d.addCallback(lambda ign: self._activate_enough_servers())
         d.addCallback(lambda ign: self._download_current_segment())
         # when we're done, _download_current_segment will call _done. If we
         # aren't, it will call loop() again.
@@ -277,20 +277,20 @@ class Retrieve:
         shares = versionmap[self.verinfo]
         # this sharemap is consumed as we decide to send requests
         self.remaining_sharemap = DictOfSets()
-        for (shnum, peerid, timestamp) in shares:
-            self.remaining_sharemap.add(shnum, peerid)
+        for (shnum, serverid, timestamp) in shares:
+            self.remaining_sharemap.add(shnum, serverid)
             # If the servermap update fetched anything, it fetched at least 1
             # KiB, so we ask for that much.
             # TODO: Change the cache methods to allow us to fetch all of the
             # data that they have, then change this method to do that.
             any_cache = self._node._read_from_cache(self.verinfo, shnum,
                                                     0, 1000)
-            rref = self.servermap.get_rref_for_serverid(peerid)
+            rref = self.servermap.get_rref_for_serverid(serverid)
             reader = MDMFSlotReadProxy(rref,
                                        self._storage_index,
                                        shnum,
                                        any_cache)
-            reader.peerid = peerid
+            reader.serverid = serverid
             self.readers[shnum] = reader
         assert len(self.remaining_sharemap) >= k
 
@@ -436,7 +436,7 @@ class Retrieve:
 
         self._current_segment = self._start_segment
 
-    def _activate_enough_peers(self):
+    def _activate_enough_servers(self):
         """
         I populate self._active_readers with enough active readers to
         retrieve the contents of this mutable file. I am called before
@@ -445,9 +445,9 @@ class Retrieve:
         """
         # TODO: It would be cool to investigate other heuristics for
         # reader selection. For instance, the cost (in time the user
-        # spends waiting for their file) of selecting a really slow peer
+        # spends waiting for their file) of selecting a really slow server
         # that happens to have a primary share is probably more than
-        # selecting a really fast peer that doesn't have a primary
+        # selecting a really fast server that doesn't have a primary
         # share. Maybe the servermap could be extended to provide this
         # information; it could keep track of latency information while
         # it gathers more important data, and then this routine could
@@ -485,7 +485,7 @@ class Retrieve:
         else:
             new_shnums = []
 
-        self.log("adding %d new peers to the active list" % len(new_shnums))
+        self.log("adding %d new servers to the active list" % len(new_shnums))
         for shnum in new_shnums:
             reader = self.readers[shnum]
             self._active_readers.append(reader)
@@ -528,7 +528,7 @@ class Retrieve:
 
     def _remove_reader(self, reader):
         """
-        At various points, we will wish to remove a peer from
+        At various points, we will wish to remove a server from
         consideration and/or use. These include, but are not necessarily
         limited to:
 
@@ -556,18 +556,18 @@ class Retrieve:
         self._active_readers.remove(reader)
         # TODO: self.readers.remove(reader)?
         for shnum in list(self.remaining_sharemap.keys()):
-            self.remaining_sharemap.discard(shnum, reader.peerid)
+            self.remaining_sharemap.discard(shnum, reader.serverid)
 
 
     def _mark_bad_share(self, reader, f):
         """
-        I mark the (peerid, shnum) encapsulated by my reader argument as
+        I mark the (serverid, shnum) encapsulated by my reader argument as
         a bad share, which means that it will not be used anywhere else.
 
         There are several reasons to want to mark something as a bad
         share. These include:
 
-            - A connection error to the peer.
+            - A connection error to the server.
             - A mismatched prefix (that is, a prefix that does not match
               our local conception of the version information string).
             - A failing block hash, salt hash, share hash, or other
@@ -576,20 +576,20 @@ class Retrieve:
         This method will ensure that readers that we wish to mark bad
         (for these reasons or other reasons) are not used for the rest
         of the download. Additionally, it will attempt to tell the
-        remote peer (with no guarantee of success) that its share is
+        remote server (with no guarantee of success) that its share is
         corrupt.
         """
         self.log("marking share %d on server %s as bad" % \
                  (reader.shnum, reader))
         prefix = self.verinfo[-2]
-        self.servermap.mark_bad_share(reader.peerid,
+        self.servermap.mark_bad_share(reader.serverid,
                                       reader.shnum,
                                       prefix)
         self._remove_reader(reader)
-        self._bad_shares.add((reader.peerid, reader.shnum, f))
-        self._status.problems[reader.peerid] = f
+        self._bad_shares.add((reader.serverid, reader.shnum, f))
+        self._status.problems[reader.serverid] = f
         self._last_failure = f
-        self.notify_server_corruption(reader.peerid, reader.shnum,
+        self.notify_server_corruption(reader.serverid, reader.shnum,
                                       str(f.value))
 
 
@@ -722,12 +722,12 @@ class Retrieve:
         I am called when a block or a salt fails to correctly validate, or when
         the decryption or decoding operation fails for some reason.  I react to
         this failure by notifying the remote server of corruption, and then
-        removing the remote peer from further activity.
+        removing the remote server from further activity.
         """
         assert isinstance(readers, list)
         bad_shnums = [reader.shnum for reader in readers]
 
-        self.log("validation or decoding failed on share(s) %s, peer(s) %s "
+        self.log("validation or decoding failed on share(s) %s, server(s) %s "
                  ", segment %d: %s" % \
                  (bad_shnums, readers, self._current_segment, str(f)))
         for reader in readers:
@@ -744,7 +744,7 @@ class Retrieve:
         self.log("validating share %d for segment %d" % (reader.shnum,
                                                              segnum))
         elapsed = time.time() - started
-        self._status.add_fetch_timing(reader.peerid, elapsed)
+        self._status.add_fetch_timing(reader.serverid, elapsed)
         self._set_current_status("validating blocks")
         # Did we fail to fetch either of the things that we were
         # supposed to? Fail if so.
@@ -757,7 +757,7 @@ class Retrieve:
             assert isinstance(results[0][1], failure.Failure)
 
             f = results[0][1]
-            raise CorruptShareError(reader.peerid,
+            raise CorruptShareError(reader.serverid,
                                     reader.shnum,
                                     "Connection error: %s" % str(f))
 
@@ -777,7 +777,7 @@ class Retrieve:
                 bht.set_hashes(blockhashes)
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.peerid,
+                raise CorruptShareError(reader.serverid,
                                         reader.shnum,
                                         "block hash tree failure: %s" % e)
 
@@ -791,7 +791,7 @@ class Retrieve:
            bht.set_hashes(leaves={segnum: blockhash})
         except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                 IndexError), e:
-            raise CorruptShareError(reader.peerid,
+            raise CorruptShareError(reader.serverid,
                                     reader.shnum,
                                     "block hash tree failure: %s" % e)
 
@@ -812,7 +812,7 @@ class Retrieve:
                                             leaves={reader.shnum: bht[0]})
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.peerid,
+                raise CorruptShareError(reader.serverid,
                                         reader.shnum,
                                         "corrupt hashes: %s" % e)
 
@@ -931,8 +931,8 @@ class Retrieve:
         return plaintext
 
 
-    def notify_server_corruption(self, peerid, shnum, reason):
-        rref = self.servermap.get_rref_for_serverid(peerid)
+    def notify_server_corruption(self, serverid, shnum, reason):
+        rref = self.servermap.get_rref_for_serverid(serverid)
         rref.callRemoteOnly("advise_corrupt_share",
                             "mutable", self._storage_index, shnum, reason)
 
@@ -945,13 +945,13 @@ class Retrieve:
                      (reader, reader.shnum),
                      level=log.WEIRD, umid="YIw4tA")
             if self._verify:
-                self.servermap.mark_bad_share(reader.peerid, reader.shnum,
+                self.servermap.mark_bad_share(reader.serverid, reader.shnum,
                                               self.verinfo[-2])
-                e = CorruptShareError(reader.peerid,
+                e = CorruptShareError(reader.serverid,
                                       reader.shnum,
                                       "invalid privkey")
                 f = failure.Failure(e)
-                self._bad_shares.add((reader.peerid, reader.shnum, f))
+                self._bad_shares.add((reader.serverid, reader.shnum, f))
             return
 
         # it's good
@@ -997,14 +997,14 @@ class Retrieve:
 
     def _raise_notenoughshareserror(self):
         """
-        I am called by _activate_enough_peers when there are not enough
-        active peers left to complete the download. After making some
+        I am called by _activate_enough_servers when there are not enough
+        active servers left to complete the download. After making some
         useful logging statements, I throw an exception to that effect
         to the caller of this Retrieve object through
         self._done_deferred.
         """
 
-        format = ("ran out of peers: "
+        format = ("ran out of servers: "
                   "have %(have)d of %(total)d segments "
                   "found %(bad)d bad shares "
                   "encoding %(k)d-of-%(n)d")
