@@ -264,7 +264,6 @@ class Publish:
         # write proxy for that server. We'll use this to write
         # shares to the server.
         for (server,shnum) in self.goal:
-            serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(server)
             renew_secret = self._node.get_renewal_secret(server)
             cancel_secret = self._node.get_cancel_secret(server)
@@ -279,7 +278,6 @@ class Publish:
                                                 self.total_shares,
                                                 self.segment_size,
                                                 self.datalength)
-            self.writers[shnum].serverid = serverid
             self.writers[shnum].server = server
             known_shares = self._servermap.get_known_shares()
             assert (server, shnum) in known_shares
@@ -463,7 +461,6 @@ class Publish:
         # write proxy for that server. We'll use this to write
         # shares to the server.
         for (server,shnum) in self.goal:
-            serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(server)
             renew_secret = self._node.get_renewal_secret(server)
             cancel_secret = self._node.get_cancel_secret(server)
@@ -478,7 +475,6 @@ class Publish:
                                                 self.total_shares,
                                                 self.segment_size,
                                                 self.datalength)
-            self.writers[shnum].serverid = serverid
             self.writers[shnum].server = server
             known_shares = self._servermap.get_known_shares()
             if (server, shnum) in known_shares:
@@ -922,7 +918,7 @@ class Publish:
         #       update work
 
         # this is a bit CPU intensive but easy to analyze. We create a sort
-        # order for each serverid. If the serverid is marked as bad, we don't
+        # order for each server. If the server is marked as bad, we don't
         # even put them in the list. Then we care about the number of shares
         # which have already been assigned to them. After that we care about
         # their permutation order.
@@ -976,7 +972,6 @@ class Publish:
             return
 
         server = writer.server
-        serverid = writer.serverid
         lp = self.log("_got_write_answer from %s, share %d" %
                       (server.get_name(), writer.shnum))
 
@@ -994,7 +989,7 @@ class Publish:
 
         # TODO: Precompute this.
         known_shnums = [x.shnum for x in self.writers.values()
-                        if x.serverid == serverid]
+                        if x.server == server]
         surprise_shares -= set(known_shnums)
         self.log("found the following surprise shares: %s" %
                  str(surprise_shares))
