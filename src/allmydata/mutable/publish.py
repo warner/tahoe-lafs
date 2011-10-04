@@ -239,7 +239,7 @@ class Publish:
         # the third is a table of successes: share which have actually been
         # placed. These are populated when responses come back with success.
         # When self.placed == self.goal, we're done.
-        self.placed = set() # (serverid, shnum) tuples
+        self.placed = set() # (server, shnum) tuples
 
         # we also keep a mapping from serverid to RemoteReference. Each time
         # we pull a connection out of the full serverlist, we add it to this
@@ -438,7 +438,7 @@ class Publish:
         # the third is a table of successes: share which have actually been
         # placed. These are populated when responses come back with success.
         # When self.placed == self.goal, we're done.
-        self.placed = set() # (serverid, shnum) tuples
+        self.placed = set() # (server, shnum) tuples
 
         # we also keep a mapping from serverid to RemoteReference. Each time
         # we pull a connection out of the full serverlist, we add it to this
@@ -1154,7 +1154,7 @@ class Publish:
             self.log("wrote successfully: adding new share to servermap")
             self._servermap.add_new_share(serverid, writer.shnum,
                                           self.versioninfo, started)
-            self.placed.add( (serverid, writer.shnum) )
+            self.placed.add( (writer.server, writer.shnum) )
         self._update_status()
         # the next method in the deferred chain will check to see if
         # we're done and successful.
