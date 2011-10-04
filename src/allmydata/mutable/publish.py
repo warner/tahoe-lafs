@@ -1090,7 +1090,7 @@ class Publish:
             self.log("our testv failed, so the write did not happen",
                      parent=lp, level=log.WEIRD, umid="8sc26g")
             self.surprised = True
-            self.bad_servers.add(writer.server) # don't ask them again
+            self.bad_servers.add(server) # don't ask them again
             # use the checkstring to add information to the log message
             unknown_format = False
             for (shnum,readv) in read_data.items():
@@ -1134,7 +1134,7 @@ class Publish:
             self.log("wrote successfully: adding new share to servermap")
             self._servermap.add_new_share(server, writer.shnum,
                                           self.versioninfo, started)
-            self.placed.add( (writer.server, writer.shnum) )
+            self.placed.add( (server, writer.shnum) )
         self._update_status()
         # the next method in the deferred chain will check to see if
         # we're done and successful.
