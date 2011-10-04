@@ -447,7 +447,7 @@ class Publish:
             (serverid, shnum) = key
             server = self._storage_broker.get_server_for_id(serverid)
             self.goal.add( (server,shnum) )
-            self.bad_share_checkstrings[key] = old_checkstring
+            self.bad_share_checkstrings[(server,shnum)] = old_checkstring
 
         # TODO: Make this part do server selection.
         self.update_goal()
@@ -487,8 +487,8 @@ class Publish:
                 self.writers[shnum].set_checkstring(old_seqnum,
                                                     old_root_hash,
                                                     old_salt)
-            elif (serverid, shnum) in self.bad_share_checkstrings:
-                old_checkstring = self.bad_share_checkstrings[(serverid, shnum)]
+            elif (server, shnum) in self.bad_share_checkstrings:
+                old_checkstring = self.bad_share_checkstrings[(server, shnum)]
                 self.writers[shnum].set_checkstring(old_checkstring)
 
         # Our remote shares will not have a complete checkstring until
