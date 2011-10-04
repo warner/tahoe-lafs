@@ -228,7 +228,7 @@ class Publish:
         # we keep track of three tables. The first is our goal: which share
         # we want to see on which servers. This is initially populated by the
         # existing servermap.
-        self.goal = set() # pairs of (serverid, shnum) tuples
+        self.goal = set() # pairs of (server, shnum) tuples
 
         # the number of outstanding queries: those that are in flight and
         # may or may not be delivered, accepted, or acknowledged. This is
@@ -257,7 +257,7 @@ class Publish:
         # do a repair to repair and recreate these.
         for (server, shnum) in self._servermap.get_known_shares():
             serverid = server.get_serverid()
-            self.goal.add( (serverid, shnum) )
+            self.goal.add( (server, shnum) )
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         self.writers = {}
 
@@ -265,11 +265,11 @@ class Publish:
         self._version = MDMF_VERSION
         writer_class = MDMFSlotWriteProxy
 
-        # For each (serverid, shnum) in self.goal, we make a
+        # For each (server, shnum) in self.goal, we make a
         # write proxy for that server. We'll use this to write
         # shares to the server.
-        for key in self.goal:
-            serverid, shnum = key
+        for (server,shnum) in self.goal:
+            serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(serverid)
             renew_secret = self._node.get_renewal_secret(serverid)
             cancel_secret = self._node.get_cancel_secret(serverid)
@@ -285,7 +285,6 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
-            server = self._storage_broker.get_server_for_id(serverid)
             known_shares = self._servermap.get_known_shares()
             assert (server, shnum) in known_shares
             old_versionid, old_timestamp = known_shares[(server,shnum)]
@@ -427,7 +426,7 @@ class Publish:
         # we keep track of three tables. The first is our goal: which share
         # we want to see on which servers. This is initially populated by the
         # existing servermap.
-        self.goal = set() # pairs of (serverid, shnum) tuples
+        self.goal = set() # pairs of (server, shnum) tuples
 
         # the number of outstanding queries: those that are in flight and
         # may or may not be delivered, accepted, or acknowledged. This is
@@ -454,13 +453,14 @@ class Publish:
         # try to update each existing share in place.
         for (server, shnum) in self._servermap.get_known_shares():
             serverid = server.get_serverid()
-            self.goal.add( (serverid, shnum) )
+            self.goal.add( (server, shnum) )
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
         # then we add in all the shares that were bad (corrupted, bad
         # signatures, etc). We want to replace these.
         for key, old_checkstring in self._servermap.get_bad_shares().items():
             (serverid, shnum) = key
-            self.goal.add(key)
+            server = self._storage_broker.get_server_for_id(serverid)
+            self.goal.add( (server,shnum) )
             self.bad_share_checkstrings[key] = old_checkstring
             self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
 
@@ -472,11 +472,11 @@ class Publish:
         else:
             writer_class = SDMFSlotWriteProxy
 
-        # For each (serverid, shnum) in self.goal, we make a
+        # For each (server, shnum) in self.goal, we make a
         # write proxy for that server. We'll use this to write
         # shares to the server.
-        for key in self.goal:
-            serverid, shnum = key
+        for (server,shnum) in self.goal:
+            serverid = server.get_serverid()
             write_enabler = self._node.get_write_enabler(serverid)
             renew_secret = self._node.get_renewal_secret(serverid)
             cancel_secret = self._node.get_cancel_secret(serverid)
@@ -492,7 +492,6 @@ class Publish:
                                                 self.segment_size,
                                                 self.datalength)
             self.writers[shnum].serverid = serverid
-            server = self._storage_broker.get_server_for_id(serverid)
             known_shares = self._servermap.get_known_shares()
             if (server, shnum) in known_shares:
                 old_versionid, old_timestamp = known_shares[(server,shnum)]
@@ -901,9 +900,8 @@ class Publish:
 
     def log_goal(self, goal, message=""):
         logmsg = [message]
-        for (shnum, serverid) in sorted([(s,p) for (p,s) in goal]):
-            logmsg.append("sh%d to [%s]" % (shnum,
-                                            idlib.shortnodeid_b2a(serverid)))
+        for (shnum, server) in sorted([(s,p) for (p,s) in goal]):
+            logmsg.append("sh%d to [%s]" % (shnum, server.get_name()))
         self.log("current goal: %s" % (", ".join(logmsg)), level=log.NOISY)
         self.log("we are planning to push new seqnum=#%d" % self._new_seqnum,
                  level=log.NOISY)
@@ -914,12 +912,12 @@ class Publish:
             self.log_goal(self.goal, "before update: ")
 
         # first, remove any bad servers from our goal
-        self.goal = set([ (serverid, shnum)
-                          for (serverid, shnum) in self.goal
-                          if serverid not in self.bad_servers ])
+        self.goal = set([ (server, shnum)
+                          for (server, shnum) in self.goal
+                          if server.get_serverid() not in self.bad_servers ])
 
         # find the homeless shares:
-        homefull_shares = set([shnum for (serverid, shnum) in self.goal])
+        homefull_shares = set([shnum for (server, shnum) in self.goal])
         homeless_shares = set(range(self.total_shares)) - homefull_shares
         homeless_shares = sorted(list(homeless_shares))
         # place them somewhere. We prefer unused servers at the beginning of
@@ -941,8 +939,8 @@ class Publish:
         # which have already been assigned to them. After that we care about
         # their permutation order.
         old_assignments = DictOfSets()
-        for (serverid, shnum) in self.goal:
-            old_assignments.add(serverid, shnum)
+        for (server, shnum) in self.goal:
+            old_assignments.add(server.get_serverid(), shnum)
 
         serverlist = []
         for i, server in enumerate(self.full_serverlist):
@@ -973,7 +971,8 @@ class Publish:
             # this, otherwise it would cause the publish to fail with an
             # UncoordinatedWriteError. See #546 for details of the trouble
             # this used to cause.
-            self.goal.add( (serverid, shnum) )
+            server = self._storage_broker.get_server_for_id(serverid)
+            self.goal.add( (server, shnum) )
             self.connections[serverid] = ss
             i += 1
             if i >= len(serverlist):
@@ -1030,7 +1029,8 @@ class Publish:
             if checkstring == self._checkstring:
                 # they have the right share, somehow
 
-                if (serverid,shnum) in self.goal:
+                server = self._storage_broker.get_server_for_id(serverid)
+                if (server,shnum) in self.goal:
                     # and we want them to have it, so we probably sent them a
                     # copy in an earlier write. This is ok, and avoids the
                     # #546 problem.
