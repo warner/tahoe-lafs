@@ -1046,7 +1046,7 @@ class Publish:
                     # TODO: ask this server next time. I don't yet have a good
                     # way to do this. Two insufficient possibilities are:
                     #
-                    # self._servermap.add_new_share(serverid, shnum, verinfo, now)
+                    # self._servermap.add_new_share(server, shnum, verinfo, now)
                     #  but that requires fetching/validating/parsing the whole
                     #  version string, and all we have is the checkstring
                     # self._servermap.mark_bad_share(serverid, shnum, checkstring)
@@ -1132,7 +1132,7 @@ class Publish:
         # shares, and can safely execute these statements.
         if self.versioninfo:
             self.log("wrote successfully: adding new share to servermap")
-            self._servermap.add_new_share(serverid, writer.shnum,
+            self._servermap.add_new_share(server, writer.shnum,
                                           self.versioninfo, started)
             self.placed.add( (writer.server, writer.shnum) )
         self._update_status()

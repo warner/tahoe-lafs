@@ -161,11 +161,9 @@ class ServerMap:
         # key=(server,shnum) -> checkstring
         return self._bad_shares
 
-    def add_new_share(self, serverid, shnum, verinfo, timestamp):
+    def add_new_share(self, server, shnum, verinfo, timestamp):
         """We've written a new share out, replacing any that was there
         before."""
-        # XXX this will change to take an IServer
-        server = self._storage_broker.get_server_for_id(serverid)
         key = (server, shnum)
         self._bad_shares.pop(key, None)
         self._known_shares[key] = (verinfo, timestamp)
@@ -887,7 +885,7 @@ class ServermapUpdater:
 
         # Add the info to our servermap.
         timestamp = time.time()
-        self._servermap.add_new_share(serverid, shnum, verinfo, timestamp)
+        self._servermap.add_new_share(server, shnum, verinfo, timestamp)
 
         return verinfo
 
