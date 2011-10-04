@@ -39,7 +39,7 @@ class PublishStatus:
         self.timings["encrypt"] = 0.0
         self.timings["encode"] = 0.0
         self.servermap = None
-        self.problems = {}
+        self._problems = {}
         self.active = True
         self.storage_index = None
         self.helper = False
@@ -80,6 +80,8 @@ class PublishStatus:
         return self.active
     def get_counter(self):
         return self.counter
+    def get_problems(self):
+        return self._problems
 
     def set_storage_index(self, si):
         self.storage_index = si

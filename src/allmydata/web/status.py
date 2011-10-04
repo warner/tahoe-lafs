@@ -819,7 +819,7 @@ class PublishStatusPage(rend.Page, RateAndTimeMixin):
         return ctx.tag["Sharemap:", l]
 
     def render_problems(self, ctx, data):
-        problems = data.problems
+        problems = data.get_problems()
         if not problems:
             return ""
         l = T.ul()
