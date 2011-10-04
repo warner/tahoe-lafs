@@ -380,7 +380,7 @@ class Publish:
             # If we don't have a servermap, that's because we're doing the
             # initial publish
             self._new_seqnum = 1
-            self._servermap = ServerMap(self._storage_broker)
+            self._servermap = ServerMap()
         self._status.set_servermap(self._servermap)
 
         self.log(format="new seqnum will be %(seqnum)d",

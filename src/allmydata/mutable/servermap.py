@@ -112,8 +112,7 @@ class ServerMap:
                        checkstring.
     """
 
-    def __init__(self, storage_broker):
-        self._storage_broker = storage_broker
+    def __init__(self):
         self._known_shares = {}
         self.unreachable_servers = set() # servers that didn't respond to queries
         self.reachable_servers = set() # servers that did respond to queries
@@ -124,7 +123,7 @@ class ServerMap:
         self.update_data = {} # (verinfo,shnum) => data
 
     def copy(self):
-        s = ServerMap(self._storage_broker)
+        s = ServerMap()
         s._known_shares = self._known_shares.copy() # tuple->tuple
         s.unreachable_servers = set(self.unreachable_servers)
         s.reachable_servers = set(self.reachable_servers)

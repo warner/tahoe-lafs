@@ -608,7 +608,7 @@ class MutableFileNode:
         """
         I am a serialized twin to get_servermap.
         """
-        servermap = ServerMap(self._storage_broker)
+        servermap = ServerMap()
         d = self._update_servermap(servermap, mode)
         # The servermap will tell us about the most recent size of the
         # file, so we may as well set that so that callers might get
