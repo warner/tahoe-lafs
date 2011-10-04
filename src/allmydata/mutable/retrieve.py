@@ -82,7 +82,8 @@ class RetrieveStatus:
         self.progress = value
     def set_active(self, value):
         self.active = value
-    def add_problem(self, serverid, f):
+    def add_problem(self, server, f):
+        serverid = server.get_serverid()
         self._problems[serverid] = f
 
 class Marker:
@@ -593,7 +594,7 @@ class Retrieve:
                                       prefix)
         self._remove_reader(reader)
         self._bad_shares.add((reader.serverid, reader.shnum, f))
-        self._status.add_problem(reader.serverid, f)
+        self._status.add_problem(reader.server, f)
         self._last_failure = f
         self.notify_server_corruption(reader.server, reader.shnum,
                                       str(f.value))
