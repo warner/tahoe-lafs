@@ -105,7 +105,6 @@ class Retrieve:
         self._last_failure = None
         prefix = si_b2a(self._storage_index)[:5]
         self._log_number = log.msg("Retrieve(%s): starting" % prefix)
-        self._outstanding_queries = {} # maps (serverid,shnum) to start_time
         self._running = True
         self._decoding = False
         self._bad_shares = set()
