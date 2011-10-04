@@ -59,7 +59,8 @@ class RetrieveStatus:
     def get_problems(self):
         return self._problems
 
-    def add_fetch_timing(self, serverid, elapsed):
+    def add_fetch_timing(self, server, elapsed):
+        serverid = server.get_serverid()
         if serverid not in self.timings["fetch_per_server"]:
             self.timings["fetch_per_server"][serverid] = []
         self.timings["fetch_per_server"][serverid].append(elapsed)
@@ -749,7 +750,7 @@ class Retrieve:
         self.log("validating share %d for segment %d" % (reader.shnum,
                                                              segnum))
         elapsed = time.time() - started
-        self._status.add_fetch_timing(reader.serverid, elapsed)
+        self._status.add_fetch_timing(reader.server, elapsed)
         self._set_current_status("validating blocks")
         # Did we fail to fetch either of the things that we were
         # supposed to? Fail if so.
