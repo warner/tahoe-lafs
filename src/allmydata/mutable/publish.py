@@ -241,11 +241,6 @@ class Publish:
         # When self.placed == self.goal, we're done.
         self.placed = set() # (server, shnum) tuples
 
-        # we also keep a mapping from serverid to RemoteReference. Each time
-        # we pull a connection out of the full serverlist, we add it to this
-        # for use later.
-        self.connections = {}
-
         self.bad_share_checkstrings = {}
 
         # This is set at the last step of the publishing process.
@@ -255,10 +250,7 @@ class Publish:
         # try to update each existing share in place. Since we're
         # updating, we ignore damaged and missing shares -- callers must
         # do a repair to repair and recreate these.
-        for (server, shnum) in self._servermap.get_known_shares():
-            serverid = server.get_serverid()
-            self.goal.add( (server, shnum) )
-            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
+        self.goal = set(self._servermap.get_known_shares())
         self.writers = {}
 
         # SDMF files are updated differently.
@@ -276,7 +268,7 @@ class Publish:
             secrets = (write_enabler, renew_secret, cancel_secret)
 
             self.writers[shnum] =  writer_class(shnum,
-                                                self.connections[serverid],
+                                                server.get_rref(),
                                                 self._storage_index,
                                                 secrets,
                                                 self._new_seqnum,
@@ -440,11 +432,6 @@ class Publish:
         # When self.placed == self.goal, we're done.
         self.placed = set() # (server, shnum) tuples
 
-        # we also keep a mapping from serverid to RemoteReference. Each time
-        # we pull a connection out of the full serverlist, we add it to this
-        # for use later.
-        self.connections = {}
-
         self.bad_share_checkstrings = {}
 
         # This is set at the last step of the publishing process.
@@ -452,10 +439,8 @@ class Publish:
 
         # we use the servermap to populate the initial goal: this way we will
         # try to update each existing share in place.
-        for (server, shnum) in self._servermap.get_known_shares():
-            serverid = server.get_serverid()
-            self.goal.add( (server, shnum) )
-            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
+        self.goal = set(self._servermap.get_known_shares())
+
         # then we add in all the shares that were bad (corrupted, bad
         # signatures, etc). We want to replace these.
         for key, old_checkstring in self._servermap.get_bad_shares().items():
@@ -463,7 +448,6 @@ class Publish:
             server = self._storage_broker.get_server_for_id(serverid)
             self.goal.add( (server,shnum) )
             self.bad_share_checkstrings[key] = old_checkstring
-            self.connections[serverid] = self._servermap.get_rref_for_serverid(serverid)
 
         # TODO: Make this part do server selection.
         self.update_goal()
@@ -484,7 +468,7 @@ class Publish:
             secrets = (write_enabler, renew_secret, cancel_secret)
 
             self.writers[shnum] =  writer_class(shnum,
-                                                self.connections[serverid],
+                                                server.get_rref(),
                                                 self._storage_index,
                                                 secrets,
                                                 self._new_seqnum,
@@ -975,7 +959,6 @@ class Publish:
             # this used to cause.
             server = self._storage_broker.get_server_for_id(serverid)
             self.goal.add( (server, shnum) )
-            self.connections[serverid] = ss
             i += 1
             if i >= len(serverlist):
                 i = 0
