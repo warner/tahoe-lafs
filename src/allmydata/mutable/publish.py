@@ -212,7 +212,7 @@ class Publish:
         sb = self._storage_broker
         full_serverlist = list(sb.get_servers_for_psi(self._storage_index))
         self.full_serverlist = full_serverlist # for use later, immutable
-        self.bad_servers = set() # serverids who have errbacked/refused requests
+        self.bad_servers = set() # servers who have errbacked/refused requests
 
         # This will set self.segment_size, self.num_segments, and
         # self.fec. TODO: Does it know how to do the offset? Probably
@@ -412,7 +412,7 @@ class Publish:
         sb = self._storage_broker
         full_serverlist = list(sb.get_servers_for_psi(self._storage_index))
         self.full_serverlist = full_serverlist # for use later, immutable
-        self.bad_servers = set() # serverids who have errbacked/refused requests
+        self.bad_servers = set() # servers who have errbacked/refused requests
 
         # This will set self.segment_size, self.num_segments, and
         # self.fec.
@@ -916,7 +916,7 @@ class Publish:
         # first, remove any bad servers from our goal
         self.goal = set([ (server, shnum)
                           for (server, shnum) in self.goal
-                          if server.get_serverid() not in self.bad_servers ])
+                          if server not in self.bad_servers ])
 
         # find the homeless shares:
         homefull_shares = set([shnum for (server, shnum) in self.goal])
@@ -948,7 +948,7 @@ class Publish:
         for i, server in enumerate(self.full_serverlist):
             serverid = server.get_serverid()
             ss = server.get_rref()
-            if serverid in self.bad_servers:
+            if server in self.bad_servers:
                 continue
             entry = (len(old_assignments.get(serverid, [])), i, serverid, ss)
             serverlist.append(entry)
@@ -1110,7 +1110,7 @@ class Publish:
             self.log("our testv failed, so the write did not happen",
                      parent=lp, level=log.WEIRD, umid="8sc26g")
             self.surprised = True
-            self.bad_servers.add(serverid) # don't ask them again
+            self.bad_servers.add(writer.server) # don't ask them again
             # use the checkstring to add information to the log message
             unknown_format = False
             for (shnum,readv) in read_data.items():
