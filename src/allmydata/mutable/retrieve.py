@@ -296,7 +296,6 @@ class Retrieve:
                                        shnum,
                                        any_cache)
             reader.server = server
-            reader.serverid = server.get_serverid()
             self.readers[shnum] = reader
         assert len(self.remaining_sharemap) >= k
 
