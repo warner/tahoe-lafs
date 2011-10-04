@@ -284,7 +284,7 @@ class Retrieve:
         self.remaining_sharemap = DictOfSets()
         for (shnum, serverid, timestamp) in shares:
             server = self._storage_broker.get_server_for_id(serverid)
-            self.remaining_sharemap.add(shnum, serverid)
+            self.remaining_sharemap.add(shnum, server)
             # If the servermap update fetched anything, it fetched at least 1
             # KiB, so we ask for that much.
             # TODO: Change the cache methods to allow us to fetch all of the
@@ -562,7 +562,7 @@ class Retrieve:
         self._active_readers.remove(reader)
         # TODO: self.readers.remove(reader)?
         for shnum in list(self.remaining_sharemap.keys()):
-            self.remaining_sharemap.discard(shnum, reader.serverid)
+            self.remaining_sharemap.discard(shnum, reader.server)
 
 
     def _mark_bad_share(self, reader, f):
