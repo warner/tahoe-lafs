@@ -185,9 +185,10 @@ class MutableFileNode:
     def _read_from_cache(self, verinfo, shnum, offset, length):
         return self._cache.read(verinfo, shnum, offset, length)
 
-    def get_write_enabler(self, peerid):
-        assert len(peerid) == 20
-        return hashutil.ssk_write_enabler_hash(self._writekey, peerid)
+    def get_write_enabler(self, server):
+        seed = server.get_foolscap_write_enabler_seed()
+        assert len(seed) == 20
+        return hashutil.ssk_write_enabler_hash(self._writekey, seed)
     def get_renewal_secret(self, server):
         crs = self._secret_holder.get_renewal_secret()
         frs = hashutil.file_renewal_secret_hash(crs, self._storage_index)

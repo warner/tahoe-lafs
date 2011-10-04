@@ -265,7 +265,7 @@ class Publish:
         # shares to the server.
         for (server,shnum) in self.goal:
             serverid = server.get_serverid()
-            write_enabler = self._node.get_write_enabler(serverid)
+            write_enabler = self._node.get_write_enabler(server)
             renew_secret = self._node.get_renewal_secret(server)
             cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
@@ -464,7 +464,7 @@ class Publish:
         # shares to the server.
         for (server,shnum) in self.goal:
             serverid = server.get_serverid()
-            write_enabler = self._node.get_write_enabler(serverid)
+            write_enabler = self._node.get_write_enabler(server)
             renew_secret = self._node.get_renewal_secret(server)
             cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
