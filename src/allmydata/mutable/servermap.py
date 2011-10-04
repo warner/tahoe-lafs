@@ -787,14 +787,13 @@ class ServermapUpdater:
 
 
     def _try_to_set_pubkey(self, pubkey_s, server, shnum, lp):
-        serverid = server.get_serverid()
         if self._node.get_pubkey():
             return # don't go through this again if we don't have to
         fingerprint = hashutil.ssk_pubkey_fingerprint_hash(pubkey_s)
         assert len(fingerprint) == 32
         if fingerprint != self._node.get_fingerprint():
-            raise CorruptShareError(serverid, shnum,
-                                "pubkey doesn't match fingerprint")
+            raise CorruptShareError(server, shnum,
+                                    "pubkey doesn't match fingerprint")
         self._node._populate_pubkey(self._deserialize_pubkey(pubkey_s))
         assert self._node.get_pubkey()
 
@@ -819,7 +818,6 @@ class ServermapUpdater:
             # servermap anymore.
             self.log("but we're not running anymore.")
             return None
-        serverid = server.get_serverid()
 
         _, verinfo, signature, __, ___ = results
         (seqnum,
@@ -853,7 +851,7 @@ class ServermapUpdater:
             assert self._node.get_pubkey()
             valid = self._node.get_pubkey().verify(prefix, signature[1])
             if not valid:
-                raise CorruptShareError(serverid, shnum,
+                raise CorruptShareError(server, shnum,
                                         "signature is invalid")
 
         # ok, it's a valid verinfo. Add it to the list of validated

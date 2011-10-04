@@ -763,7 +763,7 @@ class Retrieve:
             assert isinstance(results[0][1], failure.Failure)
 
             f = results[0][1]
-            raise CorruptShareError(reader.serverid,
+            raise CorruptShareError(reader.server,
                                     reader.shnum,
                                     "Connection error: %s" % str(f))
 
@@ -783,7 +783,7 @@ class Retrieve:
                 bht.set_hashes(blockhashes)
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.serverid,
+                raise CorruptShareError(reader.server,
                                         reader.shnum,
                                         "block hash tree failure: %s" % e)
 
@@ -797,7 +797,7 @@ class Retrieve:
            bht.set_hashes(leaves={segnum: blockhash})
         except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                 IndexError), e:
-            raise CorruptShareError(reader.serverid,
+            raise CorruptShareError(reader.server,
                                     reader.shnum,
                                     "block hash tree failure: %s" % e)
 
@@ -818,7 +818,7 @@ class Retrieve:
                                             leaves={reader.shnum: bht[0]})
             except (hashtree.BadHashError, hashtree.NotEnoughHashesError, \
                     IndexError), e:
-                raise CorruptShareError(reader.serverid,
+                raise CorruptShareError(reader.server,
                                         reader.shnum,
                                         "corrupt hashes: %s" % e)
 
@@ -953,7 +953,7 @@ class Retrieve:
             if self._verify:
                 self.servermap.mark_bad_share(reader.server, reader.shnum,
                                               self.verinfo[-2])
-                e = CorruptShareError(reader.serverid,
+                e = CorruptShareError(reader.server,
                                       reader.shnum,
                                       "invalid privkey")
                 f = failure.Failure(e)
