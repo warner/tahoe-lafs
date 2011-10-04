@@ -1110,7 +1110,7 @@ class Publish:
             self.log("our testv failed, so the write did not happen",
                      parent=lp, level=log.WEIRD, umid="8sc26g")
             self.surprised = True
-            self.bad_servers.add(writer) # don't ask them again
+            self.bad_servers.add(serverid) # don't ask them again
             # use the checkstring to add information to the log message
             unknown_format = False
             for (shnum,readv) in read_data.items():
