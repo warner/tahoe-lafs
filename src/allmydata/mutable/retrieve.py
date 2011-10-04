@@ -564,10 +564,10 @@ class Retrieve:
             self.remaining_sharemap.discard(shnum, reader.server)
 
 
-    def _mark_bad_share(self, reader, f):
+    def _mark_bad_share(self, server, shnum, reader, f):
         """
-        I mark the (server, shnum) encapsulated by my reader argument as
-        a bad share, which means that it will not be used anywhere else.
+        I mark the given (server, shnum) as a bad share, which means that it
+        will not be used anywhere else.
 
         There are several reasons to want to mark something as a bad
         share. These include:
@@ -585,17 +585,14 @@ class Retrieve:
         corrupt.
         """
         self.log("marking share %d on server %s as bad" % \
-                 (reader.shnum, reader))
+                 (shnum, server.get_name()))
         prefix = self.verinfo[-2]
-        self.servermap.mark_bad_share(reader.server,
-                                      reader.shnum,
-                                      prefix)
+        self.servermap.mark_bad_share(server, shnum, prefix)
         self._remove_reader(reader)
-        self._bad_shares.add((reader.server, reader.shnum, f))
-        self._status.add_problem(reader.server, f)
+        self._bad_shares.add((server, shnum, f))
+        self._status.add_problem(server, f)
         self._last_failure = f
-        self.notify_server_corruption(reader.server, reader.shnum,
-                                      str(f.value))
+        self.notify_server_corruption(server, shnum, str(f.value))
 
 
     def _download_current_segment(self):
@@ -736,7 +733,7 @@ class Retrieve:
                  ", segment %d: %s" % \
                  (bad_shnums, readers, self._current_segment, str(f)))
         for reader in readers:
-            self._mark_bad_share(reader, f)
+            self._mark_bad_share(reader.server, reader.shnum, reader, f)
         return
 
 
