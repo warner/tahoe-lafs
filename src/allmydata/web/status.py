@@ -718,7 +718,7 @@ class RetrieveStatusPage(rend.Page, RateAndTimeMixin):
         return ctx.tag["Encoding: %s of %s" % (k, n)]
 
     def render_problems(self, ctx, data):
-        problems = data.problems
+        problems = data.get_problems()
         if not problems:
             return ""
         l = T.ul()

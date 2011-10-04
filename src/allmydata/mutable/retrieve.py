@@ -27,7 +27,7 @@ class RetrieveStatus:
         self.timings["decode"] = 0.0
         self.timings["decrypt"] = 0.0
         self.timings["cumulative_verify"] = 0.0
-        self.problems = {}
+        self._problems = {}
         self.active = True
         self.storage_index = None
         self.helper = False
@@ -56,6 +56,8 @@ class RetrieveStatus:
         return self.active
     def get_counter(self):
         return self.counter
+    def get_problems(self):
+        return self._problems
 
     def add_fetch_timing(self, serverid, elapsed):
         if serverid not in self.timings["fetch_per_server"]:
@@ -79,6 +81,8 @@ class RetrieveStatus:
         self.progress = value
     def set_active(self, value):
         self.active = value
+    def add_problem(self, serverid, f):
+        self._problems[serverid] = f
 
 class Marker:
     pass
@@ -589,7 +593,7 @@ class Retrieve:
                                       prefix)
         self._remove_reader(reader)
         self._bad_shares.add((reader.serverid, reader.shnum, f))
-        self._status.problems[reader.serverid] = f
+        self._status.add_problem(reader.serverid, f)
         self._last_failure = f
         self.notify_server_corruption(reader.serverid, reader.shnum,
                                       str(f.value))
