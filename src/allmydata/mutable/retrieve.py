@@ -594,7 +594,7 @@ class Retrieve:
         self._bad_shares.add((reader.serverid, reader.shnum, f))
         self._status.add_problem(reader.serverid, f)
         self._last_failure = f
-        self.notify_server_corruption(reader.serverid, reader.shnum,
+        self.notify_server_corruption(reader.server, reader.shnum,
                                       str(f.value))
 
 
@@ -936,8 +936,8 @@ class Retrieve:
         return plaintext
 
 
-    def notify_server_corruption(self, serverid, shnum, reason):
-        rref = self.servermap.get_rref_for_serverid(serverid)
+    def notify_server_corruption(self, server, shnum, reason):
+        rref = server.get_rref()
         rref.callRemoteOnly("advise_corrupt_share",
                             "mutable", self._storage_index, shnum, reason)
 
