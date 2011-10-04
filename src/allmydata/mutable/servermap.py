@@ -227,14 +227,6 @@ class ServerMap:
             versionmap.add(verinfo, (shnum, server, timestamp))
         return versionmap
 
-    def _make_versionmap2(self):
-        """Return a dict that maps versionid to sets of (shnum, serverid,
-        timestamp) tuples."""
-        versionmap = DictOfSets()
-        for ( (server, shnum), (verinfo, timestamp) ) in self._known_shares.items():
-            versionmap.add(verinfo, (shnum, server.get_serverid(), timestamp))
-        return versionmap
-
     def shares_on_server(self, serverid):
         return set([shnum
                     for (server, shnum)
@@ -251,11 +243,11 @@ class ServerMap:
     def shares_available(self):
         """Return a dict that maps verinfo to tuples of
         (num_distinct_shares, k, N) tuples."""
-        versionmap = self._make_versionmap2()
+        versionmap = self.make_versionmap()
         all_shares = {}
         for verinfo, shares in versionmap.items():
             s = set()
-            for (shnum, serverid, timestamp) in shares:
+            for (shnum, server, timestamp) in shares:
                 s.add(shnum)
             (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
              offsets_tuple) = verinfo
@@ -277,23 +269,23 @@ class ServerMap:
 
     def summarize_versions(self):
         """Return a string describing which versions we know about."""
-        versionmap = self._make_versionmap2()
+        versionmap = self.make_versionmap()
         bits = []
         for (verinfo, shares) in versionmap.items():
             vstr = self.summarize_version(verinfo)
-            shnums = set([shnum for (shnum, serverid, timestamp) in shares])
+            shnums = set([shnum for (shnum, server, timestamp) in shares])
             bits.append("%d*%s" % (len(shnums), vstr))
         return "/".join(bits)
 
     def recoverable_versions(self):
         """Return a set of versionids, one for each version that is currently
         recoverable."""
-        versionmap = self._make_versionmap2()
+        versionmap = self.make_versionmap()
         recoverable_versions = set()
         for (verinfo, shares) in versionmap.items():
             (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
              offsets_tuple) = verinfo
-            shnums = set([shnum for (shnum, serverid, timestamp) in shares])
+            shnums = set([shnum for (shnum, server, timestamp) in shares])
             if len(shnums) >= k:
                 # this one is recoverable
                 recoverable_versions.add(verinfo)
@@ -303,13 +295,13 @@ class ServerMap:
     def unrecoverable_versions(self):
         """Return a set of versionids, one for each version that is currently
         unrecoverable."""
-        versionmap = self._make_versionmap2()
+        versionmap = self.make_versionmap()
 
         unrecoverable_versions = set()
         for (verinfo, shares) in versionmap.items():
             (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
              offsets_tuple) = verinfo
-            shnums = set([shnum for (shnum, serverid, timestamp) in shares])
+            shnums = set([shnum for (shnum, server, timestamp) in shares])
             if len(shnums) < k:
                 unrecoverable_versions.add(verinfo)
 
@@ -336,14 +328,14 @@ class ServerMap:
         # Return a dict of versionid -> health, for versions that are
         # unrecoverable and have later seqnums than any recoverable versions.
         # These indicate that a write will lose data.
-        versionmap = self._make_versionmap2()
+        versionmap = self.make_versionmap()
         healths = {} # maps verinfo to (found,k)
         unrecoverable = set()
         highest_recoverable_seqnum = -1
         for (verinfo, shares) in versionmap.items():
             (seqnum, root_hash, IV, segsize, datalength, k, N, prefix,
              offsets_tuple) = verinfo
-            shnums = set([shnum for (shnum, serverid, timestamp) in shares])
+            shnums = set([shnum for (shnum, server, timestamp) in shares])
             healths[verinfo] = (len(shnums),k)
             if len(shnums) < k:
                 unrecoverable.add(verinfo)
