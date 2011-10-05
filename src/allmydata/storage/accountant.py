@@ -57,14 +57,27 @@ class Account(Referenceable):
 
     # these are the non-RIStorageServer methods, some remote, some local
 
+    def _read(self, *paths):
+        fn = os.path.join(self.accountdir, *paths)
+        return open(fn).read()
+    def _write(self, s, *paths):
+        fn = os.path.join(self.accountdir, *paths)
+        tmpfn = fn + ".tmp"
+        f = open(tmpfn, "w")
+        f.write(s)
+        f.close()
+        os.rename(tmpfn, fn)
+
     def remote_set_nickname(self, nickname):
         if len(nickname) > 1000:
             raise ValueError("nickname too long")
-        save()
+        self._write(nickname.encode("utf-8")+"\n", "nickname")
 
     def get_nickname(self):
-        #return read(nickname)
-        return "bob"
+        try:
+            return self._read("nickname").decode("utf-8")
+        except EnvironmentError:
+            return u""
 
     def get_connection_status(self):
         d = {"created": time.time() - 1000}
