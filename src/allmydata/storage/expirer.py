@@ -146,6 +146,9 @@ class LeaseCheckingCrawler(ShareCrawler):
             self.increment(rec, "examined-buckets-"+sharetype, 1)
 
         try:
+            # the bucket directory may consume non-trivial space, so count it
+            # too. The space consumed by the share itself is added inside
+            # process_share()
             bucket_diskbytes = s.st_blocks * 512
         except AttributeError:
             bucket_diskbytes = 0 # no stat().st_blocks on windows
@@ -422,3 +425,54 @@ class LeaseCheckingCrawler(ShareCrawler):
         state["estimated-remaining-cycle"] = remaining
         state["estimated-current-cycle"] = cycle
         return state
+
+
+class AccountingCrawler(ShareCrawler):
+    """I manage a table of total space used per ownerid. Most of the time,
+    this table is stored in a cache..
+    """
+
+    minimum_cycle_time = 60*60 # we don't need this more than once an hour
+
+    # My main purpose is to regenerate
+
+    def __init__(self, server, statefile):
+        ShareCrawler.__init__(self, server, statefile)
+
+    def add_initial_state(self):
+        # ["bucket-counts"][cyclenum][prefix] = number
+        # ["last-complete-cycle"] = cyclenum # maintained by base class
+        # ["last-complete-bucket-count"] = number
+        # ["storage-index-samples"][prefix] = (cyclenum,
+        #                                      list of SI strings (base32))
+        self.state.setdefault("bucket-counts", {})
+        self.state.setdefault("last-complete-bucket-count", None)
+        self.state.setdefault("storage-index-samples", {})
+
+    def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
+        # we override process_prefixdir() because we don't want to look at
+        # the individual buckets. We'll save state after each one. On my
+        # laptop, a mostly-empty storage server can process about 70
+        # prefixdirs in a 1.0s slice.
+        if cycle not in self.state["bucket-counts"]:
+            self.state["bucket-counts"][cycle] = {}
+        self.state["bucket-counts"][cycle][prefix] = len(buckets)
+        if prefix in self.prefixes[:self.num_sample_prefixes]:
+            self.state["storage-index-samples"][prefix] = (cycle, buckets)
+
+    def finished_cycle(self, cycle):
+        last_counts = self.state["bucket-counts"].get(cycle, [])
+        if len(last_counts) == len(self.prefixes):
+            # great, we have a whole cycle.
+            num_buckets = sum(last_counts.values())
+            self.state["last-complete-bucket-count"] = num_buckets
+            # get rid of old counts
+            for old_cycle in list(self.state["bucket-counts"].keys()):
+                if old_cycle != cycle:
+                    del self.state["bucket-counts"][old_cycle]
+        # get rid of old samples too
+        for prefix in list(self.state["storage-index-samples"].keys()):
+            old_cycle,buckets = self.state["storage-index-samples"][prefix]
+            if old_cycle != cycle:
+                del self.state["storage-index-samples"][prefix]
+

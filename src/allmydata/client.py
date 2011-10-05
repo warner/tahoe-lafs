@@ -8,7 +8,7 @@ from twisted.application.internet import TimerService
 from pycryptopp.publickey import rsa
 
 import allmydata
-from allmydata.storage.server import StorageServer
+from allmydata.storage.server import StorageServerAndAccountant
 from allmydata import storage_client
 from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
@@ -274,16 +274,18 @@ class Client(node.Node, pollmixin.PollMixin):
             sharetypes.append("mutable")
         expiration_sharetypes = tuple(sharetypes)
 
-        ss = StorageServer(storedir, self.nodeid,
-                           reserved_space=reserved,
-                           discard_storage=discard,
-                           readonly_storage=readonly,
-                           stats_provider=self.stats_provider,
-                           expiration_enabled=expire,
-                           expiration_mode=mode,
-                           expiration_override_lease_duration=o_l_d,
-                           expiration_cutoff_date=cutoff_date,
-                           expiration_sharetypes=expiration_sharetypes)
+        ss_class = StorageServerAndAccountant
+        ss = ss_class(storedir, self.nodeid,
+                      reserved_space=reserved,
+                      discard_storage=discard,
+                      readonly_storage=readonly,
+                      stats_provider=self.stats_provider,
+                      expiration_enabled=expire,
+                      expiration_mode=mode,
+                      expiration_override_lease_duration=o_l_d,
+                      expiration_cutoff_date=cutoff_date,
+                      expiration_sharetypes=expiration_sharetypes)
+        ss.set_tub(self.tub)
         self.add_service(ss)
 
         d = self.when_tub_ready()
@@ -316,9 +318,15 @@ class Client(node.Node, pollmixin.PollMixin):
         self.init_nodemaker()
 
     def init_client_storage_broker(self):
+        def _make_key():
+            sk_vs,vk_vs = keyutil.make_keypair()
+            return sk_vs+"\n" # priv-v0-BASE32
+        sk_vs = self.get_or_create_private_config("client.key", _make_key)
+        self.client_key = keyutil.parse_privkey(sk_vs) # (sk, vk_vs)
         # create a StorageFarmBroker object, for use by Uploader/Downloader
         # (and everybody else who wants to use storage servers)
-        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True)
+        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True,
+                                              client_key=self.client_key)
         self.storage_broker = sb
 
         # load static server specifications from tahoe.cfg, if any.

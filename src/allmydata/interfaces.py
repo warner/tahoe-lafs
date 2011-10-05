@@ -89,6 +89,9 @@ class RIStorageServer(RemoteInterface):
         """
         return DictOf(str, Any())
 
+    def get_account(msg=str, sig=str, pubkey_s=str):
+        return Any()
+
     def allocate_buckets(storage_index=StorageIndex,
                          renew_secret=LeaseRenewSecret,
                          cancel_secret=LeaseCancelSecret,

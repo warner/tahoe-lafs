@@ -29,9 +29,9 @@ the foolscap-based server implemented in src/allmydata/storage/*.py .
 # 6: implement other sorts of IStorageClient classes: S3, etc
 
 
-import re, time
+import re, time, simplejson
 from zope.interface import implements
-from foolscap.api import eventually
+from foolscap.api import eventually, Referenceable
 from allmydata.interfaces import IStorageBroker, IDisplayableServer, IServer
 from allmydata.util import log, base32
 from allmydata.util.assertutil import precondition
@@ -62,10 +62,11 @@ class StorageFarmBroker:
     I'm also responsible for subscribing to the IntroducerClient to find out
     about new servers as they are announced by the Introducer.
     """
-    def __init__(self, tub, permute_peers):
+    def __init__(self, tub, permute_peers, client_key=None):
         self.tub = tub
         assert permute_peers # False not implemented yet
         self.permute_peers = permute_peers
+        self.client_key = client_key
         # self.servers maps serverid -> IServer, and keeps track of all the
         # storage servers that we've heard about. Each descriptor manages its
         # own Reconnector, and will give us a RemoteReference when we ask
@@ -74,10 +75,11 @@ class StorageFarmBroker:
         self.introducer_client = None
 
     # these two are used in unit tests
-    def test_add_rref(self, serverid, rref, ann):
-        s = NativeStorageServer(serverid, ann.copy())
+    def test_add_rref(self, key_s, rref, ann):
+        assert "FURL" in ann
+        s = NativeStorageServer(key_s, ann, self.tub, self.client_key)
         s.rref = rref
-        self.servers[serverid] = s
+        self.servers[s.get_serverid()] = s
 
     def test_add_server(self, serverid, s):
         self.servers[serverid] = s
@@ -91,7 +93,7 @@ class StorageFarmBroker:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann)
+        s = NativeStorageServer(key_s, ann, self.tub, self.client_key)
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
         if old:
@@ -157,7 +159,7 @@ class StubServer:
     def get_nickname(self):
         return "?"
 
-class NativeStorageServer:
+class NativeStorageServer(Referenceable):
     """I hold information about a storage server that we want to connect to.
     If we are connected, I hold the RemoteReference, their host address, and
     the their version information. I remember information about when we were
@@ -184,9 +186,11 @@ class NativeStorageServer:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann, min_shares=1):
+    def __init__(self, key_s, ann, tub, client_key=None, min_shares=1):
         self.key_s = key_s
         self.announcement = ann
+        self.tub = tub
+        self.client_key = client_key
         self.min_shares = min_shares
 
         assert "anonymous-storage-FURL" in ann, ann
@@ -283,11 +287,41 @@ class NativeStorageServer:
                 name=self.get_name(), version=rref.version,
                 facility="tahoe.storage_broker", umid="SWmJYg",
                 level=log.NOISY, parent=lp)
+        print "rref.version", rref.version
+        v = rref.version.get("http://allmydata.org/tahoe/protocols/storage/v1", {})
+        if "accounting-v1" not in v or not self.client_key:
+            print "no accounting, or no key"
+            self.last_connect_time = time.time()
+            self.remote_host = rref.getPeer()
+            self.rref = rref
+            rref.notifyOnDisconnect(self._lost)
+            return
+        print "doing upgrade"
+        # the RIStorageServer we're talking to can upgrade us to a real
+        # Account. We are the receiver.
+        me = self.tub.registerReference(self)
+        msg_d = {"please-give-Account-to-rxFURL": me}
+        msg = simplejson.dumps(msg_d).encode("utf-8")
+        print msg
+        sk,vk_vs = self.client_key
+        sig = sk.sign(msg)
+        d = rref.callRemote("get_account", msg, sig, vk_vs)
+        return d
 
+    def remote_account(self, account):
+        d = add_version_to_remote_reference(account, self.VERSION_DEFAULTS)
+        d.addCallback(self._got_versioned_remote_account)
+        return d
+    def _got_versioned_remote_account(self, account):
+        # finally. now *this* we can use
         self.last_connect_time = time.time()
-        self.remote_host = rref.getPeer()
-        self.rref = rref
-        rref.notifyOnDisconnect(self._lost)
+        self.remote_host = account.getPeer()
+        self.rref = account
+        account.notifyOnDisconnect(self._lost)
+        def _got_message(msg):
+            print "_got_message", msg
+        account.callRemote("get_client_message").addCallback(_got_message).addErrback(log.err)
+
 
     def get_rref(self):
         return self.rref
