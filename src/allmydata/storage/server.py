@@ -17,6 +17,7 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
+from allmydata.storage.accountant import Account
 
 # storage/
 # storage/shares/incoming
@@ -549,59 +550,6 @@ class StorageServer(service.MultiService, Referenceable):
                 level=log.SCARY, umid="SGx2fA")
         return None
 
-class Account(Referenceable):
-    def __init__(self, owner_num, server):
-        self.owner_num = owner_num
-        self.server = server
-
-    def remote_get_version(self):
-        return self.server.remote_get_version()
-    def remote_get_status(self):
-        return {"write": True, "read": True, "save": True}
-    def remote_get_client_message(self):
-        return {"message": "CLIENT MESSAGE WOO!"}
-    # all other RIStorageServer methods should pass through to self.server
-    # but add owner_num=
-
-    def remote_get_version(self):
-        return self.server.remote_get_version()
-    def remote_allocate_buckets(self, storage_index,
-                                renew_secret, cancel_secret,
-                                sharenums, allocated_size,
-                                canary, owner_num=0):
-        return self.server.remote_allocate_buckets(
-            storage_index,
-            renew_secret, cancel_secret,
-            sharenums, allocated_size,
-            canary, owner_num=self.owner_num)
-    def remote_add_lease(self, storage_index, renew_secret, cancel_secret,
-                         owner_num=1):
-        return self.server.remote_add_lease(
-            storage_index, renew_secret, cancel_secret,
-            owner_num=self.owner_num)
-    def remote_renew_lease(self, storage_index, renew_secret):
-        return self.server.remote_renew_lease(storage_index, renew_secret)
-    def remote_cancel_lease(self, storage_index, cancel_secret):
-        return self.server.remote_cancel_lease(storage_index, cancel_secret)
-    def remote_get_buckets(self, storage_index):
-        return self.server.remote_get_buckets(storage_index)
-    # TODO: add leases and ownernums to mutable shares
-    def remote_slot_testv_and_readv_and_writev(self, storage_index,
-                                               secrets,
-                                               test_and_write_vectors,
-                                               read_vector):
-        return self.server.remote_slot_testv_and_readv_and_writev(
-            storage_index,
-            secrets,
-            test_and_write_vectors,
-            read_vector) # TODO: ownernum=
-    def remote_slot_readv(self, storage_index, shares, readv):
-        return self.server.remote_slot_readv(storage_index, shares, readv)
-    def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
-                                    reason):
-        return self.server.remote_advise_corrupt_share(
-            share_type, storage_index, shnum, reason)
-
 
 
 
@@ -610,14 +558,15 @@ class StorageServerAndAccountant(StorageServer):
     # will have just these two methods, and created to wrap a StorageServer
     # instead of subclassing it.
 
-    def set_tub(self, tub):
+    def set_accountant(self, accountant, tub):
+        self.accountant = accountant
         self.tub = tub
+
     def remote_get_account(self, msg, sig, pubkey_vs):
         print "GETTING ACCOUNT", msg
         vk = keyutil.parse_pubkey(pubkey_vs)
         vk.verify(sig, msg)
-        account_name = pubkey_vs # think about ascii, kinda wordy
-        account = self.get_account(account_name)
+        account = self.accountant.get_account(pubkey_vs, self)
         msg_d = simplejson.loads(msg.decode("utf-8"))
         rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
         d = self.tub.getReference(rxFURL)

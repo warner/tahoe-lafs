@@ -9,6 +9,7 @@ from pycryptopp.publickey import rsa
 
 import allmydata
 from allmydata.storage.server import StorageServerAndAccountant
+from allmydata.storage.accountant import Accountant
 from allmydata import storage_client
 from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
@@ -285,7 +286,9 @@ class Client(node.Node, pollmixin.PollMixin):
                       expiration_override_lease_duration=o_l_d,
                       expiration_cutoff_date=cutoff_date,
                       expiration_sharetypes=expiration_sharetypes)
-        ss.set_tub(self.tub)
+        accountant = Accountant(self.basedir, create_if_missing=True)
+        self.add_service(accountant)
+        ss.set_accountant(accountant, self.tub)
         self.add_service(ss)
 
         d = self.when_tub_ready()
