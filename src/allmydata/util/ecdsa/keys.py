@@ -92,6 +92,7 @@ class VerifyingKey:
                                    der.encode_bitstring(point_str))
 
     def verify(self, signature, data, hashfunc=None, sigdecode=sigdecode_string):
+        print "VERIFY"
         hashfunc = hashfunc or self.default_hashfunc
         digest = hashfunc(data).digest()
         return self.verify_digest(signature, digest, sigdecode)
@@ -134,6 +135,7 @@ class SigningKey:
         pubkey_point = curve.generator*secexp
         pubkey = ecdsa.Public_key(curve.generator, pubkey_point)
         pubkey.order = n
+        print "GET_VERIFYING_KEY"
         self.verifying_key = VerifyingKey.from_public_point(pubkey_point, curve,
                                                             hashfunc)
         self.privkey = ecdsa.Private_key(pubkey, secexp)
@@ -225,6 +227,7 @@ class SigningKey:
         Use hashfunc=hashlib.sha1 to match openssl's -ecdsa-with-SHA1 mode,
         or hashfunc=hashlib.sha256 for openssl-1.0.0's -ecdsa-with-SHA256.
         """
+        print "SIGN"
 
         hashfunc = hashfunc or self.default_hashfunc
         h = hashfunc(data).digest()
