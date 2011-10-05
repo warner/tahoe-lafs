@@ -15,7 +15,7 @@ from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
 from allmydata.control import ControlServer
 from allmydata.introducer.client import IntroducerClient
-from allmydata.util import hashutil, base32, pollmixin, log
+from allmydata.util import hashutil, base32, pollmixin, log, keyutil
 from allmydata.util.encodingutil import get_filesystem_encoding
 from allmydata.util.abbreviate import parse_abbreviated_size
 from allmydata.util.time_format import parse_duration, parse_date
@@ -198,11 +198,36 @@ class Client(node.Node, pollmixin.PollMixin):
         self.convergence = base32.a2b(convergence_s)
         self._secret_holder = SecretHolder(lease_secret, self.convergence)
 
+    def _maybe_create_server_key(self):
+        # we only create the key once. On all subsequent runs, we re-use the
+        # existing key
+        def _make_key():
+            sk_vs,vk_vs = keyutil.make_keypair()
+            return sk_vs+"\n"
+        sk_vs = self.get_or_create_private_config("server.privkey", _make_key)
+        sk,vk_vs = keyutil.parse_privkey(sk_vs.strip())
+        self.write_config("server.pubkey", vk_vs+"\n")
+        self._server_key = sk
+
+    def _init_permutation_seed(self, ss):
+        seed = self.get_config_from_file("permutation-seed")
+        if not seed:
+            have_shares = ss.have_shares()
+            if have_shares:
+                seed = base32.b2a(self.nodeid)
+            else:
+                vk = self._server_key.get_verifying_key()
+                seed = base32.b2a(vk.to_string())
+            self.write_config("permutation-seed", seed+"\n")
+        return seed.strip()
+
     def init_storage(self):
         # should we run a storage server (and publish it for others to use)?
         if not self.get_config("storage", "enabled", True, boolean=True):
             return
         readonly = self.get_config("storage", "readonly", False, boolean=True)
+
+        self._maybe_create_server_key()
 
         storedir = os.path.join(self.basedir, self.STOREDIR)
 
@@ -255,10 +280,13 @@ class Client(node.Node, pollmixin.PollMixin):
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready
         def _publish(res):
+            permutation_seed_b32 = self._init_permutation_seed(ss)
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
             ri_name = RIStorageServer.__remote_name__
-            self.introducer_client.publish(furl, "storage", ri_name)
+            extra = {"permutation-seed-base32": permutation_seed_b32}
+            self.introducer_client.publish(furl, "storage", ri_name,
+                                           self._server_key, extra)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")
