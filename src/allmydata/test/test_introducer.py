@@ -16,7 +16,8 @@ from allmydata.introducer.common import get_tubid_string_from_ann_d, \
 from allmydata.introducer import old
 # test compatibility with old introducer .tac files
 from allmydata.introducer import IntroducerNode
-from allmydata.util import pollmixin, ecdsa, base32, hashutil
+from allmydata.util import pollmixin, base32
+import ed25519
 import allmydata.test.common_util as testutil
 
 class LoggingMultiService(service.MultiService):
@@ -152,9 +153,7 @@ class Client(unittest.TestCase):
         furl1a = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:7777/gydnp"
         furl2 = "pb://ttwwooyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/ttwwoo"
 
-        privkey = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p,
-                                            hashfunc=hashutil.SHA256)
-        pubkey = privkey.get_verifying_key()
+        privkey,pubkey = ed25519.create_keypair()
         pubkey_s = "v0-"+base32.b2a(pubkey.to_string())
 
         # ann1: ic1, furl1
@@ -308,8 +307,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                     c.publish(node_furl, "storage", "ri_name")
                 elif i == 1:
                     # sign the announcement
-                    privkey = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p,
-                                                        hashfunc=hashutil.SHA256)
+                    privkey,pubkey = ed25519.create_keypair()
                     privkeys[c] = privkey
                     c.publish("storage", make_ann_d(node_furl), privkey)
                 else:
@@ -681,9 +679,7 @@ class Announcements(unittest.TestCase):
         client_v2 = IntroducerClient(tub, introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        sk = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p,
-                                       hashfunc=hashutil.SHA256)
-        pk = sk.get_verifying_key()
+        sk,pk = ed25519.create_keypair()
         pks = "v0-"+base32.b2a(pk.to_string())
         ann_t0 = make_ann_t(client_v2, furl1, sk)
         canary0 = Referenceable()

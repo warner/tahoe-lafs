@@ -13,7 +13,7 @@ from allmydata.immutable import upload
 from allmydata.interfaces import MDMF_VERSION, SDMF_VERSION
 from allmydata.mutable.publish import MutableData
 from allmydata.dirnode import normalize
-from allmydata.util import ecdsa
+import ed25519
 
 # Test that the scripts can be imported.
 from allmydata.scripts import create_node, debug, keygen, startstop_node, \
@@ -1392,10 +1392,8 @@ class Admin(unittest.TestCase):
             self.failUnless(pubkey_line.startswith(vk_header), pubkey_line)
             privkey_b = base32.a2b(privkey_line[len(sk_header):])
             pubkey_b = base32.a2b(pubkey_line[len(vk_header):])
-            sk = ecdsa.SigningKey.from_string(privkey_b, curve=ecdsa.NIST256p,
-                                              hashfunc=hashutil.SHA256)
-            vk = ecdsa.VerifyingKey.from_string(pubkey_b, curve=ecdsa.NIST256p,
-                                                hashfunc=hashutil.SHA256)
+            sk = ed25519.SigningKey(privkey_b)
+            vk = ed25519.VerifyingKey(pubkey_b)
             self.failUnlessEqual(sk.get_verifying_key().to_string(),
                                  vk.to_string())
         d.addCallback(_done)
