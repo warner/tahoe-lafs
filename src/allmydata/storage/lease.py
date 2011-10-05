@@ -19,6 +19,8 @@ class LeaseInfo:
         return self.expiration_time - 31*24*60*60
     def get_age(self):
         return time.time() - self.get_grant_renew_time_time()
+    def get_ownernum(self):
+        return self.owner_num
 
     def from_immutable_data(self, data):
         (self.owner_num,
