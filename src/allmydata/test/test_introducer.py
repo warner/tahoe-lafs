@@ -597,9 +597,6 @@ class ClientInfo(unittest.TestCase):
 
     def test_client_v1(self):
         introducer = IntroducerService()
-        tub = introducer_furl = None
-        client_v1 = old.IntroducerClient_v1(tub, introducer_furl, u"nick-v1",
-                                            "my_version", "oldest")
         subscriber = FakeRemoteReference()
         introducer.remote_subscribe(subscriber, "storage")
         # the v1 subscribe interface had no subscriber_info: that was usually
