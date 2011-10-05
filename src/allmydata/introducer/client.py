@@ -1,29 +1,74 @@
 
-from base64 import b32decode
+import time
 from zope.interface import implements
 from twisted.application import service
-from foolscap.api import Referenceable, SturdyRef, eventually
+from foolscap.api import Referenceable, eventually, RemoteInterface, Violation
 from allmydata.interfaces import InsufficientVersionError
-from allmydata.introducer.interfaces import RIIntroducerSubscriberClient, \
-     IIntroducerClient
-from allmydata.util import log, idlib
-from allmydata.util.rrefutil import add_version_to_remote_reference, trap_deadref
+from allmydata.introducer.interfaces import IIntroducerClient, \
+     RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
+from allmydata.introducer.common import sign_to_foolscap, unsign_from_foolscap,\
+     convert_announcement_v1_to_v2, convert_announcement_v2_to_v1, \
+     make_index, get_tubid_string_from_ann_d
+from allmydata.util import log
+from allmydata.util.rrefutil import add_version_to_remote_reference
+from allmydata.util.keyutil import BadSignatureError
+
+class ClientAdapter_v1(Referenceable): # for_v1
+    """I wrap a v2 IntroducerClient to make it look like a v1 client, so it
+    can be attached to an old server."""
+    implements(RIIntroducerSubscriberClient_v1)
+
+    def __init__(self, original):
+        self.original = original
+
+    def remote_announce(self, announcements):
+        lp = self.original.log("received %d announcements (v1)" %
+                               len(announcements))
+        anns_v1 = set([convert_announcement_v1_to_v2(ann_v1)
+                       for ann_v1 in announcements])
+        return self.original.got_announcements(anns_v1, lp)
+
+    def remote_set_encoding_parameters(self, parameters):
+        self.original.remote_set_encoding_parameters(parameters)
+
+class RIStubClient(RemoteInterface): # for_v1
+    """Each client publishes a service announcement for a dummy object called
+    the StubClient. This object doesn't actually offer any services, but the
+    announcement helps the Introducer keep track of which clients are
+    subscribed (so the grid admin can keep track of things like the size of
+    the grid and the client versions in use. This is the (empty)
+    RemoteInterface for the StubClient."""
+
+class StubClient(Referenceable): # for_v1
+    implements(RIStubClient)
 
 
 class IntroducerClient(service.Service, Referenceable):
-    implements(RIIntroducerSubscriberClient, IIntroducerClient)
+    implements(RIIntroducerSubscriberClient_v2, IIntroducerClient)
 
     def __init__(self, tub, introducer_furl,
-                 nickname, my_version, oldest_supported):
+                 nickname, my_version, oldest_supported,
+                 app_versions):
         self._tub = tub
         self.introducer_furl = introducer_furl
 
         assert type(nickname) is unicode
-        self._nickname_utf8 = nickname.encode("utf-8") # we always send UTF-8
+        self._nickname = nickname
         self._my_version = my_version
         self._oldest_supported = oldest_supported
+        self._app_versions = app_versions
 
-        self._published_announcements = set()
+        self._my_subscriber_info = { "version": 0,
+                                     "nickname": self._nickname,
+                                     "app-versions": self._app_versions,
+                                     "my-version": self._my_version,
+                                     "oldest-supported": self._oldest_supported,
+                                     }
+        self._stub_client = None # for_v1
+        self._stub_client_furl = None
+
+        self._published_announcements = {}
+        self._canary = Referenceable()
 
         self._publisher = None
 
@@ -33,10 +78,11 @@ class IntroducerClient(service.Service, Referenceable):
 
         # _current_announcements remembers one announcement per
         # (servicename,serverid) pair. Anything that arrives with the same
-        # pair will displace the previous one. This stores unpacked
-        # announcement dictionaries, which can be compared for equality to
-        # distinguish re-announcement from updates. It also provides memory
-        # for clients who subscribe after startup.
+        # pair will displace the previous one. This stores tuples of
+        # (unpacked announcement dictionary, verifyingkey, rxtime). The ann_d
+        # dicts can be compared for equality to distinguish re-announcement
+        # from updates. It also provides memory for clients who subscribe
+        # after startup.
         self._current_announcements = {}
 
         self.encoding_parameters = None
@@ -51,6 +97,11 @@ class IntroducerClient(service.Service, Referenceable):
             "new_announcement": 0,
             "outbound_message": 0,
             }
+        self._debug_outstanding = 0
+
+    def _debug_retired(self, res):
+        self._debug_outstanding -= 1
+        return res
 
     def startService(self):
         service.Service.startService(self)
@@ -95,24 +146,16 @@ class IntroducerClient(service.Service, Referenceable):
 
     def log(self, *args, **kwargs):
         if "facility" not in kwargs:
-            kwargs["facility"] = "tahoe.introducer"
+            kwargs["facility"] = "tahoe.introducer.client"
         return log.msg(*args, **kwargs)
-
-
-    def publish(self, furl, service_name, remoteinterface_name):
-        assert type(self._nickname_utf8) is str # we always send UTF-8
-        ann = (furl, service_name, remoteinterface_name,
-               self._nickname_utf8, self._my_version, self._oldest_supported)
-        self._published_announcements.add(ann)
-        self._maybe_publish()
 
     def subscribe_to(self, service_name, cb, *args, **kwargs):
         self._local_subscribers.append( (service_name,cb,args,kwargs) )
         self._subscribed_service_names.add(service_name)
         self._maybe_subscribe()
-        for (servicename,nodeid),ann_d in self._current_announcements.items():
+        for (servicename,unique),(ann_d,key_s,when) in self._current_announcements.items():
             if servicename == service_name:
-                eventually(cb, nodeid, ann_d)
+                eventually(cb, key_s, ann_d, *args, **kwargs)
 
     def _maybe_subscribe(self):
         if not self._publisher:
@@ -124,92 +167,157 @@ class IntroducerClient(service.Service, Referenceable):
                 # there is a race here, but the subscription desk ignores
                 # duplicate requests.
                 self._subscriptions.add(service_name)
-                d = self._publisher.callRemote("subscribe", self, service_name)
-                d.addErrback(trap_deadref)
-                d.addErrback(log.err, format="server errored during subscribe",
-                             facility="tahoe.introducer",
+                self._debug_outstanding += 1
+                d = self._publisher.callRemote("subscribe_v2",
+                                               self, service_name,
+                                               self._my_subscriber_info)
+                d.addBoth(self._debug_retired)
+                d.addErrback(self._subscribe_handle_v1, service_name) # for_v1
+                d.addErrback(log.err, facility="tahoe.introducer.client",
                              level=log.WEIRD, umid="2uMScQ")
+
+    def _subscribe_handle_v1(self, f, service_name): # for_v1
+        f.trap(Violation, NameError)
+        # they don't have a 'subscribe_v2' method: must be a v1 introducer.
+        # Fall back to the v1 'subscribe' method, using a client adapter.
+        ca = ClientAdapter_v1(self)
+        self._debug_outstanding += 1
+        d = self._publisher.callRemote("subscribe", ca, service_name)
+        d.addBoth(self._debug_retired)
+        # We must also publish an empty 'stub_client' object, so the
+        # introducer can count how many clients are connected and see what
+        # versions they're running.
+        if not self._stub_client_furl:
+            self._stub_client = sc = StubClient()
+            self._stub_client_furl = self._tub.registerReference(sc)
+        def _publish_stub_client(ignored):
+            ri_name = RIStubClient.__remote_name__
+            self.publish(self._stub_client_furl, "stub_client", ri_name)
+        d.addCallback(_publish_stub_client)
+        return d
+
+    def create_announcement(self, furl, service_name, remoteinterface_name,
+                            signing_key, extra_keys):
+        ann_d = {"version": 0,
+                 "service-name": service_name,
+                 "FURL": furl,
+                 "remoteinterface-name": remoteinterface_name,
+
+                 "nickname": self._nickname,
+                 "app-versions": self._app_versions,
+                 "my-version": self._my_version,
+                 "oldest-supported": self._oldest_supported,
+                 }
+        ann_d.update(extra_keys)
+        ann_t = sign_to_foolscap(ann_d, signing_key)
+        return ann_t
+
+    def publish(self, furl, service_name, remoteinterface_name,
+                signing_key=None, extra_keys={}):
+        ann_t = self.create_announcement(furl,
+                                         service_name, remoteinterface_name,
+                                         signing_key, extra_keys)
+        self._published_announcements[service_name] = ann_t
+        self._maybe_publish()
 
     def _maybe_publish(self):
         if not self._publisher:
             self.log("want to publish, but no introducer yet", level=log.NOISY)
             return
         # this re-publishes everything. The Introducer ignores duplicates
-        for ann in self._published_announcements:
+        for ann_t in self._published_announcements.values():
             self._debug_counts["outbound_message"] += 1
-            d = self._publisher.callRemote("publish", ann)
-            d.addErrback(trap_deadref)
-            d.addErrback(log.err,
-                         format="server errored during publish %(ann)s",
-                         ann=ann, facility="tahoe.introducer",
+            self._debug_outstanding += 1
+            d = self._publisher.callRemote("publish_v2", ann_t, self._canary)
+            d.addBoth(self._debug_retired)
+            d.addErrback(self._handle_v1_publisher, ann_t) # for_v1
+            d.addErrback(log.err, ann_t=ann_t,
+                         facility="tahoe.introducer.client",
                          level=log.WEIRD, umid="xs9pVQ")
 
+    def _handle_v1_publisher(self, f, ann_t): # for_v1
+        f.trap(Violation, NameError)
+        # they don't have the 'publish_v2' method, so fall back to the old
+        # 'publish' method (which takes an unsigned tuple of bytestrings)
+        self.log("falling back to publish_v1",
+                 level=log.UNUSUAL, umid="9RCT1A", failure=f)
+        ann_v1 = convert_announcement_v2_to_v1(ann_t)
+        self._debug_outstanding += 1
+        d = self._publisher.callRemote("publish", ann_v1)
+        d.addBoth(self._debug_retired)
+        return d
 
 
-    def remote_announce(self, announcements):
-        self.log("received %d announcements" % len(announcements))
+    def remote_announce_v2(self, announcements):
+        lp = self.log("received %d announcements (v2)" % len(announcements))
+        return self.got_announcements(announcements, lp)
+
+    def got_announcements(self, announcements, lp=None):
+        # this is the common entry point for both v1 and v2 announcements
         self._debug_counts["inbound_message"] += 1
-        for ann in announcements:
+        for ann_t in announcements:
             try:
-                self._process_announcement(ann)
-            except:
-                log.err(format="unable to process announcement %(ann)s",
-                        ann=ann)
-                # Don't let a corrupt announcement prevent us from processing
-                # the remaining ones. Don't return an error to the server,
-                # since they'd just ignore it anyways.
-                pass
+                # this might raise UnknownKeyError or bad-sig error
+                ann_d, key_s = unsign_from_foolscap(ann_t)
+                # key is "v0-base32abc123"
+            except BadSignatureError:
+                self.log("bad signature on inbound announcement: %s" % (ann_t,),
+                         parent=lp, level=log.WEIRD, umid="ZAU15Q")
+                # process other announcements that arrived with the bad one
+                continue
 
-    def _process_announcement(self, ann):
+            self._process_announcement(ann_d, key_s)
+
+    def _process_announcement(self, ann_d, key_s):
         self._debug_counts["inbound_announcement"] += 1
-        (furl, service_name, ri_name, nickname_utf8, ver, oldest) = ann
+        service_name = str(ann_d["service-name"])
         if service_name not in self._subscribed_service_names:
             self.log("announcement for a service we don't care about [%s]"
                      % (service_name,), level=log.UNUSUAL, umid="dIpGNA")
             self._debug_counts["wrong_service"] += 1
             return
-        self.log("announcement for [%s]: %s" % (service_name, ann),
-                 umid="BoKEag")
-        assert type(furl) is str
-        assert type(service_name) is str
-        assert type(ri_name) is str
-        assert type(nickname_utf8) is str
-        nickname = nickname_utf8.decode("utf-8")
-        assert type(nickname) is unicode
-        assert type(ver) is str
-        assert type(oldest) is str
+        # for ASCII values, simplejson might give us unicode *or* bytes
+        if "nickname" in ann_d and isinstance(ann_d["nickname"], str):
+            ann_d["nickname"] = unicode(ann_d["nickname"])
+        nick_s = ann_d.get("nickname",u"").encode("utf-8")
+        lp2 = self.log(format="announcement for nickname '%(nick)s', service=%(svc)s: %(ann)s",
+                       nick=nick_s, svc=service_name, ann=ann_d, umid="BoKEag")
 
-        nodeid = b32decode(SturdyRef(furl).tubID.upper())
-        nodeid_s = idlib.shortnodeid_b2a(nodeid)
+        # how do we describe this node in the logs?
+        desc_bits = []
+        if key_s:
+            desc_bits.append("serverid=" + key_s[:20])
+        if "FURL" in ann_d:
+            tubid_s = get_tubid_string_from_ann_d(ann_d)
+            desc_bits.append("tubid=" + tubid_s[:8])
+        description = "/".join(desc_bits)
 
-        ann_d = { "version": 0,
-                  "service-name": service_name,
+        # the index is used to track duplicates
+        index = make_index(ann_d, key_s)
 
-                  "FURL": furl,
-                  "nickname": nickname,
-                  "app-versions": {}, # need #466 and v2 introducer
-                  "my-version": ver,
-                  "oldest-supported": oldest,
-                  }
-
-        index = (service_name, nodeid)
-        if self._current_announcements.get(index, None) == ann_d:
-            self.log("reannouncement for [%(service)s]:%(nodeid)s, ignoring",
-                     service=service_name, nodeid=nodeid_s,
-                     level=log.UNUSUAL, umid="B1MIdA")
+        # is this announcement a duplicate?
+        if self._current_announcements.get(index, [None]*3)[0] == ann_d:
+            self.log(format="reannouncement for [%(service)s]:%(description)s, ignoring",
+                     service=service_name, description=description,
+                     parent=lp2, level=log.UNUSUAL, umid="B1MIdA")
             self._debug_counts["duplicate_announcement"] += 1
             return
+        # does it update an existing one?
         if index in self._current_announcements:
             self._debug_counts["update"] += 1
+            self.log("replacing old announcement: %s" % (ann_d,),
+                     parent=lp2, level=log.NOISY, umid="wxwgIQ")
         else:
             self._debug_counts["new_announcement"] += 1
+            self.log("new announcement[%s]" % service_name,
+                     parent=lp2, level=log.NOISY)
 
-        self._current_announcements[index] = ann_d
+        self._current_announcements[index] = (ann_d, key_s, time.time())
         # note: we never forget an index, but we might update its value
 
         for (service_name2,cb,args,kwargs) in self._local_subscribers:
             if service_name2 == service_name:
-                eventually(cb, nodeid, ann_d, *args, **kwargs)
+                eventually(cb, key_s, ann_d, *args, **kwargs)
 
     def remote_set_encoding_parameters(self, parameters):
         self.encoding_parameters = parameters

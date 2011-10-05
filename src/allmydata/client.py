@@ -6,7 +6,6 @@ from zope.interface import implements
 from twisted.internet import reactor, defer
 from twisted.application import service
 from twisted.application.internet import TimerService
-from foolscap.api import Referenceable
 from pycryptopp.publickey import rsa
 
 import allmydata
@@ -22,8 +21,7 @@ from allmydata.util.abbreviate import parse_abbreviated_size
 from allmydata.util.time_format import parse_duration, parse_date
 from allmydata.stats import StatsProvider
 from allmydata.history import History
-from allmydata.interfaces import IStatsProducer, RIStubClient, \
-                                 SDMF_VERSION, MDMF_VERSION
+from allmydata.interfaces import IStatsProducer, SDMF_VERSION, MDMF_VERSION
 from allmydata.nodemaker import NodeMaker
 from allmydata.blacklist import Blacklist
 
@@ -33,9 +31,6 @@ MiB=1024*KiB
 GiB=1024*MiB
 TiB=1024*GiB
 PiB=1024*TiB
-
-class StubClient(Referenceable):
-    implements(RIStubClient)
 
 def _make_secret():
     return base32.b2a(os.urandom(hashutil.CRYPTO_VAL_SIZE)) + "\n"
@@ -173,7 +168,8 @@ class Client(node.Node, pollmixin.PollMixin):
         ic = IntroducerClient(self.tub, self.introducer_furl,
                               self.nickname,
                               str(allmydata.__full_version__),
-                              str(self.OLDEST_SUPPORTED_VERSION))
+                              str(self.OLDEST_SUPPORTED_VERSION),
+                              self.get_app_versions())
         self.introducer_client = ic
         # hold off on starting the IntroducerClient until our tub has been
         # started, so we'll have a useful address on our RemoteReference, so
@@ -280,7 +276,6 @@ class Client(node.Node, pollmixin.PollMixin):
         self.terminator.setServiceParent(self)
         self.add_service(Uploader(helper_furl, self.stats_provider,
                                   self.history))
-        self.init_stub_client()
         self.init_blacklist()
         self.init_nodemaker()
 
@@ -319,20 +314,6 @@ class Client(node.Node, pollmixin.PollMixin):
 
     def get_storage_broker(self):
         return self.storage_broker
-
-    def init_stub_client(self):
-        def _publish(res):
-            # we publish an empty object so that the introducer can count how
-            # many clients are connected and see what versions they're
-            # running.
-            sc = StubClient()
-            furl = self.tub.registerReference(sc)
-            ri_name = RIStubClient.__remote_name__
-            self.introducer_client.publish(furl, "stub_client", ri_name)
-        d = self.when_tub_ready()
-        d.addCallback(_publish)
-        d.addErrback(log.err, facility="tahoe.init",
-                     level=log.BAD, umid="OEHq3g")
 
     def init_blacklist(self):
         fn = os.path.join(self.basedir, "access.blacklist")

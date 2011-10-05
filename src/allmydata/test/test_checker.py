@@ -24,7 +24,7 @@ class WebResultsRendering(unittest.TestCase, WebRenderingMixin):
                                    ("\x11"*20, "peer-11")] :
             ann_d = { "version": 0,
                       "service-name": "storage",
-                      "FURL": "fake furl",
+                      "FURL": "pb://abcde@nowhere/fake",
                       "nickname": unicode(nickname),
                       "app-versions": {}, # need #466 and v2 introducer
                       "my-version": "ver",
