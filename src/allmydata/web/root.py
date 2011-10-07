@@ -268,6 +268,14 @@ class Root(rend.Page):
             return "normal: full read+write"
         status_d.addCallback(_format_status)
         ctx.fillSlots("status", status_d) # TODO: blocks the whole page
+        # consider this:
+        #  cache the status, with a timestamp
+        #  if the status is more than 5 minutes out of date:
+        #    put a "?" here
+        #    and send queries to update it
+        #  that means get_account_status() returns immediately, can return
+        #  None, and fires off requests in the background.
+        # same for descriptor.get_claimed_usage() below
 
         message_d = descriptor.get_server_message()
         def _format_message(msg):
