@@ -293,6 +293,15 @@ class Client(node.Node, pollmixin.PollMixin):
         self.accountant = accountant
         self.add_service(ss)
 
+        # TODO: another idea: now that we can, publish a separate FURL for
+        # the Accountant. Continue to use ann_d["FURL"] for the
+        # anonymous-access StorageServer, but add ann_d["accountant_FURL"]
+        # for the accountant desk. Aware clients will connect to the latter
+        # and use it to upgrade to a (personalized) IStorageServer reference.
+        # Older clients will go straight for the anonymous-access FURL. That
+        # way, we don't have to do the weird mixing of StorageServer and
+        # Accountant classes into a single object.
+
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready
         def _publish(res):
