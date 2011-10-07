@@ -2,6 +2,8 @@
 import os, time, weakref
 from twisted.application import service
 from foolscap.api import Referenceable
+class BadAccountName(Exception):
+    pass
 
 class Account(Referenceable):
     def __init__(self, owner_num, server, accountdir):
@@ -167,6 +169,8 @@ class Accountant(service.MultiService):
         return self._active_accounts[pubkey_vs] # a is still alive
 
     def get_ownernum_by_pubkey(self, pubkey_vs):
+        if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):
+            raise BadAccountName("unacceptable characters in pubkey")
         assert ("." not in pubkey_vs and "/" not in pubkey_vs)
         accountdir = os.path.join(self.accountsdir, pubkey_vs)
         if not os.path.isdir(accountdir):
