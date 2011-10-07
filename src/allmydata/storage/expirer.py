@@ -456,6 +456,28 @@ class AccountingCrawler(ShareCrawler):
     (e.g. when the admin deletes a sharefile with /bin/rm).
     """
 
+    # XXX TODO new idea: move all leases into the DB. Do not store leases in
+    # shares at all. The crawler will exist solely to discover shares that
+    # have been manually added to disk (via 'scp' or some out-of-band means),
+    # and will add 30- or 60- day "migration leases" to them, to keep them
+    # alive until their original owner does a deep-add-lease and claims them
+    # properly. Better migration tools ('tahoe storage export'?) will create
+    # export files that include both the share data and the lease data, and
+    # then an import tool will both put the share in the right place and
+    # update the recipient node's lease DB.
+    #
+    # I guess the crawler will also be responsible for deleting expired
+    # shares, since it will be looking at both share files on disk and leases
+    # in the DB.
+    #
+    # So the DB needs a row per share-on-disk, and a separate table with
+    # leases on each bucket. When it sees a share-on-disk that isn't in the
+    # first table, it adds the migration-lease. When it sees a share-on-disk
+    # that is in the first table but has no leases in the second table (i.e.
+    # expired), it deletes both the share and the first-table row. When it
+    # sees a row in the first table but no share-on-disk (i.e. manually
+    # deleted share), it deletes the row (and any leases).
+
     slow_start = 7*60 # wait 7 minutes after startup
     minimum_cycle_time = 12*60*60 # not more than twice per day
 
@@ -497,7 +519,7 @@ class AccountingCrawler(ShareCrawler):
 
     # ideally, leases should be on buckets, not shares, so none of the
     # following data structures would be eyed on shnum. putting two shares on
-    # the same server would mean 'size' is double the usualy value, but would
+    # the same server would mean 'size' is double the usual value, but would
     # not otherwise be visible in the leasedb. But, since we want share files
     # to be canonical, leases need to live inside shares for now, which means
     # the leasedb is aware of shnums.
