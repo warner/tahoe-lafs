@@ -74,7 +74,7 @@ class StorageFarmBroker:
         self.introducer_client = None
 
     # these two are used in unit tests
-    def test_add_rref(self, serverid, rref, ann_d={}):
+    def test_add_rref(self, serverid, rref, ann_d):
         s = NativeStorageServer(serverid, ann_d.copy())
         s.rref = rref
         self.servers[serverid] = s
