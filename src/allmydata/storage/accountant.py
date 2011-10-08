@@ -81,15 +81,22 @@ class Account(AnonymousAccount):
         AnonymousAccount.__init__(self, owner_num, server, accountdir)
         self.connected = False
         self.connected_since = None
-    def remote_get_status(self):
+        self.connection = None
         import random
         def maybe(): return bool(random.randint(0,1))
-        return {"write": maybe(), "read": maybe(), "save": maybe()}
+        self.status = {"write": maybe(),
+                       "read": maybe(),
+                       "save": maybe(),
+                       }
+        self.account_message = {
+            "message": "free storage! %d" % random.randint(0,10),
+            "fancy": "free pony if you knew how to ask",
+            }
+
+    def remote_get_status(self):
+        return self.status
     def remote_get_account_message(self):
-        import random
-        return {"message": "free storage! %d" % random.randint(0,10),
-                "fancy": "free pony if you knew how to ask",
-                }
+        return self.account_message
 
     # these are the non-RIStorageServer methods, some remote, some local
 
@@ -129,6 +136,7 @@ class Account(AnonymousAccount):
     def connection_from(self, rx):
         self.connected = True
         self.connected_since = time.time()
+        self.connection = rx
         rhost = rx.getPeer()
         from twisted.internet import address
         if isinstance(rhost, address.IPv4Address):
@@ -143,8 +151,24 @@ class Account(AnonymousAccount):
     def _disconnected(self):
         self.connected = False
         self.connected_since = None
+        self.connection = None
         self._write(str(int(time.time())), "last_seen")
         self.disconnected_since = None
+
+    def _send_status(self):
+        self.connection.callRemoteOnly("status", self.status)
+    def _send_account_message(self):
+        self.connection.callRemoteOnly("account_message", self.account_message)
+
+    def set_status(self, write, read, save):
+        self.status = { "write": write,
+                        "read": read,
+                        "save": save,
+                        }
+        self._send_status()
+    def set_account_message(self, message):
+        self.account_message = message
+        self._send_account_message()
 
     def get_connection_status(self):
         # starts as: connected=False, connected_since=None,

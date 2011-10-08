@@ -337,6 +337,14 @@ class NativeStorageServer(Referenceable):
         nickname = self.client_info.get("nickname", u"<none>")
         account.callRemoteOnly("set_nickname", nickname)
 
+    def remote_status(self, status):
+        self.accounting_status = status
+        # maybe notify local subscribers. status["write"] tells us whether
+        # it's worth sending data to this server
+
+    def remote_account_message(self, account_message):
+        self.account_message = account_message
+        # maybe notify
 
     def get_rref(self):
         return self.rref
