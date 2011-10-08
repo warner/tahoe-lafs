@@ -490,6 +490,46 @@ class AccountingCrawler(ShareCrawler):
         self._expire_time = None
 
     def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
+        # assume that we can list every bucketdir and stat every sharefile in
+        # this prefix quickly. Otherwise we have to retain more state between
+        # timeslices.
+        shares = {}
+        for bucket in buckets:
+            bucketdir = os.path.join(prefixdir, bucket)
+            for sharefile in os.listdir(bucketdir):
+                try:
+                    shnum = int(sharefile)
+                except ValueError:
+                    continue
+                stat = os.stat(os.path.join(bucketdir, sharefile))
+                def size_of_disk_file(stat_results):
+                    return stat_results.st_blocks * 512
+                share_size = size_of_disk_file(stat)
+                shares[(bucket,shnum)] = (share_size, stat.mtime)
+        current_shares = set(shares)
+
+        # now check the database for everything in this prefix
+        c = self._cursor
+        c.execute("SELECT `storage_index`,`shnum`,`last_mtime`"
+                  " FROM `shares`"
+                  " WHERE `prefix` == ?",
+                  (prefix,))
+        db_shares = dict([((si,shnum), last_mtime)
+                          for (si,shnum,last_mtime) in c.fetchall()])
+        known_shares = set(db_shares)
+
+        # add new shares to the DB
+        for si_shnum in (current_shares - known_shares):
+            storage_index, shnum = si_shnum
+            self._add_share(prefix, storage_index, shnum)
+            db_shares[si_shnum] = 0 # last_mtime, forces size update
+        # remove deleted shares
+        deleted_share_sis = [si for (si,shnum)
+                             in (known_shares - current_shares)]
+        qmarks = "(" + ",".join(["?"] * len(leftover)) + ")"
+        c.execute("DELETE FROM `shares`"
+                  ...
+        
         # start by removing any leftover DB rows: this needs to happen in the
         # same reactor turn as the os.listdir() that produced 'buckets'
         c = self._cursor

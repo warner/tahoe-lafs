@@ -8,6 +8,24 @@ from allmydata.interfaces import RIStorageServer
 class BadAccountName(Exception):
     pass
 
+LEASE_SCHEMA_V1 = """
+CREATE TABLE shares
+(
+ `prefix` VARCHAR(2),
+ `storage_index` VARCHAR(26),
+ `shnum` INTEGER,
+ `last_mtime` INTEGER,
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT
+);
+CREATE TABLE leases
+(
+ `share_id` INTEGER,
+ `account_id` INTEGER,
+ `expiration_time` INTEGER
+);
+"""
+
+
 class AnonymousAccount(Referenceable):
     implements(RIStorageServer)
 
