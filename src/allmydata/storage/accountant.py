@@ -1,29 +1,23 @@
 
-import os, time, weakref
+import os, time, weakref, re
+from zope.interface import implements
 from twisted.application import service
 from foolscap.api import Referenceable
+from allmydata.interfaces import RIStorageServer
+
 class BadAccountName(Exception):
     pass
 
-class Account(Referenceable):
+class AnonymousAccount(Referenceable):
+    implements(RIStorageServer)
+
     def __init__(self, owner_num, server, accountdir):
         self.owner_num = owner_num
         self.server = server
         self.accountdir = accountdir
-        self.connected = False
-        self.connected_since = None
 
     def remote_get_version(self):
         return self.server.remote_get_version()
-    def remote_get_status(self):
-        import random
-        def maybe(): return bool(random.randint(0,1))
-        return {"write": maybe(), "read": maybe(), "save": maybe()}
-    def remote_get_account_message(self):
-        import random
-        return {"message": "free storage! %d" % random.randint(0,10),
-                "fancy": "free pony if you knew how to ask",
-                }
     # all other RIStorageServer methods should pass through to self.server
     # but add owner_num=
 
@@ -63,6 +57,21 @@ class Account(Referenceable):
                                     reason):
         return self.server.remote_advise_corrupt_share(
             share_type, storage_index, shnum, reason)
+
+class Account(AnonymousAccount):
+    def __init__(self, owner_num, server, accountdir):
+        AnonymousAccount.__init__(self, owner_num, server, accountdir)
+        self.connected = False
+        self.connected_since = None
+    def remote_get_status(self):
+        import random
+        def maybe(): return bool(random.randint(0,1))
+        return {"write": maybe(), "read": maybe(), "save": maybe()}
+    def remote_get_account_message(self):
+        import random
+        return {"message": "free storage! %d" % random.randint(0,10),
+                "fancy": "free pony if you knew how to ask",
+                }
 
     # these are the non-RIStorageServer methods, some remote, some local
 
@@ -138,8 +147,9 @@ class Account(Referenceable):
                 }
 
 class Accountant(service.MultiService):
-    def __init__(self, basedir, create_if_missing):
+    def __init__(self, basedir, storage_server, create_if_missing):
         service.MultiService.__init__(self)
+        self.storage_server = storage_server
         self.accountsdir = os.path.join(basedir, "accounts")
         if not os.path.isdir(self.accountsdir):
             os.mkdir(self.accountsdir)
@@ -160,13 +170,20 @@ class Accountant(service.MultiService):
 
     # methods used by StorageServer
 
-    def get_account(self, pubkey_vs, storage_server):
+    def get_account(self, pubkey_vs):
         ownernum = self.get_ownernum_by_pubkey(pubkey_vs)
         if pubkey_vs not in self._active_accounts:
-            a = Account(ownernum, storage_server,
+            a = Account(ownernum, self.storage_server,
                         os.path.join(self.accountsdir, pubkey_vs))
             self._active_accounts[pubkey_vs] = a
         return self._active_accounts[pubkey_vs] # a is still alive
+
+    def get_anonymous_account(self):
+        if not self._anonymous_account:
+            a = AnonymousAccount(0, self.storage_server,
+                                 os.path.join(self.accountsdir, "anonymous"))
+            self._anonymous_account = a
+        return self._anonymous_account
 
     def get_ownernum_by_pubkey(self, pubkey_vs):
         if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):

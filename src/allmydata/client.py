@@ -8,7 +8,7 @@ from twisted.application.internet import TimerService
 from pycryptopp.publickey import rsa
 
 import allmydata
-from allmydata.storage.server import StorageServerAndAccountant
+from allmydata.storage.server import StorageServer, AccountantWindow
 from allmydata.storage.accountant import Accountant
 from allmydata import storage_client
 from allmydata.immutable.upload import Uploader
@@ -276,22 +276,26 @@ class Client(node.Node, pollmixin.PollMixin):
             sharetypes.append("mutable")
         expiration_sharetypes = tuple(sharetypes)
 
-        ss_class = StorageServerAndAccountant
-        ss = ss_class(storedir, self.nodeid,
-                      reserved_space=reserved,
-                      discard_storage=discard,
-                      readonly_storage=readonly,
-                      stats_provider=self.stats_provider,
-                      expiration_enabled=expire,
-                      expiration_mode=mode,
-                      expiration_override_lease_duration=o_l_d,
-                      expiration_cutoff_date=cutoff_date,
-                      expiration_sharetypes=expiration_sharetypes)
-        accountant = Accountant(self.basedir, create_if_missing=True)
-        self.add_service(accountant)
-        ss.set_accountant(accountant, self.tub)
-        self.accountant = accountant
+        ss = StorageServer(storedir, self.nodeid,
+                           reserved_space=reserved,
+                           discard_storage=discard,
+                           readonly_storage=readonly,
+                           stats_provider=self.stats_provider,
+                           expiration_enabled=expire,
+                           expiration_mode=mode,
+                           expiration_override_lease_duration=o_l_d,
+                           expiration_cutoff_date=cutoff_date,
+                           expiration_sharetypes=expiration_sharetypes)
         self.add_service(ss)
+        self.storage_server = ss
+
+        accountant = Accountant(self.basedir, ss, create_if_missing=True)
+        self.add_service(accountant)
+        self.accountant = accountant
+
+        accountant_window = AccountantWindow(accountant, self.tub)
+
+        legacy_account = accountant.get_anonymous_account()
 
         # TODO: another idea: now that we can, publish a separate FURL for
         # the Accountant. Continue to use ann_d["FURL"] for the
@@ -307,7 +311,12 @@ class Client(node.Node, pollmixin.PollMixin):
         def _publish(res):
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
+
+            furl2_file = os.path.join(self.basedir, "private", "accountant.furl").encode(get_filesystem_encoding())
+            furl2 = self.tub.registerReference(accountant_window, furlFile=furl2_file)
+
             ann = {"anonymous-storage-FURL": furl,
+                   "accountant-FURL": furl2,
                    "permutation-seed-base32": self._init_permutation_seed(ss),
                    }
             self.introducer_client.publish("storage", ann, self._server_key)

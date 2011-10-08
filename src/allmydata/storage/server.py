@@ -5,7 +5,7 @@ from foolscap.api import Referenceable
 from twisted.application import service
 
 from zope.interface import implements
-from allmydata.interfaces import RIStorageServer, IStatsProducer
+from allmydata.interfaces import IStatsProducer
 from allmydata.util import fileutil, idlib, log, time_format, keyutil
 import allmydata # for __full_version__
 
@@ -17,7 +17,6 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
-from allmydata.storage.accountant import Account
 
 # storage/
 # storage/shares/incoming
@@ -34,8 +33,8 @@ NUM_RE=re.compile("^[0-9]+$")
 
 
 
-class StorageServer(service.MultiService, Referenceable):
-    implements(RIStorageServer, IStatsProducer)
+class StorageServer(service.MultiService):
+    implements(IStatsProducer)
     name = 'storage'
     LeaseCheckerClass = LeaseCheckingCrawler
 
@@ -553,12 +552,8 @@ class StorageServer(service.MultiService, Referenceable):
 
 
 
-class StorageServerAndAccountant(StorageServer):
-    # when anonymous storage goes away, we expose Accountant instead, which
-    # will have just these two methods, and created to wrap a StorageServer
-    # instead of subclassing it.
-
-    def set_accountant(self, accountant, tub):
+class AccountantWindow(Referenceable):
+    def __init__(self, accountant, tub):
         self.accountant = accountant
         self.tub = tub
 
@@ -566,7 +561,7 @@ class StorageServerAndAccountant(StorageServer):
         print "GETTING ACCOUNT", msg
         vk = keyutil.parse_pubkey(pubkey_vs)
         vk.verify(sig, msg)
-        account = self.accountant.get_account(pubkey_vs, self)
+        account = self.accountant.get_account(pubkey_vs)
         msg_d = simplejson.loads(msg.decode("utf-8"))
         rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
         d = self.tub.getReference(rxFURL)
@@ -576,9 +571,3 @@ class StorageServerAndAccountant(StorageServer):
         d.addCallback(_got_rx)
         d.addErrback(log.err, umid="nFYfcA")
         return d
-
-    def get_account(self, pubkey_s):
-        #owner_num = X(pubkey_s)
-        owner_num = 2
-        server = self
-        return Account(owner_num, server)
