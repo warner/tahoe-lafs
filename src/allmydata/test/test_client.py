@@ -141,7 +141,7 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
     def test_permute(self):
         sb = StorageFarmBroker(None, True)
         for k in ["%d" % i for i in range(5)]:
-            ann_d = {"FURL": "pb://abcde@nowhere/fake",
+            ann_d = {"anonymous-storage-FURL": "pb://abcde@nowhere/fake",
                      "permutation-seed-base32": base32.b2a(k) }
             sb.test_add_rref(k, "rref", ann_d)
 

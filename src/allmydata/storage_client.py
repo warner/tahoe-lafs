@@ -186,10 +186,8 @@ class NativeStorageServer:
         assert m, furl
         tubid_s = m.group(1).lower()
         self._tubid = base32.a2b(tubid_s)
-        if "permutation-seed-base32" in ann_d:
-            ps = base32.a2b(str(ann_d["permutation-seed-base32"]))
-        else:
-            ps = self._tubid
+        assert "permutation-seed-base32" in ann_d, ann_d
+        ps = base32.a2b(str(ann_d["permutation-seed-base32"]))
         self._permutation_seed = ps
 
         name = key_s or tubid_s

@@ -78,14 +78,15 @@ class IIntroducerClient(Interface):
     publish their services to the rest of the world, and I help them learn
     about services available on other nodes."""
 
-    def publish(furl, service_name, remoteinterface_name,
-                signing_key=None):
-        """Once you call this, I will tell the world that the Referenceable
-        available at FURL is available to provide a service named
-        SERVICE_NAME. The precise definition of the service being provided is
-        identified by the Foolscap 'remote interface name' in the last
-        parameter: this is supposed to be a globally-unique string that
-        identifies the RemoteInterface that is implemented.
+    def publish(service_name, ann_d, signing_key=None):
+        """Publish the given announcement dictionary (which must be
+        JSON-serializable), plus some additional keys, to the world.
+
+        Each announcement is characterized by a (service_name, serverid)
+        pair. When the server sees two announcements with the same pair, the
+        later one will replace the earlier one. The serverid is derived from
+        the signing_key, if present, otherwise it is derived from the
+        'anonymous-storage-FURL' key.
 
         If signing_key= is set to an instance of SigningKey, it will be
         used to sign the announcement."""
@@ -108,14 +109,13 @@ class IIntroducerClient(Interface):
         expected to have at least the following keys:
 
          version: 0
-         service-name: str('storage')
-
-         FURL: str(furl)
-         remoteinterface-name: str(ri_name)
          nickname: unicode
          app-versions: {}
          my-version: str
          oldest-supported: str
+
+         service-name: str('storage')
+         anonymous-storage-FURL: str(furl)
 
         Note that app-version will be an empty dictionary if either the
         publishing client or the Introducer are running older code.

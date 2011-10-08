@@ -55,7 +55,7 @@ class IntroducerRoot(rend.Page):
             # enough: when multiple services are run on a single host,
             # they're usually either configured with the same addresses,
             # or setLocationAutomatically picks up the same interfaces.
-            furl = ann_d["FURL"]
+            furl = ann_d["anonymous-storage-FURL"]
             locations = SturdyRef(furl).getTubRef().getLocations()
             # list of tuples, ("ipv4", host, port)
             host = frozenset([hint[1]
@@ -117,7 +117,7 @@ class IntroducerRoot(rend.Page):
         return ann
 
     def render_service_row(self, ctx, (since,ann_d)):
-        sr = SturdyRef(ann_d["FURL"])
+        sr = SturdyRef(ann_d["anonymous-storage-FURL"])
         nodeid = sr.tubID
         advertised = self.show_location_hints(sr)
         ctx.fillSlots("peerid", "%s %s" % (nodeid, ann_d["nickname"]))

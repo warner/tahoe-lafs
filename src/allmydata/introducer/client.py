@@ -8,7 +8,7 @@ from allmydata.introducer.interfaces import IIntroducerClient, \
      RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
 from allmydata.introducer.common import sign_to_foolscap, unsign_from_foolscap,\
      convert_announcement_v1_to_v2, convert_announcement_v2_to_v1, \
-     make_index, get_tubid_string_from_ann_d
+     make_index, get_tubid_string_from_ann_d, get_tubid_string
 from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.keyutil import BadSignatureError
@@ -191,20 +191,28 @@ class IntroducerClient(service.Service, Referenceable):
             self._stub_client = sc = StubClient()
             self._stub_client_furl = self._tub.registerReference(sc)
         def _publish_stub_client(ignored):
-            ri_name = RIStubClient.__remote_name__
-            self.publish(self._stub_client_furl, "stub_client", ri_name)
+            furl = self._stub_client_furl
+            self.publish("stub_client",
+                         { "anonymous-storage-FURL": furl,
+                           "permutation-seed-base32": get_tubid_string(furl),
+                           })
         d.addCallback(_publish_stub_client)
         return d
 
-    def publish(self, ann_d, signing_key=None):
-        ann_d = ann_d.copy()
-        ann_d.update( {"version": 0,
+    def create_announcement(self, service_name, ann_d, signing_key):
+        full_ann_d = { "version": 0,
                        "nickname": self._nickname,
                        "app-versions": self._app_versions,
                        "my-version": self._my_version,
                        "oldest-supported": self._oldest_supported,
-                       } )
-        ann_t = sign_to_foolscap(ann_d, signing_key)
+
+                       "service-name": service_name,
+                       }
+        full_ann_d.update(ann_d)
+        return sign_to_foolscap(full_ann_d, signing_key)
+
+    def publish(self, service_name, ann_d, signing_key=None):
+        ann_t = self.create_announcement(service_name, ann_d, signing_key)
         self._published_announcements[service_name] = ann_t
         self._maybe_publish()
 
@@ -275,7 +283,7 @@ class IntroducerClient(service.Service, Referenceable):
         desc_bits = []
         if key_s:
             desc_bits.append("serverid=" + key_s[:20])
-        if "FURL" in ann_d:
+        if "anonymous-storage-FURL" in ann_d:
             tubid_s = get_tubid_string_from_ann_d(ann_d)
             desc_bits.append("tubid=" + tubid_s[:8])
         description = "/".join(desc_bits)

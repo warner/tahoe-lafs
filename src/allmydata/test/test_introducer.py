@@ -11,7 +11,8 @@ from twisted.application import service
 from allmydata.interfaces import InsufficientVersionError
 from allmydata.introducer.client import IntroducerClient, ClientAdapter_v1
 from allmydata.introducer.server import IntroducerService
-from allmydata.introducer.common import get_tubid_string_from_ann_d
+from allmydata.introducer.common import get_tubid_string_from_ann_d, \
+     get_tubid_string
 from allmydata.introducer import old
 # test compatibility with old introducer .tac files
 from allmydata.introducer import IntroducerNode
@@ -76,6 +77,13 @@ class Introducer(ServiceMixin, unittest.TestCase, pollmixin.PollMixin):
         self.failUnlessEqual(len(i.get_subscribers()), 0)
 
 
+def make_ann_d(furl):
+    ann_d = { "anonymous-storage-FURL": furl,
+              "permutation-seed-base32": get_tubid_string(furl) }
+    return ann_d
+
+def make_ann_t(ic, furl, privkey):
+    return ic.create_announcement("storage", make_ann_d(furl), privkey)
 
 class Client(unittest.TestCase):
     def test_duplicate_receive_v1(self):
@@ -154,14 +162,10 @@ class Client(unittest.TestCase):
         # ann1b: ic2, furl1
         # ann2: ic2, furl2
 
-        self.ann1 = ic1.create_announcement(furl1, "storage", "RIStorage",
-                                            privkey, {})
-        self.ann1a =  ic1.create_announcement(furl1a, "storage", "RIStorage",
-                                              privkey, {})
-        self.ann1b = ic2.create_announcement(furl1, "storage", "RIStorage",
-                                             privkey, {})
-        self.ann2 = ic2.create_announcement(furl2, "storage", "RIStorage",
-                                            privkey, {})
+        self.ann1 = make_ann_t(ic1, furl1, privkey)
+        self.ann1a = make_ann_t(ic1, furl1a, privkey)
+        self.ann1b = make_ann_t(ic2, furl1, privkey)
+        self.ann2 = make_ann_t(ic2, furl2, privkey)
 
         ic1.remote_announce_v2([self.ann1]) # queues eventual-send
         d = fireEventually()
@@ -169,7 +173,7 @@ class Client(unittest.TestCase):
             self.failUnlessEqual(len(announcements), 1)
             key_s,ann_d = announcements[0]
             self.failUnlessEqual(key_s, pubkey_s)
-            self.failUnlessEqual(ann_d["FURL"], furl1)
+            self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then1)
 
@@ -189,7 +193,7 @@ class Client(unittest.TestCase):
             self.failUnlessEqual(len(announcements), 2)
             key_s,ann_d = announcements[-1]
             self.failUnlessEqual(key_s, pubkey_s)
-            self.failUnlessEqual(ann_d["FURL"], furl1)
+            self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1)
             self.failUnlessEqual(ann_d["my-version"], "ver24")
         d.addCallback(_then3)
 
@@ -201,7 +205,7 @@ class Client(unittest.TestCase):
             self.failUnlessEqual(len(announcements), 3)
             key_s,ann_d = announcements[-1]
             self.failUnlessEqual(key_s, pubkey_s)
-            self.failUnlessEqual(ann_d["FURL"], furl1a)
+            self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1a)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then4)
 
@@ -217,7 +221,7 @@ class Client(unittest.TestCase):
             self.failUnlessEqual(len(announcements2), 1)
             key_s,ann_d = announcements2[-1]
             self.failUnlessEqual(key_s, pubkey_s)
-            self.failUnlessEqual(ann_d["FURL"], furl1a)
+            self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1a)
             self.failUnlessEqual(ann_d["my-version"], "ver23")
         d.addCallback(_then5)
         return d
@@ -300,14 +304,16 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
 
             node_furl = tub.registerReference(Referenceable())
             if i < NUM_STORAGE:
-                if i == 1:
+                if i == 0:
+                    c.publish(node_furl, "storage", "ri_name")
+                elif i == 1:
                     # sign the announcement
                     privkey = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p,
                                                         hashfunc=hashutil.SHA256)
                     privkeys[c] = privkey
-                    c.publish(node_furl, "storage", "ri_name", privkey)
+                    c.publish("storage", make_ann_d(node_furl), privkey)
                 else:
-                    c.publish(node_furl, "storage", "ri_name")
+                    c.publish("storage", make_ann_d(node_furl))
                 publishing_clients.append(c)
             else:
                 # the last one does not publish anything
@@ -323,7 +329,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
             if i == 2:
                 # also publish something that nobody cares about
                 boring_furl = tub.registerReference(Referenceable())
-                c.publish(boring_furl, "boring", "ri_name")
+                c.publish("boring", make_ann_d(boring_furl))
 
             c.setServiceParent(self.parent)
             clients.append(c)
@@ -579,7 +585,7 @@ class ClientInfo(unittest.TestCase):
         client_v2 = IntroducerClient(tub, introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions)
         #furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        #ann_s = client_v2.create_announcement(furl1, "storage", "RIStorage")
+        #ann_s = make_ann_t(client_v2, furl1, None)
         #introducer.remote_publish_v2(ann_s, Referenceable())
         subscriber = FakeRemoteReference()
         introducer.remote_subscribe_v2(subscriber, "storage",
@@ -654,8 +660,7 @@ class Announcements(unittest.TestCase):
                                      "my_version", "oldest", app_versions)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
         serverid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
-        ann_s0 = client_v2.create_announcement(furl1, "storage", "RIStorage",
-                                               None, {})
+        ann_s0 = make_ann_t(client_v2, furl1, None)
         canary0 = Referenceable()
         introducer.remote_publish_v2(ann_s0, canary0)
         a = introducer.get_announcements()
@@ -667,7 +672,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(ann_d["nickname"], u"nick-v2")
         self.failUnlessEqual(ann_d["service-name"], "storage")
         self.failUnlessEqual(ann_d["my-version"], "my_version")
-        self.failUnlessEqual(ann_d["FURL"], furl1)
+        self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1)
 
     def test_client_v2_signed(self):
         introducer = IntroducerService()
@@ -680,8 +685,7 @@ class Announcements(unittest.TestCase):
                                        hashfunc=hashutil.SHA256)
         pk = sk.get_verifying_key()
         pks = "v0-"+base32.b2a(pk.to_string())
-        ann_t0 = client_v2.create_announcement(furl1, "storage", "RIStorage",
-                                               sk, {})
+        ann_t0 = make_ann_t(client_v2, furl1, sk)
         canary0 = Referenceable()
         introducer.remote_publish_v2(ann_t0, canary0)
         a = introducer.get_announcements()
@@ -693,7 +697,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(ann_d["nickname"], u"nick-v2")
         self.failUnlessEqual(ann_d["service-name"], "storage")
         self.failUnlessEqual(ann_d["my-version"], "my_version")
-        self.failUnlessEqual(ann_d["FURL"], furl1)
+        self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1)
 
     def test_client_v1(self):
         introducer = IntroducerService()
@@ -713,7 +717,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(ann_d["nickname"], u"nick-v1".encode("utf-8"))
         self.failUnlessEqual(ann_d["service-name"], "storage")
         self.failUnlessEqual(ann_d["my-version"], "my_version")
-        self.failUnlessEqual(ann_d["FURL"], furl1)
+        self.failUnlessEqual(ann_d["anonymous-storage-FURL"], furl1)
 
 
 class TooNewServer(IntroducerService):

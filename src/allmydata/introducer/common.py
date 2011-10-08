@@ -16,7 +16,8 @@ def make_index(ann_d, key_s):
         return (service_name, tubid)
 
 def get_tubid_string_from_ann_d(ann_d):
-    return get_tubid_string(str(ann_d["FURL"]))
+    return get_tubid_string(str(ann_d.get("anonymous-storage-FURL")
+                                or ann_d.get("FURL")))
 
 def get_tubid_string(furl):
     m = re.match(r'pb://(\w+)@', furl)
@@ -27,20 +28,19 @@ def convert_announcement_v1_to_v2(ann_t):
     (furl, service_name, ri_name, nickname, ver, oldest) = ann_t
     assert type(furl) is str
     assert type(service_name) is str
-    assert type(ri_name) is str
+    # ignore ri_name
     assert type(nickname) is str
     assert type(ver) is str
     assert type(oldest) is str
     ann_d = {"version": 0,
-             "service-name": service_name,
-             "anonymous-storage-FURL": furl,
-             "remoteinterface-name": ri_name,
-             # consider adding [permutation-seed-base32] here
-
              "nickname": nickname.decode("utf-8"),
              "app-versions": {},
              "my-version": ver,
              "oldest-supported": oldest,
+
+             "service-name": service_name,
+             "anonymous-storage-FURL": furl,
+             "permutation-seed-base32": get_tubid_string(furl),
              }
     msg = simplejson.dumps(ann_d).encode("utf-8")
     return (msg, None, None)
@@ -51,7 +51,7 @@ def convert_announcement_v2_to_v1(ann_v2):
     assert ann_d["version"] == 0
     ann_t = (str(ann_d["anonymous-storage-FURL"]),
              str(ann_d["service-name"]),
-             str(ann_d["remoteinterface-name"]),
+             "remoteinterface-name is unused",
              ann_d["nickname"].encode("utf-8"),
              str(ann_d["my-version"]),
              str(ann_d["oldest-supported"]),
