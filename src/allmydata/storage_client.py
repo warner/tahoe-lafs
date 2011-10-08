@@ -180,8 +180,8 @@ class NativeStorageServer:
         self.announcement = ann_d
         self.min_shares = min_shares
 
-        assert "FURL" in ann_d, ann_d
-        furl = str(ann_d["FURL"])
+        assert "anonymous-storage-FURL" in ann_d, ann_d
+        furl = str(ann_d["anonymous-storage-FURL"])
         m = re.match(r'pb://(\w+)@', furl)
         assert m, furl
         tubid_s = m.group(1).lower()
@@ -237,7 +237,7 @@ class NativeStorageServer:
         return self.announcement_time
 
     def start_connecting(self, tub, trigger_cb):
-        furl = str(self.announcement["FURL"])
+        furl = str(self.announcement["anonymous-storage-FURL"])
         self._trigger_cb = trigger_cb
         self._reconnector = tub.connectTo(furl, self._got_connection)
 

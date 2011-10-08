@@ -280,13 +280,15 @@ class Client(node.Node, pollmixin.PollMixin):
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready
         def _publish(res):
-            permutation_seed_b32 = self._init_permutation_seed(ss)
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
-            ri_name = RIStorageServer.__remote_name__
-            extra = {"permutation-seed-base32": permutation_seed_b32}
-            self.introducer_client.publish(furl, "storage", ri_name,
-                                           self._server_key, extra)
+            ann_d = {"service-name": "storage",
+                     "anonymous-storage-FURL": furl,
+                     "remoteinterface-name": RIStorageServer.__remote_name__,
+                     # ?? why do we send the RI name anyways?
+                     "permutation-seed-base32": self._init_permutation_seed(ss),
+                     }
+            self.introducer_client.publish(ann_d, self._server_key)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")

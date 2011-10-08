@@ -196,27 +196,15 @@ class IntroducerClient(service.Service, Referenceable):
         d.addCallback(_publish_stub_client)
         return d
 
-    def create_announcement(self, furl, service_name, remoteinterface_name,
-                            signing_key, extra_keys):
-        ann_d = {"version": 0,
-                 "service-name": service_name,
-                 "FURL": furl,
-                 "remoteinterface-name": remoteinterface_name,
-
-                 "nickname": self._nickname,
-                 "app-versions": self._app_versions,
-                 "my-version": self._my_version,
-                 "oldest-supported": self._oldest_supported,
-                 }
-        ann_d.update(extra_keys)
+    def publish(self, ann_d, signing_key=None):
+        ann_d = ann_d.copy()
+        ann_d.update( {"version": 0,
+                       "nickname": self._nickname,
+                       "app-versions": self._app_versions,
+                       "my-version": self._my_version,
+                       "oldest-supported": self._oldest_supported,
+                       } )
         ann_t = sign_to_foolscap(ann_d, signing_key)
-        return ann_t
-
-    def publish(self, furl, service_name, remoteinterface_name,
-                signing_key=None, extra_keys={}):
-        ann_t = self.create_announcement(furl,
-                                         service_name, remoteinterface_name,
-                                         signing_key, extra_keys)
         self._published_announcements[service_name] = ann_t
         self._maybe_publish()
 

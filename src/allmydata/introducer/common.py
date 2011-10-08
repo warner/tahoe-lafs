@@ -33,8 +33,9 @@ def convert_announcement_v1_to_v2(ann_t):
     assert type(oldest) is str
     ann_d = {"version": 0,
              "service-name": service_name,
-             "FURL": furl,
+             "anonymous-storage-FURL": furl,
              "remoteinterface-name": ri_name,
+             # consider adding [permutation-seed-base32] here
 
              "nickname": nickname.decode("utf-8"),
              "app-versions": {},
@@ -48,7 +49,8 @@ def convert_announcement_v2_to_v1(ann_v2):
     (msg, sig, pubkey) = ann_v2
     ann_d = simplejson.loads(msg)
     assert ann_d["version"] == 0
-    ann_t = (str(ann_d["FURL"]), str(ann_d["service-name"]),
+    ann_t = (str(ann_d["anonymous-storage-FURL"]),
+             str(ann_d["service-name"]),
              str(ann_d["remoteinterface-name"]),
              ann_d["nickname"].encode("utf-8"),
              str(ann_d["my-version"]),
