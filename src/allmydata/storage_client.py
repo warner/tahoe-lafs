@@ -271,9 +271,15 @@ class NativeStorageServer(Referenceable):
         return self.announcement_time
 
     def start_connecting(self, tub, trigger_cb):
-        furl = str(self.announcement["anonymous-storage-FURL"])
         self._trigger_cb = trigger_cb
-        self._reconnector = tub.connectTo(furl, self._got_connection)
+        furl = self.announcement.get("accountant-FURL")
+        if furl and self.client_key:
+            self.accounting_enabled = True
+            self._reconnector = tub.connectTo(str(furl), self._got_connection)
+        else:
+            self.accounting_enabled = False
+            furl = self.announcement["anonymous-storage-FURL"]
+            self._reconnector = tub.connectTo(str(furl), self._got_connection)
 
     def _got_connection(self, rref):
         lp = log.msg(format="got connection to %(name)s, getting versions",
@@ -292,27 +298,27 @@ class NativeStorageServer(Referenceable):
                 name=self.get_name(), version=rref.version,
                 facility="tahoe.storage_broker", umid="SWmJYg",
                 level=log.NOISY, parent=lp)
-        print "rref.version", rref.version
-        v = rref.version.get("http://allmydata.org/tahoe/protocols/storage/v1", {})
-        if "accounting-v1" not in v or not self.client_key:
+        if self.accounting_enabled:
+            print "doing upgrade"
+            # the AccountantWindow we're talking to can upgrade us to a real
+            # Account. We are the receiver.
+            me = self.tub.registerReference(self)
+            msg_d = {"please-give-Account-to-rxFURL": me}
+            msg = simplejson.dumps(msg_d).encode("utf-8")
+            print msg
+            sk,vk_vs = self.client_key
+            sig = sk.sign(msg)
+            d = rref.callRemote("get_account", msg, sig, vk_vs)
+            return d
+        else:
             print "no accounting, or no key"
+            # we got the AnonymousAccount
             self.last_connect_time = time.time()
             self.remote_host = rref.getPeer()
             self.rref = rref
             self.accounting_enabled = False
             rref.notifyOnDisconnect(self._lost)
             return
-        print "doing upgrade"
-        # the RIStorageServer we're talking to can upgrade us to a real
-        # Account. We are the receiver.
-        me = self.tub.registerReference(self)
-        msg_d = {"please-give-Account-to-rxFURL": me}
-        msg = simplejson.dumps(msg_d).encode("utf-8")
-        print msg
-        sk,vk_vs = self.client_key
-        sig = sk.sign(msg)
-        d = rref.callRemote("get_account", msg, sig, vk_vs)
-        return d
 
     def remote_account(self, account):
         d = add_version_to_remote_reference(account, self.VERSION_DEFAULTS)
