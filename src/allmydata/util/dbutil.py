@@ -1,5 +1,5 @@
 
-import sys
+import os, sys
 
 class DBError(Exception):
     pass
