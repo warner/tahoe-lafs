@@ -339,7 +339,7 @@ class NativeStorageServer(Referenceable):
         # they'll send us remote_status() and remote_account_message() soon
 
     def remote_status(self, status):
-        self.accounting_status = status
+        self.account_status = status
         # maybe notify local subscribers. status["write"] tells us whether
         # it's worth sending data to this server
 
@@ -374,15 +374,12 @@ class NativeStorageServer(Referenceable):
 
     def get_account_status(self):
         if self.rref and self.accounting_enabled:
-            return self.rref.callRemote("get_status")
+            return self.account_status
         # pre-accounting servers always allow everything, mostly
-        return defer.succeed({"write": True, "read": True, "save": True})
+        return {"write": True, "read": True, "save": True}
 
-    def get_server_message(self):
-        if not self.rref or not self.accounting_enabled:
-            return defer.succeed({})
-        d = self.rref.callRemote("get_account_message")
-        def _got(message):
+    def get_account_message(self):
+        if self.rref and self.accounting_enabled:
             # Servers use this to advertise new features to the client's
             # user. If we recognize a feature, we should suppress the
             # message, because we'll have other feature-specific code which
@@ -396,10 +393,8 @@ class NativeStorageServer(Referenceable):
             # schme, we'd do this:
             #if "bitcoin_v1" in message:
             #    del message["bitcoin_v1"]
-
-            return message
-        d.addCallback(_got)
-        return d
+            return self.account_message
+        return {}
 
 class UnknownServerTypeError(Exception):
     pass

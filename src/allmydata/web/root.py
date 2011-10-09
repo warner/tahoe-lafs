@@ -256,7 +256,7 @@ class Root(rend.Page):
         announcement = server.get_announcement()
         version = announcement["my-version"]
 
-        status_d = descriptor.get_account_status()
+        status = server.get_account_status()
         def _format_status(status):
             # WRS= FFF FFT FTT TTT
             if not status.get("save",True):
@@ -266,18 +266,9 @@ class Root(rend.Page):
             if not status.get("write",True):
                 return "frozen: read, but no write"
             return "normal: full read+write"
-        status_d.addCallback(_format_status)
-        ctx.fillSlots("status", status_d) # TODO: blocks the whole page
-        # consider this:
-        #  cache the status, with a timestamp
-        #  if the status is more than 5 minutes out of date:
-        #    put a "?" here
-        #    and send queries to update it
-        #  that means get_account_status() returns immediately, can return
-        #  None, and fires off requests in the background.
-        # same for descriptor.get_claimed_usage() below
+        ctx.fillSlots("status", _format_status(status))
 
-        message_d = descriptor.get_server_message()
+        message = server.get_account_message()
         def _format_message(msg):
             bits = T.span()
             if "message" in msg:
@@ -290,10 +281,17 @@ class Root(rend.Page):
                     bits[T.br()]
                     bits["%s: %s" % (k, msg[k])]
             return bits
-        message_d.addCallback(_format_message)
-        ctx.fillSlots("server_message", message_d)
+        ctx.fillSlots("server_message", _format_message(message))
 
-        usage_d = descriptor.get_claimed_usage()
+        # consider this:
+        #  cache the usage, with a timestamp
+        #  if the usage is more than 5 minutes out of date:
+        #    put a "?" here
+        #    and send queries to update it
+        #  that means get_claimed_usage() returns immediately, can return
+        #  None, and fires off requests in the background.
+
+        usage_d = server.get_claimed_usage()
         def _format_usage(usage):
             if usage is None:
                 return "?"
