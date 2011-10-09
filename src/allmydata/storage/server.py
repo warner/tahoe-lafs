@@ -14,7 +14,7 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
      create_mutable_sharefile
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.expirer import LeaseCheckingCrawler
+from allmydata.storage.expirer import AccountingCrawler
 
 # storage/
 # storage/shares/incoming
@@ -34,7 +34,6 @@ NUM_RE=re.compile("^[0-9]+$")
 class StorageServer(service.MultiService):
     implements(IStatsProducer)
     name = 'storage'
-    LeaseCheckerClass = LeaseCheckingCrawler
 
     def __init__(self, storedir, nodeid, reserved_space=0,
                  discard_storage=False, readonly_storage=False,
@@ -84,16 +83,16 @@ class StorageServer(service.MultiService):
                           "cancel": [],
                           }
         self.add_bucket_counter()
+        self.init_leasecrawler()
 
-        statefile = os.path.join(self.storedir, "lease_checker.state")
-        historyfile = os.path.join(self.storedir, "lease_checker.history")
-        klass = self.LeaseCheckerClass
-        self.lease_checker = klass(self, statefile, historyfile,
-                                   expiration_enabled, expiration_mode,
-                                   expiration_override_lease_duration,
-                                   expiration_cutoff_date,
-                                   expiration_sharetypes)
-        self.lease_checker.setServiceParent(self)
+    def init_leasecrawler(self):
+        statefile = os.path.join(self.storedir, "leasedb_crawler.state")
+        dbfile = os.path.join(self.storedir, "leasedb.sqlite")
+        crawler = AccountingCrawler(self, statefile, dbfile)
+        self.accounting_crawler = crawler
+        crawler.setServiceParent(self)
+    def get_leasedb(self):
+        return self.accounting_crawler.get_leasedb()
 
     def __repr__(self):
         return "<StorageServer %s>" % (idlib.shortnodeid_b2a(self.my_nodeid),)

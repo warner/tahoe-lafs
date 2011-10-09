@@ -10,23 +10,6 @@ from allmydata.util import log, keyutil
 class BadAccountName(Exception):
     pass
 
-LEASE_SCHEMA_V1 = """
-CREATE TABLE shares
-(
- `prefix` VARCHAR(2),
- `storage_index` VARCHAR(26),
- `shnum` INTEGER,
- `last_mtime` INTEGER,
- `id` INTEGER PRIMARY KEY AUTOINCREMENT
-);
-CREATE TABLE leases
-(
- `share_id` INTEGER,
- `account_id` INTEGER,
- `expiration_time` INTEGER
-);
-"""
-
 
 class AnonymousAccount(Referenceable):
     implements(RIStorageServer)
@@ -190,6 +173,7 @@ class Account(AnonymousAccount):
                 "created": int(self._read("created")),
                 }
 
+
 class Accountant(service.MultiService):
     def __init__(self, basedir, storage_server, create_if_missing):
         service.MultiService.__init__(self)
@@ -200,6 +184,7 @@ class Accountant(service.MultiService):
             self._write("2", "next_ownernum")
         self.create_if_missing = create_if_missing
         self._active_accounts = weakref.WeakValueDictionary()
+        self.leasedb = self.storage_server.get_leasedb()
 
     def _read(self, *paths):
         fn = os.path.join(self.accountsdir, *paths)
