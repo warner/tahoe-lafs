@@ -78,7 +78,7 @@ class StorageFarmBroker:
 
     # these two are used in unit tests
     def test_add_rref(self, key_s, rref, ann):
-        assert "FURL" in ann
+        assert "anonymous-storage-FURL" in ann
         s = NativeStorageServer(key_s, ann, self.tub, self.client_key)
         s.rref = rref
         self.servers[s.get_serverid()] = s

@@ -172,6 +172,10 @@ class FakeHistory:
     def list_all_helper_statuses(self):
         return []
 
+class FakeAccountant:
+    def get_all_accounts(self):
+        return []
+
 class FakeClient(Client):
     def __init__(self):
         # don't upcall to Client.__init__, since we only want to initialize a
@@ -197,6 +201,7 @@ class FakeClient(Client):
                                        None, None, None)
         self.nodemaker.all_contents = self.all_contents
         self.mutable_file_default = SDMF_VERSION
+        self.accountant = FakeAccountant()
 
     def startService(self):
         return service.MultiService.startService(self)

@@ -449,7 +449,7 @@ CREATE TABLE leases
  `expiration_time` INTEGER
 );
 CREATE INDEX `prefix` ON shares (`prefix`);
-CREATE UNIQUE INDEX `share_id` ON leases (`storage_index`,`shnum`);
+CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
 CREATE INDEX `account_id` ON leases (`account_id`);
 CREATE INDEX `expiration_time` ON leases (`expiration_time`);
 """
