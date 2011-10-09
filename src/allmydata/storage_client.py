@@ -303,7 +303,9 @@ class NativeStorageServer(Referenceable):
             # the AccountantWindow we're talking to can upgrade us to a real
             # Account. We are the receiver.
             me = self.tub.registerReference(self)
-            msg_d = {"please-give-Account-to-rxFURL": me}
+            nickname = self.client_info.get("nickname", u"<none>")
+            msg_d = { "please-give-Account-to-rxFURL": me,
+                      "nickname": nickname }
             msg = simplejson.dumps(msg_d).encode("utf-8")
             print msg
             sk,vk_vs = self.client_key
@@ -312,13 +314,20 @@ class NativeStorageServer(Referenceable):
             return d
         else:
             print "no accounting, or no key"
-            # we got the AnonymousAccount
-            self.last_connect_time = time.time()
-            self.remote_host = rref.getPeer()
-            self.rref = rref
-            self.accounting_enabled = False
-            rref.notifyOnDisconnect(self._lost)
+            # we were given the AnonymousAccount
+            self._connected(rref)
             return
+
+    def _connected(self, rref):
+        self.last_connect_time = time.time()
+        self.remote_host = rref.getPeer()
+        self.rref = rref
+        rref.notifyOnDisconnect(self._lost)
+
+    # the following messages are sent by the server-side Account.
+    # remote_account() happens once, at startup. The others are sent both at
+    # startup and as periodic updates when something changes in their opinion
+    # of us.
 
     def remote_account(self, account):
         d = add_version_to_remote_reference(account, self.VERSION_DEFAULTS)
@@ -326,16 +335,8 @@ class NativeStorageServer(Referenceable):
         return d
     def _got_versioned_remote_account(self, account):
         # finally. now *this* we can use
-        self.last_connect_time = time.time()
-        self.remote_host = account.getPeer()
-        self.rref = account
-        self.accounting_enabled = True
-        account.notifyOnDisconnect(self._lost)
-        def _got_message(msg):
-            print "_got_message", msg
-        account.callRemote("get_client_message").addCallback(_got_message).addErrback(log.err)
-        nickname = self.client_info.get("nickname", u"<none>")
-        account.callRemoteOnly("set_nickname", nickname)
+        self._connected(account)
+        # they'll send us remote_status() and remote_account_message() soon
 
     def remote_status(self, status):
         self.accounting_status = status
@@ -345,6 +346,8 @@ class NativeStorageServer(Referenceable):
     def remote_account_message(self, account_message):
         self.account_message = account_message
         # maybe notify
+
+    # these methods are called by local code
 
     def get_rref(self):
         return self.rref

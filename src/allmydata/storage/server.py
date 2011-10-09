@@ -564,10 +564,14 @@ class AccountantWindow(Referenceable):
         account = self.accountant.get_account(pubkey_vs)
         msg_d = simplejson.loads(msg.decode("utf-8"))
         rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
+        account.set_nickname(msg_d["nickname"])
         d = self.tub.getReference(rxFURL)
         def _got_rx(rx):
             account.connection_from(rx)
-            return rx.callRemote("account", account)
+            d = rx.callRemote("account", account)
+            d.addCallback(lambda ign: account._send_status())
+            d.addCallback(lambda ign: account._send_account_message())
+            return d
         d.addCallback(_got_rx)
         d.addErrback(log.err, umid="nFYfcA")
         return d

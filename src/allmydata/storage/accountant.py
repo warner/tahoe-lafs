@@ -114,7 +114,7 @@ class Account(AnonymousAccount):
         f.close()
         os.rename(tmpfn, fn)
 
-    def remote_set_nickname(self, nickname):
+    def set_nickname(self, nickname):
         if len(nickname) > 1000:
             raise ValueError("nickname too long")
         self._write(nickname.encode("utf-8"), "nickname")
