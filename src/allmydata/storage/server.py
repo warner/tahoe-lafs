@@ -1,12 +1,10 @@
 import os, re, weakref, struct, time
 
-import simplejson
-from foolscap.api import Referenceable
 from twisted.application import service
 
 from zope.interface import implements
 from allmydata.interfaces import IStatsProducer
-from allmydata.util import fileutil, idlib, log, time_format, keyutil
+from allmydata.util import fileutil, idlib, log, time_format
 import allmydata # for __full_version__
 
 from allmydata.storage.common import si_b2a, si_a2b, storage_index_to_dir
@@ -548,30 +546,3 @@ class StorageServer(service.MultiService):
                 share_type=share_type, si=si_s, shnum=shnum, reason=reason,
                 level=log.SCARY, umid="SGx2fA")
         return None
-
-
-
-
-class AccountantWindow(Referenceable):
-    def __init__(self, accountant, tub):
-        self.accountant = accountant
-        self.tub = tub
-
-    def remote_get_account(self, msg, sig, pubkey_vs):
-        print "GETTING ACCOUNT", msg
-        vk = keyutil.parse_pubkey(pubkey_vs)
-        vk.verify(sig, msg)
-        account = self.accountant.get_account(pubkey_vs)
-        msg_d = simplejson.loads(msg.decode("utf-8"))
-        rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
-        account.set_nickname(msg_d["nickname"])
-        d = self.tub.getReference(rxFURL)
-        def _got_rx(rx):
-            account.connection_from(rx)
-            d = rx.callRemote("account", account)
-            d.addCallback(lambda ign: account._send_status())
-            d.addCallback(lambda ign: account._send_account_message())
-            return d
-        d.addCallback(_got_rx)
-        d.addErrback(log.err, umid="nFYfcA")
-        return d

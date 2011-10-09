@@ -1,9 +1,11 @@
 
+import simplejson
 import os, time, weakref, re
 from zope.interface import implements
 from twisted.application import service
 from foolscap.api import Referenceable
 from allmydata.interfaces import RIStorageServer
+from allmydata.util import log, keyutil
 
 class BadAccountName(Exception):
     pass
@@ -248,3 +250,28 @@ class Accountant(service.MultiService):
         for d in os.listdir(self.accountsdir):
             if d.startswith("pub-v0-"):
                 yield (d, self.get_account(d, None)) # TODO: None is weird
+
+
+class AccountantWindow(Referenceable):
+    def __init__(self, accountant, tub):
+        self.accountant = accountant
+        self.tub = tub
+
+    def remote_get_account(self, msg, sig, pubkey_vs):
+        print "GETTING ACCOUNT", msg
+        vk = keyutil.parse_pubkey(pubkey_vs)
+        vk.verify(sig, msg)
+        account = self.accountant.get_account(pubkey_vs)
+        msg_d = simplejson.loads(msg.decode("utf-8"))
+        rxFURL = msg_d["please-give-Account-to-rxFURL"].encode("ascii")
+        account.set_nickname(msg_d["nickname"])
+        d = self.tub.getReference(rxFURL)
+        def _got_rx(rx):
+            account.connection_from(rx)
+            d = rx.callRemote("account", account)
+            d.addCallback(lambda ign: account._send_status())
+            d.addCallback(lambda ign: account._send_account_message())
+            return d
+        d.addCallback(_got_rx)
+        d.addErrback(log.err, umid="nFYfcA")
+        return d
