@@ -289,13 +289,9 @@ class Client(node.Node, pollmixin.PollMixin):
         self.add_service(ss)
         self.storage_server = ss
 
-        accountant = Accountant(self.basedir, ss, create_if_missing=True)
-        self.add_service(accountant)
-        self.accountant = accountant
-
-        accountant_window = AccountantWindow(accountant, self.tub)
-
-        legacy_account = accountant.get_anonymous_account()
+        self.accountant = Accountant(self.basedir, ss, create_if_missing=True)
+        self.add_service(self.accountant)
+        accountant_window = AccountantWindow(self.accountant, self.tub)
 
         # TODO: another idea: now that we can, publish a separate FURL for
         # the Accountant. Continue to use ann_d["FURL"] for the
@@ -309,16 +305,19 @@ class Client(node.Node, pollmixin.PollMixin):
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready
         def _publish(res):
-            furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
-            furl = self.tub.registerReference(ss, furlFile=furl_file)
+            ann = {}
+            ann["permutation-seed-base32"] = self._init_permutation_seed(ss)
 
-            furl2_file = os.path.join(self.basedir, "private", "accountant.furl").encode(get_filesystem_encoding())
-            furl2 = self.tub.registerReference(accountant_window, furlFile=furl2_file)
+            accountant_furlfile = os.path.join(self.basedir, "private", "accountant.furl").encode(get_filesystem_encoding())
+            accountant_furl = self.tub.registerReference(accountant_window, furlFile=accountant_furlfile)
+            ann["accountant-FURL"] = accountant_furl
 
-            ann = {"anonymous-storage-FURL": furl,
-                   "accountant-FURL": furl2,
-                   "permutation-seed-base32": self._init_permutation_seed(ss),
-                   }
+            if True:
+                legacy_account = self.accountant.get_anonymous_account()
+                anonymous_account_furlfile = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
+                anonymous_account_furl = self.tub.registerReference(legacy_account, furlFile=anonymous_account_furlfile)
+                ann["anonymous-storage-FURL"] = anonymous_account_furl
+
             self.introducer_client.publish("storage", ann, self._server_key)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
