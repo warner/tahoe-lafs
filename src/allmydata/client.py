@@ -9,7 +9,6 @@ from pycryptopp.publickey import rsa
 
 import allmydata
 from allmydata.storage.server import StorageServer
-from allmydata.storage.accountant import Accountant, AccountantWindow
 from allmydata import storage_client
 from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper

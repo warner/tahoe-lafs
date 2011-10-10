@@ -14,9 +14,13 @@ class DB(unittest.TestCase):
     def test_create(self):
         dbfilename = self.make("create")
         l = LeaseDB(dbfilename)
+        self.failUnlessEqual(set(l.get_all_accounts()),
+                             set([(0, u"anonymous")]))
 
         # should be able to open an existing one too
         l2 = LeaseDB(dbfilename)
+        self.failUnlessEqual(set(l2.get_all_accounts()),
+                             set([(0, u"anonymous")]))
 
     def test_accounts(self):
         dbfilename = self.make("accounts")
