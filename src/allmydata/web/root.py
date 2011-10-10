@@ -316,8 +316,7 @@ class Root(rend.Page):
             return a.get_all_accounts()
         return []
 
-    def render_client_row(self, ctx, clientinfo):
-        (id,account) = clientinfo
+    def render_client_row(self, ctx, account):
         c = account.get_connection_status()
         if c["connected"]:
             cs = "Yes: from %s" % c["last_connected_from"]
