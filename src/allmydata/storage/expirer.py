@@ -574,10 +574,11 @@ class AccountingCrawler(ShareCrawler):
     def _add_share(self, c, prefix, storage_index, shnum, size):
         c.execute("INSERT INTO `shares`"
                   " VALUES (?,?,?,?,?)",
-                  (ID, prefix, storage_index, shnum, size))
+                  (None, prefix, storage_index, shnum, size))
+        shareid = c.lastrowid
         c.execute("INSERT INTO `leases`"
                   " VALUES (?,?,?)",
-                  (SHAREID,
+                  (shareid,
                    self.STARTER_LEASE_ACCOUNTID,
                    time.time()+self.STARTER_LEASE_DURATION))
 
