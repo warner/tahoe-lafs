@@ -275,11 +275,37 @@ class NativeStorageServer(Referenceable):
         furl = self.announcement.get("accountant-FURL")
         if furl and self.client_key:
             self.accounting_enabled = True
-            self._reconnector = tub.connectTo(str(furl), self._got_connection)
+            self._reconnector = tub.connectTo(str(furl), self._got_accountant)
+            # _got_accountant() pings the other end, which fires our
+            # remote_account() method, which does
+            # add_version_to_remote_reference() and then vectors to
+            # _got_versioned_service()
         else:
             self.accounting_enabled = False
             furl = self.announcement["anonymous-storage-FURL"]
             self._reconnector = tub.connectTo(str(furl), self._got_connection)
+            # _got_connection() does add_version_to_remote_reference() and
+            # then vector to _got_versioned_service()
+
+    def _got_accountant(self, rref):
+        log.msg(format="got AccountingWindow on %(name)s, doing upgrade",
+                name=self.get_name(),
+                facility="tahoe.storage_broker", umid="bWHpsA")
+        print "doing upgrade"
+        # the AccountantWindow we're talking to can upgrade us to a real
+        # Account. We are the receiver.
+        me = self.tub.registerReference(self)
+        nickname = self.client_info.get("nickname", u"<none>")
+        msg_d = { "please-give-Account-to-rxFURL": me,
+                  "nickname": nickname }
+        msg = simplejson.dumps(msg_d).encode("utf-8")
+        print msg
+        sk,vk_vs = self.client_key
+        sig = sk.sign(msg)
+        d = rref.callRemote("get_account", msg, sig, vk_vs)
+        d.addErrback(log.err, format="storageclient._got_accountant",
+                     name=self.get_name(), umid="DNi3tw")
+        return d
 
     def _got_connection(self, rref):
         lp = log.msg(format="got connection to %(name)s, getting versions",
@@ -294,31 +320,12 @@ class NativeStorageServer(Referenceable):
                      name=self.get_name(), umid="Sdq3pg")
 
     def _got_versioned_service(self, rref, lp):
+        # both anonymous and Account code paths land here
         log.msg(format="%(name)s provided version info %(version)s",
                 name=self.get_name(), version=rref.version,
                 facility="tahoe.storage_broker", umid="SWmJYg",
                 level=log.NOISY, parent=lp)
-        if self.accounting_enabled:
-            print "doing upgrade"
-            # the AccountantWindow we're talking to can upgrade us to a real
-            # Account. We are the receiver.
-            me = self.tub.registerReference(self)
-            nickname = self.client_info.get("nickname", u"<none>")
-            msg_d = { "please-give-Account-to-rxFURL": me,
-                      "nickname": nickname }
-            msg = simplejson.dumps(msg_d).encode("utf-8")
-            print msg
-            sk,vk_vs = self.client_key
-            sig = sk.sign(msg)
-            d = rref.callRemote("get_account", msg, sig, vk_vs)
-            return d
-        else:
-            print "no accounting, or no key"
-            # we were given the AnonymousAccount
-            self._connected(rref)
-            return
-
-    def _connected(self, rref):
+        # rref is an AnonymousAccount, or a full Account
         self.last_connect_time = time.time()
         self.remote_host = rref.getPeer()
         self.rref = rref
@@ -330,13 +337,10 @@ class NativeStorageServer(Referenceable):
     # of us.
 
     def remote_account(self, account):
-        d = add_version_to_remote_reference(account, self.VERSION_DEFAULTS)
-        d.addCallback(self._got_versioned_remote_account)
-        return d
-    def _got_versioned_remote_account(self, account):
-        # finally. now *this* we can use
-        self._connected(account)
         # they'll send us remote_status() and remote_account_message() soon
+        d = add_version_to_remote_reference(account, self.VERSION_DEFAULTS)
+        d.addCallback(self._got_versioned_service, None) # TODO lp=
+        return d
 
     def remote_status(self, status):
         self.account_status = status
