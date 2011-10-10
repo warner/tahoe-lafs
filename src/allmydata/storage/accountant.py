@@ -10,6 +10,8 @@ from allmydata.storage.crawler import ShareCrawler
 
 class BadAccountName(Exception):
     pass
+class BadShareID(Exception):
+    pass
 
 LEASE_SCHEMA_V1 = """
 CREATE TABLE version
@@ -30,6 +32,7 @@ CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
 
 CREATE TABLE leases
 (
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT,
  -- FOREIGN KEY (`share_id`) REFERENCES shares(id), -- not enabled?
  -- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
  `share_id` INTEGER,
@@ -38,14 +41,18 @@ CREATE TABLE leases
  `renew_secret` VARCHAR(52),
  `cancel_secret` VARCHAR(52)
 );
-CREATE INDEX `account_id` ON leases (`account_id`);
-CREATE INDEX `expiration_time` ON leases (`expiration_time`);
+CREATE INDEX `account_id` ON `leases` (`account_id`);
+CREATE INDEX `expiration_time` ON `leases` (`expiration_time`);
 
 CREATE TABLE accounts
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+ `pubkey_vs` UNIQUE VARCHAR(52),
  `creation_time` INTEGER
 );
+CREATE INDEX `pubkey_vs` ON `accounts` (`pubkey_vs`);
+
+INSERT INTO `accounts` VALUES (0, "anonymous", 0);
 
 """
 
@@ -62,6 +69,8 @@ class LeaseDB:
         self._cursor = self._db.cursor()
         self._dirty = False
 
+    # share management
+
     def get_shares_for_prefix(self, prefix):
         self._cursor.execute("SELECT `storage_index`,`shnum`"
                              " FROM `shares`"
@@ -70,7 +79,8 @@ class LeaseDB:
         db_shares = set([(si,shnum) for (si,shnum) in self._cursor.fetchall()])
         return db_shares
 
-    def add_share(self, prefix, storage_index, shnum, size):
+    def add_new_share(self, prefix, storage_index, shnum, size):
+        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("INSERT INTO `shares`"
                              " VALUES (?,?,?,?,?)",
@@ -80,9 +90,10 @@ class LeaseDB:
                              " VALUES (?,?,?)",
                              (shareid,
                               self.STARTER_LEASE_ACCOUNTID,
-                              time.time()+self.STARTER_LEASE_DURATION))
+                              int(time.time())+self.STARTER_LEASE_DURATION))
 
     def remove_deleted_shares(self, shareids):
+        # don't forget to call .commit() when you're done
         if shareids:
             self._dirty = True
         for deleted_shareid in shareids:
@@ -92,23 +103,106 @@ class LeaseDB:
                                  (storage_index, str(shnum)))
 
     def change_share_size(self, storage_index, shnum, size):
+        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("UPDATE `shares` SET `size`=?"
                              " WHERE storage_index=? AND shnum=?",
                              (size, storage_index, shnum))
 
+    # lease management
+
+    def add_lease(self, storage_index, shnum,
+                  ownerid, expiration_time, renew_secret, cancel_secret):
+        # don't forget to call .commit() when you're done
+        self._dirty = True
+        self._cursor.execute("SELECT `id` FROM `shares`"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (storage_index, shnum))
+        row = self._cursor.fetchone()
+        if not row:
+            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
+                             % (storage_index, shnum))
+        shareid = row[0]
+        self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?,?)",
+                             (None, shareid, ownerid, expiration_time,
+                              renew_secret, cancel_secret))
+
+    def add_or_renew_lease(self, storage_index, shnum,
+                           ownerid, expiration_time,
+                           renew_secret, cancel_secret):
+        # don't forget to call .commit() when you're done
+        self._dirty = True
+        self._cursor.execute("SELECT `id` FROM `shares`"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (storage_index, shnum))
+        row = self._cursor.fetchone()
+        if not row:
+            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
+                             % (storage_index, shnum))
+        shareid = row[0]
+        self._cursor.execute("SELECT `id` FROM `leases`"
+                             " WHERE `share_id`=? AND `account_id`=?"
+                             "  AND `renew_secret`=? AND `cancel_secret`=?",
+                             (shareid, ownerid, renew_secret, cancel_secret))
+        row = self._cursor.fetchone()
+        if row:
+            leaseid = row[0]
+            self._cursor.execute("UPDATE `leases` SET expiration_time=?"
+                                 " WHERE `id`=?",
+                                 (expiration_time, leaseid))
+        else:
+            self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?,?)",
+                                 (None, shareid, ownerid, expiration_time,
+                                  renew_secret, cancel_secret))
+
+    def cancel_lease(self, storage_index, shnum, cancel_secret):
+        # don't forget to call .commit() when you're done
+        self._dirty = True
+        self._cursor.execute("SELECT `id` FROM `shares`"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (storage_index, shnum))
+        row = self._cursor.fetchone()
+        if not row:
+            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
+                             % (storage_index, shnum))
+        shareid = row[0]
+        self._cursor.execute("DELETE FROM `leases`"
+                             " WHERE `share_id`=? AND `cancel_secret`=?",
+                             (shareid, cancel_secret))
+
+    # account management
+
+    def get_or_allocate_ownernum(self, pubkey_vs):
+        if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):
+            raise BadAccountName("unacceptable characters in pubkey")
+        self._cursor.execute("SELECT `id` FROM `accounts` WHERE `pubkey_vs`=?",
+                             (pubkey_vs,))
+        row = self._cursor.fetchone()
+        if row:
+            return row[0]
+        self._cursor.execute("INSERT INTO `accounts` VALUES (?,?,?)",
+                             (None, pubkey_vs, int(time.time())))
+        accountid = self._cursor.lastrowid
+        self._db.commit()
+        return accountid
+
+    def get_all_accounts(self):
+        self._cursor.execute("SELECT `id`,`pubkey_vs`"
+                             " FROM `accounts` ORDER BY `id` ASC")
+        return self._cursor.fetchall()
+
     def commit(self):
         if self._dirty:
             self._db.commit()
+            self._dirty = False
 
 
 class AnonymousAccount(Referenceable):
     implements(RIStorageServer)
 
-    def __init__(self, owner_num, server, accountdir):
+    def __init__(self, owner_num, server):
         self.owner_num = owner_num
         self.server = server
-        self.accountdir = accountdir
 
     def remote_get_version(self):
         return self.server.remote_get_version()
@@ -153,8 +247,8 @@ class AnonymousAccount(Referenceable):
             share_type, storage_index, shnum, reason)
 
 class Account(AnonymousAccount):
-    def __init__(self, owner_num, server, accountdir):
-        AnonymousAccount.__init__(self, owner_num, server, accountdir)
+    def __init__(self, owner_num, server):
+        AnonymousAccount.__init__(self, owner_num, server)
         self.connected = False
         self.connected_since = None
         self.connection = None
@@ -175,20 +269,6 @@ class Account(AnonymousAccount):
         return self.account_message
 
     # these are the non-RIStorageServer methods, some remote, some local
-
-    def _read(self, *paths):
-        fn = os.path.join(self.accountdir, *paths)
-        try:
-            return open(fn).read().strip()
-        except EnvironmentError:
-            return None
-    def _write(self, s, *paths):
-        fn = os.path.join(self.accountdir, *paths)
-        tmpfn = fn + ".tmp"
-        f = open(tmpfn, "w")
-        f.write(s+"\n")
-        f.close()
-        os.rename(tmpfn, fn)
 
     def set_nickname(self, nickname):
         if len(nickname) > 1000:
@@ -289,28 +369,6 @@ class AccountingCrawler(ShareCrawler):
     (e.g. when the admin deletes a sharefile with /bin/rm).
     """
 
-    # XXX TODO new idea: move all leases into the DB. Do not store leases in
-    # shares at all. The crawler will exist solely to discover shares that
-    # have been manually added to disk (via 'scp' or some out-of-band means),
-    # and will add 30- or 60- day "migration leases" to them, to keep them
-    # alive until their original owner does a deep-add-lease and claims them
-    # properly. Better migration tools ('tahoe storage export'?) will create
-    # export files that include both the share data and the lease data, and
-    # then an import tool will both put the share in the right place and
-    # update the recipient node's lease DB.
-    #
-    # I guess the crawler will also be responsible for deleting expired
-    # shares, since it will be looking at both share files on disk and leases
-    # in the DB.
-    #
-    # So the DB needs a row per share-on-disk, and a separate table with
-    # leases on each bucket. When it sees a share-on-disk that isn't in the
-    # first table, it adds the migration-lease. When it sees a share-on-disk
-    # that is in the first table but has no leases in the second table (i.e.
-    # expired), it deletes both the share and the first-table row. When it
-    # sees a row in the first table but no share-on-disk (i.e. manually
-    # deleted share), it deletes the row (and any leases).
-
     slow_start = 7*60 # wait 7 minutes after startup
     minimum_cycle_time = 12*60*60 # not more than twice per day
 
@@ -374,6 +432,7 @@ class Accountant(service.MultiService):
         self.leasedb = LeaseDB(dbfile)
         self._active_accounts = weakref.WeakValueDictionary()
         self._accountant_window = None
+        self._anonymous_account = AnonymousAccount(0, self.storage_server)
 
         crawler = AccountingCrawler(storage_server, statefile, self.leasedb)
         self.accounting_crawler = crawler
@@ -395,55 +454,27 @@ class Accountant(service.MultiService):
                               expiration_sharetypes=("mutable", "immutable")):
         pass # TODO
 
-    def _read(self, *paths):
-        fn = os.path.join(self.accountsdir, *paths)
-        return open(fn).read().strip()
-    def _write(self, s, *paths):
-        fn = os.path.join(self.accountsdir, *paths)
-        tmpfn = fn + ".tmp"
-        f = open(tmpfn, "w")
-        f.write(s+"\n")
-        f.close()
-        os.rename(tmpfn, fn)
-
-    # methods used by StorageServer
+    # methods used by AccountantWindow
 
     def get_account(self, pubkey_vs):
-        ownernum = self.get_ownernum_by_pubkey(pubkey_vs)
         if pubkey_vs not in self._active_accounts:
-            a = Account(ownernum, self.storage_server,
-                        os.path.join(self.accountsdir, pubkey_vs))
+            ownernum = self._leasedb.get_or_allocate_ownernum(pubkey_vs)
+            a = Account(ownernum, self.storage_server)
             self._active_accounts[pubkey_vs] = a
-        return self._active_accounts[pubkey_vs] # a is still alive
+            # the client's RemoteReference will keep the Account alive. When
+            # it disconnects, that reference will lapse, and it will be
+            # removed from the _active_accounts WeakValueDictionary
+        return self._active_accounts[pubkey_vs] # note: a is still alive
 
     def get_anonymous_account(self):
-        if not self._anonymous_account:
-            a = AnonymousAccount(0, self.storage_server,
-                                 os.path.join(self.accountsdir, "anonymous"))
-            self._anonymous_account = a
         return self._anonymous_account
-
-    def get_ownernum_by_pubkey(self, pubkey_vs):
-        if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):
-            raise BadAccountName("unacceptable characters in pubkey")
-        assert ("." not in pubkey_vs and "/" not in pubkey_vs)
-        accountdir = os.path.join(self.accountsdir, pubkey_vs)
-        if not os.path.isdir(accountdir):
-            if not self.create_if_missing:
-                return None
-            next_ownernum = int(self._read("next_ownernum"))
-            self._write(str(next_ownernum+1), "next_ownernum")
-            os.mkdir(accountdir)
-            self._write(str(next_ownernum), pubkey_vs, "ownernum")
-            self._write(str(int(time.time())), pubkey_vs, "created")
-        ownernum = int(self._read(pubkey_vs, "ownernum"))
-        return ownernum
 
     # methods used by admin interfaces
     def get_all_accounts(self):
-        for d in os.listdir(self.accountsdir):
-            if d.startswith("pub-v0-"):
-                yield (d, self.get_account(d, None)) # TODO: None is weird
+        for ownerid, pubkey_vs in self._leasedb.get_all_accounts():
+            if pubkey_vs in self._active_accounts:
+                yield self._active_accounts[pubkey_vs]
+            yield Account(ownerid, self.storage_server)
 
 
 class AccountantWindow(Referenceable):
@@ -469,3 +500,26 @@ class AccountantWindow(Referenceable):
         d.addCallback(_got_rx)
         d.addErrback(log.err, umid="nFYfcA")
         return d
+
+
+# XXX TODO new idea: move all leases into the DB. Do not store leases in
+# shares at all. The crawler will exist solely to discover shares that
+# have been manually added to disk (via 'scp' or some out-of-band means),
+# and will add 30- or 60- day "migration leases" to them, to keep them
+# alive until their original owner does a deep-add-lease and claims them
+# properly. Better migration tools ('tahoe storage export'?) will create
+# export files that include both the share data and the lease data, and
+# then an import tool will both put the share in the right place and
+# update the recipient node's lease DB.
+#
+# I guess the crawler will also be responsible for deleting expired
+# shares, since it will be looking at both share files on disk and leases
+# in the DB.
+#
+# So the DB needs a row per share-on-disk, and a separate table with
+# leases on each bucket. When it sees a share-on-disk that isn't in the
+# first table, it adds the migration-lease. When it sees a share-on-disk
+# that is in the first table but has no leases in the second table (i.e.
+# expired), it deletes both the share and the first-table row. When it
+# sees a row in the first table but no share-on-disk (i.e. manually
+# deleted share), it deletes the row (and any leases).
