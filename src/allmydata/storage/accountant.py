@@ -246,31 +246,32 @@ class BaseAccount(Referenceable):
         self.server = server
         self._leasedb = leasedb
 
+    def get_owner_num(self):
+        return self.owner_num
+
     def remote_get_version(self):
-        return self.server.client_get_version()
+        return self.server.client_get_version(self)
     # all other RIStorageServer methods should pass through to self.server
     # but add owner_num=
 
     def remote_allocate_buckets(self, storage_index,
                                 renew_secret, cancel_secret,
                                 sharenums, allocated_size,
-                                canary, owner_num=0):
+                                canary):
         return self.server.client_allocate_buckets(
             storage_index,
             renew_secret, cancel_secret,
             sharenums, allocated_size,
-            canary, owner_num=self.owner_num)
-    def remote_add_lease(self, storage_index, renew_secret, cancel_secret,
-                         owner_num=1):
+            canary, self)
+    def remote_add_lease(self, storage_index, renew_secret, cancel_secret):
         return self.server.client_add_lease(
-            storage_index, renew_secret, cancel_secret,
-            owner_num=self.owner_num)
+            storage_index, renew_secret, cancel_secret, self)
     def remote_renew_lease(self, storage_index, renew_secret):
-        return self.server.client_renew_lease(storage_index, renew_secret)
-    def remote_cancel_lease(self, storage_index, cancel_secret):
-        return self.server.client_cancel_lease(storage_index, cancel_secret)
+        return self.server.client_renew_lease(storage_index, renew_secret, self)
+    #def remote_cancel_lease(self, storage_index, cancel_secret):
+    #    return self.server.client_cancel_lease(storage_index, cancel_secret, self)
     def remote_get_buckets(self, storage_index):
-        return self.server.client_get_buckets(storage_index)
+        return self.server.client_get_buckets(storage_index, self)
     # TODO: add leases and ownernums to mutable shares
     def remote_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
@@ -280,13 +281,13 @@ class BaseAccount(Referenceable):
             storage_index,
             secrets,
             test_and_write_vectors,
-            read_vector) # TODO: ownernum=
+            read_vector, self)
     def remote_slot_readv(self, storage_index, shares, readv):
-        return self.server.client_slot_readv(storage_index, shares, readv)
+        return self.server.client_slot_readv(storage_index, shares, readv, self)
     def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
                                     reason):
         return self.server.client_advise_corrupt_share(
-            share_type, storage_index, shnum, reason)
+            share_type, storage_index, shnum, reason, self)
 
 class AnonymousAccount(BaseAccount):
     implements(RIStorageServer)

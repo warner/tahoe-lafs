@@ -273,7 +273,7 @@ class StorageServer(service.MultiService):
 
     # these methods can be invoked by our callers
 
-    def client_get_version(self):
+    def client_get_version(self, account):
         remaining_space = self.get_available_space()
         if remaining_space is None:
             # We're on a platform that has no API to get disk stats.
@@ -298,10 +298,7 @@ class StorageServer(service.MultiService):
     def client_allocate_buckets(self, storage_index,
                                 renew_secret, cancel_secret,
                                 sharenums, allocated_size,
-                                canary, owner_num=0):
-        # owner_num is not for clients to set, but rather it should be
-        # curried into the PersonalStorageServer instance that is dedicated
-        # to a particular owner.
+                                canary, account):
         start = time.time()
         self.count("allocate")
         alreadygot = set()
@@ -316,7 +313,7 @@ class StorageServer(service.MultiService):
         # separate database. Note that the lease should not be added until
         # the BucketWriter has been closed.
         expire_time = time.time() + 31*24*60*60
-        lease_info = LeaseInfo(owner_num,
+        lease_info = LeaseInfo(account.get_owner_num(),
                                renew_secret, cancel_secret,
                                expire_time, self.my_nodeid)
 
@@ -373,11 +370,11 @@ class StorageServer(service.MultiService):
         return alreadygot, bucketwriters
 
     def client_add_lease(self, storage_index, renew_secret, cancel_secret,
-                         owner_num=1):
+                         account):
         start = time.time()
         self.count("add-lease")
         new_expire_time = time.time() + 31*24*60*60
-        lease_info = LeaseInfo(owner_num,
+        lease_info = LeaseInfo(account.get_owner_num(),
                                renew_secret, cancel_secret,
                                new_expire_time, self.my_nodeid)
         for sf in self._iter_share_files(storage_index):
@@ -397,7 +394,7 @@ class StorageServer(service.MultiService):
         if not found_buckets:
             raise IndexError("no such lease to renew")
 
-    def client_get_buckets(self, storage_index):
+    def client_get_buckets(self, storage_index, account):
         start = time.time()
         self.count("get")
         si_s = si_b2a(storage_index)
@@ -412,7 +409,7 @@ class StorageServer(service.MultiService):
     def client_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
                                                test_and_write_vectors,
-                                               read_vector):
+                                               read_vector, account):
         start = time.time()
         self.count("writev")
         si_s = si_b2a(storage_index)
@@ -493,7 +490,7 @@ class StorageServer(service.MultiService):
         self.add_latency("writev", time.time() - start)
         return (testv_is_good, read_data)
 
-    def client_slot_readv(self, storage_index, shares, readv):
+    def client_slot_readv(self, storage_index, shares, readv, account):
         start = time.time()
         self.count("readv")
         si_s = si_b2a(storage_index)
@@ -521,7 +518,7 @@ class StorageServer(service.MultiService):
         return datavs
 
     def client_advise_corrupt_share(self, share_type, storage_index, shnum,
-                                    reason):
+                                    reason, account):
         fileutil.make_dirs(self.corruption_advisory_dir)
         now = time_format.iso_utc(sep="T")
         si_s = si_b2a(storage_index)
