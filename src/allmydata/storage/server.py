@@ -273,7 +273,7 @@ class StorageServer(service.MultiService):
 
     # these methods can be invoked by our callers
 
-    def remote_get_version(self):
+    def client_get_version(self):
         remaining_space = self.get_available_space()
         if remaining_space is None:
             # We're on a platform that has no API to get disk stats.
@@ -295,7 +295,7 @@ class StorageServer(service.MultiService):
                     }
         return version
 
-    def remote_allocate_buckets(self, storage_index,
+    def client_allocate_buckets(self, storage_index,
                                 renew_secret, cancel_secret,
                                 sharenums, allocated_size,
                                 canary, owner_num=0):
@@ -372,7 +372,7 @@ class StorageServer(service.MultiService):
         self.add_latency("allocate", time.time() - start)
         return alreadygot, bucketwriters
 
-    def remote_add_lease(self, storage_index, renew_secret, cancel_secret,
+    def client_add_lease(self, storage_index, renew_secret, cancel_secret,
                          owner_num=1):
         start = time.time()
         self.count("add-lease")
@@ -385,7 +385,7 @@ class StorageServer(service.MultiService):
         self.add_latency("add-lease", time.time() - start)
         return None
 
-    def remote_renew_lease(self, storage_index, renew_secret):
+    def client_renew_lease(self, storage_index, renew_secret):
         start = time.time()
         self.count("renew")
         new_expire_time = time.time() + 31*24*60*60
@@ -397,7 +397,7 @@ class StorageServer(service.MultiService):
         if not found_buckets:
             raise IndexError("no such lease to renew")
 
-    def remote_get_buckets(self, storage_index):
+    def client_get_buckets(self, storage_index):
         start = time.time()
         self.count("get")
         si_s = si_b2a(storage_index)
@@ -409,7 +409,7 @@ class StorageServer(service.MultiService):
         self.add_latency("get", time.time() - start)
         return bucketreaders
 
-    def remote_slot_testv_and_readv_and_writev(self, storage_index,
+    def client_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
                                                test_and_write_vectors,
                                                read_vector):
@@ -493,7 +493,7 @@ class StorageServer(service.MultiService):
         self.add_latency("writev", time.time() - start)
         return (testv_is_good, read_data)
 
-    def remote_slot_readv(self, storage_index, shares, readv):
+    def client_slot_readv(self, storage_index, shares, readv):
         start = time.time()
         self.count("readv")
         si_s = si_b2a(storage_index)
@@ -520,7 +520,7 @@ class StorageServer(service.MultiService):
         self.add_latency("readv", time.time() - start)
         return datavs
 
-    def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
+    def client_advise_corrupt_share(self, share_type, storage_index, shnum,
                                     reason):
         fileutil.make_dirs(self.corruption_advisory_dir)
         now = time_format.iso_utc(sep="T")

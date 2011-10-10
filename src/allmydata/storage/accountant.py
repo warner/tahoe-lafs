@@ -247,7 +247,7 @@ class BaseAccount(Referenceable):
         self._leasedb = leasedb
 
     def remote_get_version(self):
-        return self.server.remote_get_version()
+        return self.server.client_get_version()
     # all other RIStorageServer methods should pass through to self.server
     # but add owner_num=
 
@@ -255,37 +255,37 @@ class BaseAccount(Referenceable):
                                 renew_secret, cancel_secret,
                                 sharenums, allocated_size,
                                 canary, owner_num=0):
-        return self.server.remote_allocate_buckets(
+        return self.server.client_allocate_buckets(
             storage_index,
             renew_secret, cancel_secret,
             sharenums, allocated_size,
             canary, owner_num=self.owner_num)
     def remote_add_lease(self, storage_index, renew_secret, cancel_secret,
                          owner_num=1):
-        return self.server.remote_add_lease(
+        return self.server.client_add_lease(
             storage_index, renew_secret, cancel_secret,
             owner_num=self.owner_num)
     def remote_renew_lease(self, storage_index, renew_secret):
-        return self.server.remote_renew_lease(storage_index, renew_secret)
+        return self.server.client_renew_lease(storage_index, renew_secret)
     def remote_cancel_lease(self, storage_index, cancel_secret):
-        return self.server.remote_cancel_lease(storage_index, cancel_secret)
+        return self.server.client_cancel_lease(storage_index, cancel_secret)
     def remote_get_buckets(self, storage_index):
-        return self.server.remote_get_buckets(storage_index)
+        return self.server.client_get_buckets(storage_index)
     # TODO: add leases and ownernums to mutable shares
     def remote_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
                                                test_and_write_vectors,
                                                read_vector):
-        return self.server.remote_slot_testv_and_readv_and_writev(
+        return self.server.client_slot_testv_and_readv_and_writev(
             storage_index,
             secrets,
             test_and_write_vectors,
             read_vector) # TODO: ownernum=
     def remote_slot_readv(self, storage_index, shares, readv):
-        return self.server.remote_slot_readv(storage_index, shares, readv)
+        return self.server.client_slot_readv(storage_index, shares, readv)
     def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
                                     reason):
-        return self.server.remote_advise_corrupt_share(
+        return self.server.client_advise_corrupt_share(
             share_type, storage_index, shnum, reason)
 
 class AnonymousAccount(BaseAccount):
