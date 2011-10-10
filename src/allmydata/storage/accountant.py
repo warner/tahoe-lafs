@@ -416,7 +416,7 @@ class AccountingCrawler(ShareCrawler):
     (e.g. when the admin deletes a sharefile with /bin/rm).
     """
 
-    slow_start = 7*60 # wait 7 minutes after startup
+    slow_start = 7 # XXX #*60 # wait 7 minutes after startup
     minimum_cycle_time = 12*60*60 # not more than twice per day
 
     def __init__(self, server, statefile, leasedb):
