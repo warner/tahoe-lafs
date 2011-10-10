@@ -434,6 +434,7 @@ CREATE TABLE version
 (
  version INTEGER -- contains one row, set to 1
 );
+
 CREATE TABLE shares
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -442,16 +443,24 @@ CREATE TABLE shares
  `shnum` INTEGER,
  `size` INTEGER
 );
+CREATE INDEX `prefix` ON shares (`prefix`);
+CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
+
 CREATE TABLE leases
 (
  `share_id` INTEGER, -- TODO: really a foreign key
  `account_id` INTEGER,
  `expiration_time` INTEGER
 );
-CREATE INDEX `prefix` ON shares (`prefix`);
-CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
 CREATE INDEX `account_id` ON leases (`account_id`);
 CREATE INDEX `expiration_time` ON leases (`expiration_time`);
+
+CREATE TABLE accounts
+(
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+ `creation_time` INTEGER
+);
+
 """
 
 def size_of_disk_file(stat_results):
