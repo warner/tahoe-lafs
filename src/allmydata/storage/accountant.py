@@ -237,8 +237,7 @@ class LeaseDB:
             self._dirty = False
 
 
-class AnonymousAccount(Referenceable):
-    implements(RIStorageServer)
+class BaseAccount(Referenceable):
 
     def __init__(self, owner_num, server, leasedb):
         self.owner_num = owner_num
@@ -287,9 +286,12 @@ class AnonymousAccount(Referenceable):
         return self.server.remote_advise_corrupt_share(
             share_type, storage_index, shnum, reason)
 
-class Account(AnonymousAccount):
+class AnonymousAccount(BaseAccount):
+    implements(RIStorageServer)
+
+class Account(BaseAccount):
     def __init__(self, owner_num, server, leasedb):
-        AnonymousAccount.__init__(self, owner_num, server, leasedb)
+        BaseAccount.__init__(self, owner_num, server, leasedb)
         self.connected = False
         self.connected_since = None
         self.connection = None
