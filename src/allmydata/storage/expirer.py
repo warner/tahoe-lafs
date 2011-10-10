@@ -448,8 +448,10 @@ CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
 
 CREATE TABLE leases
 (
- FOREIGN KEY (`share_id`) REFERENCES shares(id),
- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
+ -- FOREIGN KEY (`share_id`) REFERENCES shares(id), -- not enabled?
+ -- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
+ `share_id` INTEGER,
+ `account_id` INTEGER,
  `expiration_time` INTEGER,
  `renew_secret` VARCHAR(52),
  `cancel_secret` VARCHAR(52)
