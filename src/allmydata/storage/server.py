@@ -210,6 +210,69 @@ class StorageServer(service.MultiService):
             space += bw.allocated_size()
         return space
 
+    def _iter_share_files(self, storage_index):
+        for shnum, filename in self._get_bucket_shares(storage_index):
+            f = open(filename, 'rb')
+            header = f.read(32)
+            f.close()
+            if header[:32] == MutableShareFile.MAGIC:
+                sf = MutableShareFile(filename, self)
+                # note: if the share has been migrated, the renew_lease()
+                # call will throw an exception, with information to help the
+                # client update the lease.
+            elif header[:4] == struct.pack(">L", 1):
+                sf = ShareFile(filename)
+            else:
+                continue # non-sharefile
+            yield sf
+
+    def bucket_writer_closed(self, bw, consumed_size):
+        if self.stats_provider:
+            self.stats_provider.count('storage_server.bytes_added', consumed_size)
+        del self._active_writers[bw]
+
+    def _get_bucket_shares(self, storage_index):
+        """Return a list of (shnum, pathname) tuples for files that hold
+        shares for this storage_index. In each tuple, 'shnum' will always be
+        the integer form of the last component of 'pathname'."""
+        storagedir = os.path.join(self.sharedir, storage_index_to_dir(storage_index))
+        try:
+            for f in os.listdir(storagedir):
+                if NUM_RE.match(f):
+                    filename = os.path.join(storagedir, f)
+                    yield (int(f), filename)
+        except OSError:
+            # Commonly caused by there being no buckets at all.
+            pass
+
+    def get_leases(self, storage_index):
+        """Provide an iterator that yields all of the leases attached to this
+        bucket. Each lease is returned as a LeaseInfo instance.
+
+        This method is not for client use.
+        """
+
+        # since all shares get the same lease data, we just grab the leases
+        # from the first share
+        try:
+            shnum, filename = self._get_bucket_shares(storage_index).next()
+            sf = ShareFile(filename)
+            return sf.get_leases()
+        except StopIteration:
+            return iter([])
+
+    def _allocate_slot_share(self, bucketdir, secrets, sharenum,
+                             allocated_size, owner_num=0):
+        (write_enabler, renew_secret, cancel_secret) = secrets
+        my_nodeid = self.my_nodeid
+        fileutil.make_dirs(bucketdir)
+        filename = os.path.join(bucketdir, "%d" % sharenum)
+        share = create_mutable_sharefile(filename, my_nodeid, write_enabler,
+                                         self)
+        return share
+
+    # these methods can be invoked by our callers
+
     def remote_get_version(self):
         remaining_space = self.get_available_space()
         if remaining_space is None:
@@ -309,22 +372,6 @@ class StorageServer(service.MultiService):
         self.add_latency("allocate", time.time() - start)
         return alreadygot, bucketwriters
 
-    def _iter_share_files(self, storage_index):
-        for shnum, filename in self._get_bucket_shares(storage_index):
-            f = open(filename, 'rb')
-            header = f.read(32)
-            f.close()
-            if header[:32] == MutableShareFile.MAGIC:
-                sf = MutableShareFile(filename, self)
-                # note: if the share has been migrated, the renew_lease()
-                # call will throw an exception, with information to help the
-                # client update the lease.
-            elif header[:4] == struct.pack(">L", 1):
-                sf = ShareFile(filename)
-            else:
-                continue # non-sharefile
-            yield sf
-
     def remote_add_lease(self, storage_index, renew_secret, cancel_secret,
                          owner_num=1):
         start = time.time()
@@ -350,25 +397,6 @@ class StorageServer(service.MultiService):
         if not found_buckets:
             raise IndexError("no such lease to renew")
 
-    def bucket_writer_closed(self, bw, consumed_size):
-        if self.stats_provider:
-            self.stats_provider.count('storage_server.bytes_added', consumed_size)
-        del self._active_writers[bw]
-
-    def _get_bucket_shares(self, storage_index):
-        """Return a list of (shnum, pathname) tuples for files that hold
-        shares for this storage_index. In each tuple, 'shnum' will always be
-        the integer form of the last component of 'pathname'."""
-        storagedir = os.path.join(self.sharedir, storage_index_to_dir(storage_index))
-        try:
-            for f in os.listdir(storagedir):
-                if NUM_RE.match(f):
-                    filename = os.path.join(storagedir, f)
-                    yield (int(f), filename)
-        except OSError:
-            # Commonly caused by there being no buckets at all.
-            pass
-
     def remote_get_buckets(self, storage_index):
         start = time.time()
         self.count("get")
@@ -380,22 +408,6 @@ class StorageServer(service.MultiService):
                                                 storage_index, shnum)
         self.add_latency("get", time.time() - start)
         return bucketreaders
-
-    def get_leases(self, storage_index):
-        """Provide an iterator that yields all of the leases attached to this
-        bucket. Each lease is returned as a LeaseInfo instance.
-
-        This method is not for client use.
-        """
-
-        # since all shares get the same lease data, we just grab the leases
-        # from the first share
-        try:
-            shnum, filename = self._get_bucket_shares(storage_index).next()
-            sf = ShareFile(filename)
-            return sf.get_leases()
-        except StopIteration:
-            return iter([])
 
     def remote_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
@@ -480,16 +492,6 @@ class StorageServer(service.MultiService):
         # all done
         self.add_latency("writev", time.time() - start)
         return (testv_is_good, read_data)
-
-    def _allocate_slot_share(self, bucketdir, secrets, sharenum,
-                             allocated_size, owner_num=0):
-        (write_enabler, renew_secret, cancel_secret) = secrets
-        my_nodeid = self.my_nodeid
-        fileutil.make_dirs(bucketdir)
-        filename = os.path.join(bucketdir, "%d" % sharenum)
-        share = create_mutable_sharefile(filename, my_nodeid, write_enabler,
-                                         self)
-        return share
 
     def remote_slot_readv(self, storage_index, shares, readv):
         start = time.time()
