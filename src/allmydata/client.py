@@ -280,27 +280,17 @@ class Client(node.Node, pollmixin.PollMixin):
                            reserved_space=reserved,
                            discard_storage=discard,
                            readonly_storage=readonly,
-                           stats_provider=self.stats_provider,
-                           expiration_enabled=expire,
-                           expiration_mode=mode,
-                           expiration_override_lease_duration=o_l_d,
-                           expiration_cutoff_date=cutoff_date,
-                           expiration_sharetypes=expiration_sharetypes)
+                           stats_provider=self.stats_provider)
         self.add_service(ss)
         self.storage_server = ss
-
-        self.accountant = Accountant(self.basedir, ss, create_if_missing=True)
-        self.add_service(self.accountant)
-        accountant_window = AccountantWindow(self.accountant, self.tub)
-
-        # TODO: another idea: now that we can, publish a separate FURL for
-        # the Accountant. Continue to use ann_d["FURL"] for the
-        # anonymous-access StorageServer, but add ann_d["accountant_FURL"]
-        # for the accountant desk. Aware clients will connect to the latter
-        # and use it to upgrade to a (personalized) IStorageServer reference.
-        # Older clients will go straight for the anonymous-access FURL. That
-        # way, we don't have to do the weird mixing of StorageServer and
-        # Accountant classes into a single object.
+        self.accountant = ss.get_accountant()
+        self.accountant.set_expiration_policy(
+            expiration_enabled=expire,
+            expiration_mode=mode,
+            expiration_override_lease_duration=o_l_d,
+            expiration_cutoff_date=cutoff_date,
+            expiration_sharetypes=expiration_sharetypes)
+        accountant_window = self.accountant.get_accountant_window(self.tub)
 
         d = self.when_tub_ready()
         # we can't do registerReference until the Tub is ready

@@ -14,7 +14,7 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
      create_mutable_sharefile
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.expirer import AccountingCrawler
+from allmydata.storage.accountant import Accountant
 
 # storage/
 # storage/shares/incoming
@@ -37,12 +37,7 @@ class StorageServer(service.MultiService):
 
     def __init__(self, storedir, nodeid, reserved_space=0,
                  discard_storage=False, readonly_storage=False,
-                 stats_provider=None,
-                 expiration_enabled=False,
-                 expiration_mode="age",
-                 expiration_override_lease_duration=None,
-                 expiration_cutoff_date=None,
-                 expiration_sharetypes=("mutable", "immutable")):
+                 stats_provider=None):
         service.MultiService.__init__(self)
         assert isinstance(nodeid, str)
         assert len(nodeid) == 20
@@ -83,16 +78,16 @@ class StorageServer(service.MultiService):
                           "cancel": [],
                           }
         self.add_bucket_counter()
-        self.init_leasecrawler()
+        self.init_accountant()
 
-    def init_leasecrawler(self):
-        statefile = os.path.join(self.storedir, "leasedb_crawler.state")
+    def init_accountant(self):
         dbfile = os.path.join(self.storedir, "leasedb.sqlite")
-        crawler = AccountingCrawler(self, statefile, dbfile)
-        self.accounting_crawler = crawler
-        crawler.setServiceParent(self)
-    def get_leasedb(self):
-        return self.accounting_crawler.get_leasedb()
+        statefile = os.path.join(self.storedir, "leasedb_crawler.state")
+        self.accountant = Accountant(self, dbfile, statefile)
+        self.accountant.setServiceParent(self)
+
+    def get_accountant(self):
+        return self.accountant
 
     def __repr__(self):
         return "<StorageServer %s>" % (idlib.shortnodeid_b2a(self.my_nodeid),)

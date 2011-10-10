@@ -5,10 +5,101 @@ from zope.interface import implements
 from twisted.application import service
 from foolscap.api import Referenceable
 from allmydata.interfaces import RIStorageServer
-from allmydata.util import log, keyutil
+from allmydata.util import log, keyutil, dbutil
+from allmydata.storage.crawler import ShareCrawler
 
 class BadAccountName(Exception):
     pass
+
+LEASE_SCHEMA_V1 = """
+CREATE TABLE version
+(
+ version INTEGER -- contains one row, set to 1
+);
+
+CREATE TABLE shares
+(
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+ `prefix` VARCHAR(2),
+ `storage_index` VARCHAR(26),
+ `shnum` INTEGER,
+ `size` INTEGER
+);
+CREATE INDEX `prefix` ON shares (`prefix`);
+CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
+
+CREATE TABLE leases
+(
+ -- FOREIGN KEY (`share_id`) REFERENCES shares(id), -- not enabled?
+ -- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
+ `share_id` INTEGER,
+ `account_id` INTEGER,
+ `expiration_time` INTEGER,
+ `renew_secret` VARCHAR(52),
+ `cancel_secret` VARCHAR(52)
+);
+CREATE INDEX `account_id` ON leases (`account_id`);
+CREATE INDEX `expiration_time` ON leases (`expiration_time`);
+
+CREATE TABLE accounts
+(
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+ `creation_time` INTEGER
+);
+
+"""
+
+DAY = 24*60*60
+MONTH = 30*DAY
+
+class LeaseDB:
+    STARTER_LEASE_ACCOUNTID = 1
+    STARTER_LEASE_DURATION = 2*MONTH
+
+    def __init__(self, dbfile):
+        (self._sqlite,
+         self._db) = dbutil.get_db(dbfile, create_version=(LEASE_SCHEMA_V1, 1))
+        self._cursor = self._db.cursor()
+        self._dirty = False
+
+    def get_shares_for_prefix(self, prefix):
+        self._cursor.execute("SELECT `storage_index`,`shnum`"
+                             " FROM `shares`"
+                             " WHERE `prefix` == ?",
+                             (prefix,))
+        db_shares = set([(si,shnum) for (si,shnum) in self._cursor.fetchall()])
+        return db_shares
+
+    def add_share(self, prefix, storage_index, shnum, size):
+        self._dirty = True
+        self._cursor.execute("INSERT INTO `shares`"
+                             " VALUES (?,?,?,?,?)",
+                             (None, prefix, storage_index, shnum, size))
+        shareid = self._cursor.lastrowid
+        self._cursor.execute("INSERT INTO `leases`"
+                             " VALUES (?,?,?)",
+                             (shareid,
+                              self.STARTER_LEASE_ACCOUNTID,
+                              time.time()+self.STARTER_LEASE_DURATION))
+
+    def remove_deleted_shares(self, shareids):
+        if shareids:
+            self._dirty = True
+        for deleted_shareid in shareids:
+            storage_index, shnum = deleted_shareid
+            self._cursor.execute("DELETE FROM `shares`"
+                                 " WHERE `storage_index`=? AND `shnum`=?",
+                                 (storage_index, str(shnum)))
+
+    def change_share_size(self, storage_index, shnum, size):
+        self._dirty = True
+        self._cursor.execute("UPDATE `shares` SET `size`=?"
+                             " WHERE storage_index=? AND shnum=?",
+                             (size, storage_index, shnum))
+
+    def commit(self):
+        if self._dirty:
+            self._db.commit()
 
 
 class AnonymousAccount(Referenceable):
@@ -174,17 +265,135 @@ class Account(AnonymousAccount):
                 }
 
 
+def size_of_disk_file(filename):
+    s = os.stat(filename)
+    sharebytes = s.st_size
+    try:
+        # note that stat(2) says that st_blocks is 512 bytes, and that
+        # st_blksize is "optimal file sys I/O ops blocksize", which is
+        # independent of the block-size that st_blocks uses.
+        diskbytes = s.st_blocks * 512
+    except AttributeError:
+        # the docs say that st_blocks is only on linux. I also see it on
+        # MacOS. But it isn't available on windows.
+        diskbytes = sharebytes
+    return diskbytes
+
+class AccountingCrawler(ShareCrawler):
+    """I manage a SQLite table of which leases are owned by which ownerid, to
+    support efficient calculation of total space used per ownerid. The
+    sharefiles (and their leaseinfo fields) is the canonical source: the
+    database is merely a speedup, generated/corrected periodically by this
+    crawler. The crawler both handles the initial DB creation, and fixes the
+    DB when changes have been made outside the storage-server's awareness
+    (e.g. when the admin deletes a sharefile with /bin/rm).
+    """
+
+    # XXX TODO new idea: move all leases into the DB. Do not store leases in
+    # shares at all. The crawler will exist solely to discover shares that
+    # have been manually added to disk (via 'scp' or some out-of-band means),
+    # and will add 30- or 60- day "migration leases" to them, to keep them
+    # alive until their original owner does a deep-add-lease and claims them
+    # properly. Better migration tools ('tahoe storage export'?) will create
+    # export files that include both the share data and the lease data, and
+    # then an import tool will both put the share in the right place and
+    # update the recipient node's lease DB.
+    #
+    # I guess the crawler will also be responsible for deleting expired
+    # shares, since it will be looking at both share files on disk and leases
+    # in the DB.
+    #
+    # So the DB needs a row per share-on-disk, and a separate table with
+    # leases on each bucket. When it sees a share-on-disk that isn't in the
+    # first table, it adds the migration-lease. When it sees a share-on-disk
+    # that is in the first table but has no leases in the second table (i.e.
+    # expired), it deletes both the share and the first-table row. When it
+    # sees a row in the first table but no share-on-disk (i.e. manually
+    # deleted share), it deletes the row (and any leases).
+
+    slow_start = 7*60 # wait 7 minutes after startup
+    minimum_cycle_time = 12*60*60 # not more than twice per day
+
+    def __init__(self, server, statefile, leasedb):
+        ShareCrawler.__init__(self, server, statefile)
+        self._leasedb = leasedb
+        self._expire_time = None
+
+    def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
+        # assume that we can list every bucketdir in this prefix quickly.
+        # Otherwise we have to retain more state between timeslices.
+
+        # we define "shareid" as (SI,shnum)
+        disk_shares = set() # shareid
+        for storage_index in buckets:
+            bucketdir = os.path.join(prefixdir, storage_index)
+            for sharefile in os.listdir(bucketdir):
+                try:
+                    shnum = int(sharefile)
+                except ValueError:
+                    continue # non-numeric means not a sharefile
+                shareid = (storage_index, shnum)
+                disk_shares.add(shareid)
+
+        # now check the database for everything in this prefix
+        db_shares = self._leasedb.get_shares_for_prefix(prefix)
+
+        # add new shares to the DB
+        new_shares = (disk_shares - db_shares)
+        for shareid in new_shares:
+            storage_index, shnum = shareid
+            filename = os.path.join(prefixdir, storage_index, str(shnum))
+            size = size_of_disk_file(filename)
+            self._leasedb.add_share(prefix, storage_index, shnum, size)
+
+        # remove deleted shares
+        deleted_shares = (db_shares - disk_shares)
+        self._leasedb.remove_deleted_shares(deleted_shares)
+
+        self._leasedb.commit()
+
+
+    # these methods are for outside callers to use
+
+    def set_lease_expiration(self, enable, expire_time=None):
+        """Arrange to remove all leases that are currently expired, and to
+        delete all shares without remaining leases. The actual removals will
+        be done later, as the crawler finishes each prefix."""
+        self._do_expire = enable
+        self._expire_time = expire_time
+
+    def db_is_incomplete(self):
+        # don't bother looking at the sqlite database: it's certainly not
+        # complete.
+        return self.state["last-cycle-finished"] is None
+
 class Accountant(service.MultiService):
-    def __init__(self, basedir, storage_server, create_if_missing):
+    def __init__(self, storage_server, dbfile, statefile):
         service.MultiService.__init__(self)
         self.storage_server = storage_server
-        self.accountsdir = os.path.join(basedir, "accounts")
-        if not os.path.isdir(self.accountsdir):
-            os.mkdir(self.accountsdir)
-            self._write("2", "next_ownernum")
-        self.create_if_missing = create_if_missing
+        self.leasedb = LeaseDB(dbfile)
         self._active_accounts = weakref.WeakValueDictionary()
-        self.leasedb = self.storage_server.get_leasedb()
+        self._accountant_window = None
+
+        crawler = AccountingCrawler(storage_server, statefile, self.leasedb)
+        self.accounting_crawler = crawler
+        crawler.setServiceParent(self)
+
+    def get_accountant_window(self, tub):
+        if not self._accountant_window:
+            self._accountant_window = AccountantWindow(self, tub)
+        return self._accountant_window
+
+    def get_leasedb(self):
+        return self.leasedb
+
+    def set_expiration_policy(self,
+                              expiration_enabled=False,
+                              expiration_mode="age",
+                              expiration_override_lease_duration=None,
+                              expiration_cutoff_date=None,
+                              expiration_sharetypes=("mutable", "immutable")):
+        pass # TODO
 
     def _read(self, *paths):
         fn = os.path.join(self.accountsdir, *paths)
