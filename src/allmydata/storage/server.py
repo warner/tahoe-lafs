@@ -313,9 +313,6 @@ class StorageServer(service.MultiService):
         # separate database. Note that the lease should not be added until
         # the BucketWriter has been closed.
         expire_time = time.time() + 31*24*60*60
-        lease_info = LeaseInfo(account.get_owner_num(),
-                               renew_secret, cancel_secret,
-                               expire_time, self.my_nodeid)
 
         max_space_per_bucket = allocated_size
 
@@ -335,7 +332,6 @@ class StorageServer(service.MultiService):
         for (shnum, fn) in self._get_bucket_shares(storage_index):
             alreadygot.add(shnum)
             sf = ShareFile(fn)
-            sf.add_or_renew_lease(lease_info)
 
         for shnum in sharenums:
             incominghome = os.path.join(self.incomingdir, si_dir, "%d" % shnum)
@@ -351,8 +347,11 @@ class StorageServer(service.MultiService):
                 pass
             elif (not limited) or (remaining_space >= max_space_per_bucket):
                 # ok! we need to create the new share file.
-                bw = BucketWriter(self, incominghome, finalhome,
-                                  max_space_per_bucket, lease_info, canary)
+                lease_info = (storage_index, shnum,
+                              renew_secret, cancel_secret, expire_time)
+                bw = BucketWriter(self, account, lease_info,
+                                  incominghome, finalhome,
+                                  max_space_per_bucket, canary)
                 if self.no_storage:
                     bw.throw_out_all_data = True
                 bucketwriters[shnum] = bw
@@ -374,11 +373,10 @@ class StorageServer(service.MultiService):
         start = time.time()
         self.count("add-lease")
         new_expire_time = time.time() + 31*24*60*60
-        lease_info = LeaseInfo(account.get_owner_num(),
-                               renew_secret, cancel_secret,
-                               new_expire_time, self.my_nodeid)
         for sf in self._iter_share_files(storage_index):
-            sf.add_or_renew_lease(lease_info)
+            lease_info = (storage_index, SHNUM,
+                          renew_secret, cancel_secret, new_expire_time)
+            account.add_lease(lease_info, FILENAME)
         self.add_latency("add-lease", time.time() - start)
         return None
 
@@ -389,6 +387,7 @@ class StorageServer(service.MultiService):
         found_buckets = False
         for sf in self._iter_share_files(storage_index):
             found_buckets = True
+            # XXX
             sf.renew_lease(renew_secret, new_expire_time)
         self.add_latency("renew", time.time() - start)
         if not found_buckets:
@@ -456,9 +455,6 @@ class StorageServer(service.MultiService):
 
         ownerid = 1 # TODO
         expire_time = time.time() + 31*24*60*60   # one month
-        lease_info = LeaseInfo(ownerid,
-                               renew_secret, cancel_secret,
-                               expire_time, self.my_nodeid)
 
         if testv_is_good:
             # now apply the write vectors
@@ -477,8 +473,10 @@ class StorageServer(service.MultiService):
                                                           owner_num=0)
                         shares[sharenum] = share
                     shares[sharenum].writev(datav, new_length)
-                    # and update the lease
-                    shares[sharenum].add_or_renew_lease(lease_info)
+                    lease_info = (storage_index, sharenum,
+                                  renew_secret, cancel_secret, expire_time)
+                    # and add/update the lease
+                    shares[sharenum].add_lease(account, lease_info)
 
             if new_length == 0:
                 # delete empty bucket directories

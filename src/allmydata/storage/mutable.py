@@ -214,6 +214,9 @@ class MutableShareFile:
                 # self._change_container_size() here.
         f.close()
 
+    def add_lease(self, account, lease_info):
+        account.add_lease(lease_info, self.home)
+
 def testv_compare(a, op, b):
     assert op in ("lt", "le", "eq", "ne", "ge", "gt")
     if op == "lt":

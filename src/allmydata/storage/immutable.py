@@ -107,11 +107,15 @@ class ShareFile:
 class BucketWriter(Referenceable):
     implements(RIBucketWriter)
 
-    def __init__(self, ss, incominghome, finalhome, max_size, canary):
+    def __init__(self, ss, account, lease_info, incominghome, finalhome,
+                 max_size, canary):
         self.ss = ss
         self.incominghome = incominghome
         self.finalhome = finalhome
         self._max_size = max_size # don't allow the client to write more than this
+        self._account = account
+        self._lease_info = lease_info
+        self._shnum = shnum
         self._canary = canary
         self._disconnect_marker = canary.notifyOnDisconnect(self._disconnected)
         self.closed = False
@@ -168,6 +172,7 @@ class BucketWriter(Referenceable):
         self.ss.bucket_writer_closed(self, filelen)
         self.ss.add_latency("close", time.time() - start)
         self.ss.count("close")
+        self._account.add_lease(self._lease_info, self.finalhome)
 
     def _disconnected(self):
         if not self.closed:

@@ -246,8 +246,18 @@ class BaseAccount(Referenceable):
         self.server = server
         self._leasedb = leasedb
 
+    # these methods are called by StorageServer
+
     def get_owner_num(self):
         return self.owner_num
+
+    def add_lease(self, lease_info, filename):
+        (storage_index, shnum, renew_secret, cancel_secret,
+         expire_time) = lease_info
+        size = size_of_disk_file(filename)
+        self._leasedb.add_lease(storage_index, shnum,
+                                self.owner_num, expire_time,
+                                renew_secret, cancel_secret)
 
     def remote_get_version(self):
         return self.server.client_get_version(self)
