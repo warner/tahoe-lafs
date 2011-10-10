@@ -473,13 +473,13 @@ class Accountant(service.MultiService):
     def __init__(self, storage_server, dbfile, statefile):
         service.MultiService.__init__(self)
         self.storage_server = storage_server
-        self.leasedb = LeaseDB(dbfile)
+        self._leasedb = LeaseDB(dbfile)
         self._active_accounts = weakref.WeakValueDictionary()
         self._accountant_window = None
         self._anonymous_account = AnonymousAccount(0, self.storage_server,
-                                                   self.leasedb)
+                                                   self._leasedb)
 
-        crawler = AccountingCrawler(storage_server, statefile, self.leasedb)
+        crawler = AccountingCrawler(storage_server, statefile, self._leasedb)
         self.accounting_crawler = crawler
         crawler.setServiceParent(self)
 
@@ -489,7 +489,7 @@ class Accountant(service.MultiService):
         return self._accountant_window
 
     def get_leasedb(self):
-        return self.leasedb
+        return self._leasedb
 
     def set_expiration_policy(self,
                               expiration_enabled=False,
@@ -504,7 +504,7 @@ class Accountant(service.MultiService):
     def get_account(self, pubkey_vs):
         if pubkey_vs not in self._active_accounts:
             ownernum = self._leasedb.get_or_allocate_ownernum(pubkey_vs)
-            a = Account(ownernum, self.storage_server, self.leasedb)
+            a = Account(ownernum, self.storage_server, self._leasedb)
             self._active_accounts[pubkey_vs] = a
             # the client's RemoteReference will keep the Account alive. When
             # it disconnects, that reference will lapse, and it will be
@@ -519,7 +519,7 @@ class Accountant(service.MultiService):
         for ownerid, pubkey_vs in self._leasedb.get_all_accounts():
             if pubkey_vs in self._active_accounts:
                 yield self._active_accounts[pubkey_vs]
-            yield Account(ownerid, self.storage_server, self.leasedb)
+            yield Account(ownerid, self.storage_server, self._leasedb)
 
 
 class AccountantWindow(Referenceable):
