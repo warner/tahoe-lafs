@@ -9,7 +9,7 @@ from twisted.application import service
 from foolscap.api import fireEventually
 import itertools
 from allmydata import interfaces
-from allmydata.util import fileutil, hashutil, base32, pollmixin, time_format
+from allmydata.util import fileutil, hashutil, base32, pollmixin
 from allmydata.storage.server import StorageServer
 from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.immutable import BucketWriter, BucketReader

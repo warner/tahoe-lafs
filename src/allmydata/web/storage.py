@@ -1,9 +1,9 @@
 
-import time, simplejson
+import simplejson
 from nevow import rend, tags as T, inevow
 from allmydata.web.common import getxmlfile, abbreviate_time, get_arg
 from allmydata.util.abbreviate import abbreviate_space
-from allmydata.util import time_format, idlib
+from allmydata.util import idlib
 
 def remove_prefix(s, prefix):
     if not s.startswith(prefix):
