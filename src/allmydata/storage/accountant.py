@@ -52,6 +52,15 @@ CREATE TABLE accounts
 );
 CREATE INDEX `pubkey_vs` ON `accounts` (`pubkey_vs`);
 
+CREATE TABLE account_attributes
+(
+ `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+ `account_id` INTEGER,
+ `name` VARCHAR(20),
+ `value` VARCHAR(20) -- actually anything: usually string, unicode, integer
+ );
+CREATE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`);
+
 INSERT INTO `accounts` VALUES (0, "anonymous", 0);
 
 """
@@ -172,6 +181,32 @@ class LeaseDB:
 
     # account management
 
+    def get_account_attribute(self, accountid, name):
+        self._cursor.execute("SELECT `value` FROM `account_attributes`"
+                             " WHERE account_id=? AND name=?",
+                             (accountid, name))
+        row = self._cursor.fetchone()
+        if row:
+            return row[0]
+        return None
+
+    def set_account_attribute(self, accountid, name, value):
+        self._cursor.execute("SELECT `id` FROM `account_attributes`"
+                             " WHERE `account_id`=? AND `name`=?",
+                             (accountid, name))
+        row = self._cursor.fetchone()
+        if row:
+            attrid = row[0]
+            self._cursor.execute("UPDATE `account_attributes`"
+                                 " SET `value`=?"
+                                 " WHERE `id`=?",
+                                 (value, attrid))
+        else:
+            self._cursor.execute("INSERT INTO `account_attributes`"
+                                 " VALUES (?,?,?,?)",
+                                 (None, accountid, name, value))
+        self._db.commit()
+
     def get_or_allocate_ownernum(self, pubkey_vs):
         if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):
             raise BadAccountName("unacceptable characters in pubkey")
@@ -200,9 +235,10 @@ class LeaseDB:
 class AnonymousAccount(Referenceable):
     implements(RIStorageServer)
 
-    def __init__(self, owner_num, server):
+    def __init__(self, owner_num, server, leasedb):
         self.owner_num = owner_num
         self.server = server
+        self._leasedb = leasedb
 
     def remote_get_version(self):
         return self.server.remote_get_version()
@@ -247,8 +283,8 @@ class AnonymousAccount(Referenceable):
             share_type, storage_index, shnum, reason)
 
 class Account(AnonymousAccount):
-    def __init__(self, owner_num, server):
-        AnonymousAccount.__init__(self, owner_num, server)
+    def __init__(self, owner_num, server, leasedb):
+        AnonymousAccount.__init__(self, owner_num, server, leasedb)
         self.connected = False
         self.connected_since = None
         self.connection = None
@@ -263,6 +299,11 @@ class Account(AnonymousAccount):
             "fancy": "free pony if you knew how to ask",
             }
 
+    def get_account_attribute(self, name):
+        return self._leasedb.get_account_attribute(self.owner_num, name)
+    def set_account_attribute(self, name, value):
+        self._leasedb.set_account_attribute(self.owner_num, name, value)
+
     def remote_get_status(self):
         return self.status
     def remote_get_account_message(self):
@@ -273,12 +314,12 @@ class Account(AnonymousAccount):
     def set_nickname(self, nickname):
         if len(nickname) > 1000:
             raise ValueError("nickname too long")
-        self._write(nickname.encode("utf-8"), "nickname")
+        self.set_account_attribute("nickname", nickname)
 
     def get_nickname(self):
-        n = self._read("nickname")
-        if n is not None:
-            return n.decode("utf-8")
+        n = self.get_account_attribute("nickname")
+        if n:
+            return n
         return u""
 
     def remote_get_current_usage(self):
@@ -301,14 +342,14 @@ class Account(AnonymousAccount):
             rhost_s = "loopback"
         else:
             rhost_s = str(rhost)
-        self._write(rhost_s, "last_connected_from")
+        self.set_account_attribute("last_connected_from", rhost_s)
         rx.notifyOnDisconnect(self._disconnected)
 
     def _disconnected(self):
         self.connected = False
         self.connected_since = None
         self.connection = None
-        self._write(str(int(time.time())), "last_seen")
+        self.set_account_attribute("last_seen", int(time.time()))
         self.disconnected_since = None
 
     def _send_status(self):
@@ -334,14 +375,11 @@ class Account(AnonymousAccount):
         # after disconnect: connected=False, connected_since=None,
         #                   last_connected_from=HOST, last_seen=STOP
 
-        last_seen = self._read("last_seen")
-        if last_seen is not None:
-            last_seen = int(last_seen)
         return {"connected": self.connected,
                 "connected_since": self.connected_since,
-                "last_connected_from": self._read("last_connected_from"),
-                "last_seen": last_seen,
-                "created": int(self._read("created")),
+                "last_connected_from": self.get_account_attribute("last_connected_from"),
+                "last_seen": self.get_account_attribute("last_seen"),
+                "created": self.get_account_attribute("created"),
                 }
 
 
@@ -432,7 +470,8 @@ class Accountant(service.MultiService):
         self.leasedb = LeaseDB(dbfile)
         self._active_accounts = weakref.WeakValueDictionary()
         self._accountant_window = None
-        self._anonymous_account = AnonymousAccount(0, self.storage_server)
+        self._anonymous_account = AnonymousAccount(0, self.storage_server,
+                                                   self.leasedb)
 
         crawler = AccountingCrawler(storage_server, statefile, self.leasedb)
         self.accounting_crawler = crawler
@@ -459,7 +498,7 @@ class Accountant(service.MultiService):
     def get_account(self, pubkey_vs):
         if pubkey_vs not in self._active_accounts:
             ownernum = self._leasedb.get_or_allocate_ownernum(pubkey_vs)
-            a = Account(ownernum, self.storage_server)
+            a = Account(ownernum, self.storage_server, self.leasedb)
             self._active_accounts[pubkey_vs] = a
             # the client's RemoteReference will keep the Account alive. When
             # it disconnects, that reference will lapse, and it will be
@@ -474,7 +513,7 @@ class Accountant(service.MultiService):
         for ownerid, pubkey_vs in self._leasedb.get_all_accounts():
             if pubkey_vs in self._active_accounts:
                 yield self._active_accounts[pubkey_vs]
-            yield Account(ownerid, self.storage_server)
+            yield Account(ownerid, self.storage_server, self.leasedb)
 
 
 class AccountantWindow(Referenceable):
