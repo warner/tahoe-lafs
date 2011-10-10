@@ -27,6 +27,7 @@ CREATE TABLE shares
  `shnum` INTEGER,
  `size` INTEGER
 );
+
 CREATE INDEX `prefix` ON shares (`prefix`);
 CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
 
@@ -41,16 +42,17 @@ CREATE TABLE leases
  `renew_secret` VARCHAR(52),
  `cancel_secret` VARCHAR(52)
 );
+
 CREATE INDEX `account_id` ON `leases` (`account_id`);
 CREATE INDEX `expiration_time` ON `leases` (`expiration_time`);
 
 CREATE TABLE accounts
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
- `pubkey_vs` UNIQUE VARCHAR(52),
+ `pubkey_vs` VARCHAR(52),
  `creation_time` INTEGER
 );
-CREATE INDEX `pubkey_vs` ON `accounts` (`pubkey_vs`);
+CREATE UNIQUE INDEX `pubkey_vs` ON `accounts` (`pubkey_vs`);
 
 CREATE TABLE account_attributes
 (
@@ -59,7 +61,7 @@ CREATE TABLE account_attributes
  `name` VARCHAR(20),
  `value` VARCHAR(20) -- actually anything: usually string, unicode, integer
  );
-CREATE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`);
+CREATE UNIQUE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`);
 
 INSERT INTO `accounts` VALUES (0, "anonymous", 0);
 
@@ -71,6 +73,9 @@ MONTH = 30*DAY
 class LeaseDB:
     STARTER_LEASE_ACCOUNTID = 1
     STARTER_LEASE_DURATION = 2*MONTH
+
+    # for all methods that start by setting self._dirty=True, be sure to call
+    # .commit() when you're done
 
     def __init__(self, dbfile):
         (self._sqlite,
@@ -89,20 +94,24 @@ class LeaseDB:
         return db_shares
 
     def add_new_share(self, prefix, storage_index, shnum, size):
-        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("INSERT INTO `shares`"
                              " VALUES (?,?,?,?,?)",
                              (None, prefix, storage_index, shnum, size))
         shareid = self._cursor.lastrowid
+        return shareid
+
+    def add_starter_lease(self, shareid):
+        self._dirty = True
         self._cursor.execute("INSERT INTO `leases`"
                              " VALUES (?,?,?)",
                              (shareid,
                               self.STARTER_LEASE_ACCOUNTID,
                               int(time.time())+self.STARTER_LEASE_DURATION))
+        leaseid = self._cursor.lastrowid
+        return leaseid
 
     def remove_deleted_shares(self, shareids):
-        # don't forget to call .commit() when you're done
         if shareids:
             self._dirty = True
         for deleted_shareid in shareids:
@@ -112,7 +121,6 @@ class LeaseDB:
                                  (storage_index, str(shnum)))
 
     def change_share_size(self, storage_index, shnum, size):
-        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("UPDATE `shares` SET `size`=?"
                              " WHERE storage_index=? AND shnum=?",
@@ -122,7 +130,6 @@ class LeaseDB:
 
     def add_lease(self, storage_index, shnum,
                   ownerid, expiration_time, renew_secret, cancel_secret):
-        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("SELECT `id` FROM `shares`"
                              " WHERE `storage_index`=? AND `shnum`=?",
@@ -139,7 +146,6 @@ class LeaseDB:
     def add_or_renew_lease(self, storage_index, shnum,
                            ownerid, expiration_time,
                            renew_secret, cancel_secret):
-        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("SELECT `id` FROM `shares`"
                              " WHERE `storage_index`=? AND `shnum`=?",
@@ -165,7 +171,6 @@ class LeaseDB:
                                   renew_secret, cancel_secret))
 
     def cancel_lease(self, storage_index, shnum, cancel_secret):
-        # don't forget to call .commit() when you're done
         self._dirty = True
         self._cursor.execute("SELECT `id` FROM `shares`"
                              " WHERE `storage_index`=? AND `shnum`=?",
@@ -440,7 +445,8 @@ class AccountingCrawler(ShareCrawler):
             storage_index, shnum = shareid
             filename = os.path.join(prefixdir, storage_index, str(shnum))
             size = size_of_disk_file(filename)
-            self._leasedb.add_share(prefix, storage_index, shnum, size)
+            sid = self._leasedb.add_new_share(prefix, storage_index,shnum, size)
+            self._leasedb.add_starter_lease(sid)
 
         # remove deleted shares
         deleted_shares = (db_shares - disk_shares)
