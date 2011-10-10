@@ -64,6 +64,7 @@ CREATE TABLE account_attributes
 CREATE UNIQUE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`);
 
 INSERT INTO `accounts` VALUES (0, "anonymous", 0);
+INSERT INTO `accounts` VALUES (1, "starter", 0);
 
 """
 
@@ -104,10 +105,10 @@ class LeaseDB:
     def add_starter_lease(self, shareid):
         self._dirty = True
         self._cursor.execute("INSERT INTO `leases`"
-                             " VALUES (?,?,?)",
-                             (shareid,
-                              self.STARTER_LEASE_ACCOUNTID,
-                              int(time.time())+self.STARTER_LEASE_DURATION))
+                             " VALUES (?,?,?,?,?,?)",
+                             (None, shareid, self.STARTER_LEASE_ACCOUNTID,
+                              int(time.time()+self.STARTER_LEASE_DURATION),
+                              None, None))
         leaseid = self._cursor.lastrowid
         return leaseid
 
@@ -171,6 +172,7 @@ class LeaseDB:
                                   renew_secret, cancel_secret))
 
     def cancel_lease(self, storage_index, shnum, cancel_secret):
+        assert isinstance(cancel_secret, type("")) # not None
         self._dirty = True
         self._cursor.execute("SELECT `id` FROM `shares`"
                              " WHERE `storage_index`=? AND `shnum`=?",
