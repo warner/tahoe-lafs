@@ -321,12 +321,16 @@ class Root(rend.Page):
         c = account.get_connection_status()
         if c["connected"]:
             cs = "Yes: from %s" % c["last_connected_from"]
-        else:
+        elif c["last_connected_from"]:
             # there is a window (between Account creation and our connection
             # to the 'rxFURL' receiver) during which the Account exists but
             # we've never connected to it. So c["last_connected_from"] can be
-            # None.
+            # None. Also the pseudo-accounts ("anonymous" and "starter")
+            # never have connection data.
             cs = "No: last from %s" % c["last_connected_from"]
+        else:
+            cs = "Never"
+
         ctx.fillSlots("nickname", account.get_nickname())
         ctx.fillSlots("clientid", account.get_id())
         ctx.fillSlots("connected-bool", c["connected"])
@@ -342,7 +346,7 @@ class Root(rend.Page):
         else:
             since = ""
         ctx.fillSlots("since", since)
-        created = "?"
+        created = ""
         if c["created"]:
             created = time.strftime(TIME_FORMAT, time.localtime(c["created"]))
         ctx.fillSlots("created", created)
