@@ -7,9 +7,9 @@ from allmydata.interfaces import IStatsProducer
 from allmydata.util import fileutil, idlib, log, time_format
 import allmydata # for __full_version__
 
-from allmydata.storage.common import si_b2a, si_a2b, storage_index_to_dir
+from allmydata.storage.common import si_b2a, si_a2b, storage_index_to_dir, \
+     storage_index_to_prefix
 _pyflakes_hush = [si_b2a, si_a2b, storage_index_to_dir] # re-exported
-from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
      create_mutable_sharefile
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
@@ -245,25 +245,8 @@ class StorageServer(service.MultiService):
             # Commonly caused by there being no buckets at all.
             pass
 
-    def get_leases(self, storage_index):
-        """Provide an iterator that yields all of the leases attached to this
-        bucket. Each lease is returned as a LeaseInfo instance.
-
-        This method is not for client use.
-        """
-
-        # since all shares get the same lease data, we just grab the leases
-        # from the first share
-        try:
-            shnum, filename = self._get_bucket_shares(storage_index).next()
-            sf = ShareFile(filename)
-            return sf.get_leases()
-        except StopIteration:
-            return iter([])
-
-    def _allocate_slot_share(self, bucketdir, secrets, sharenum,
+    def _allocate_slot_share(self, bucketdir, write_enabler, sharenum,
                              allocated_size, owner_num=0):
-        (write_enabler, renew_secret, cancel_secret) = secrets
         my_nodeid = self.my_nodeid
         fileutil.make_dirs(bucketdir)
         filename = os.path.join(bucketdir, "%d" % sharenum)
@@ -296,7 +279,6 @@ class StorageServer(service.MultiService):
         return version
 
     def client_allocate_buckets(self, storage_index,
-                                renew_secret, cancel_secret,
                                 sharenums, allocated_size,
                                 canary, account):
         start = time.time()
@@ -305,14 +287,12 @@ class StorageServer(service.MultiService):
         bucketwriters = {} # k: shnum, v: BucketWriter
         si_dir = storage_index_to_dir(storage_index)
         si_s = si_b2a(storage_index)
+        prefix = storage_index_to_prefix(storage_index)
 
         log.msg("storage: allocate_buckets %s" % si_s)
 
-        # in this implementation, the lease information (including secrets)
-        # goes into the share files themselves. It could also be put into a
-        # separate database. Note that the lease should not be added until
-        # the BucketWriter has been closed.
-        expire_time = time.time() + 31*24*60*60
+        # Note that the lease should not be added until the BucketWriter has
+        # been closed. This is handled in BucketWriter.close()
 
         max_space_per_bucket = allocated_size
 
@@ -331,7 +311,6 @@ class StorageServer(service.MultiService):
         # file, they'll want us to hold leases for this file.
         for (shnum, fn) in self._get_bucket_shares(storage_index):
             alreadygot.add(shnum)
-            sf = ShareFile(fn)
 
         for shnum in sharenums:
             incominghome = os.path.join(self.incomingdir, si_dir, "%d" % shnum)
@@ -347,9 +326,8 @@ class StorageServer(service.MultiService):
                 pass
             elif (not limited) or (remaining_space >= max_space_per_bucket):
                 # ok! we need to create the new share file.
-                lease_info = (storage_index, shnum,
-                              renew_secret, cancel_secret, expire_time)
-                bw = BucketWriter(self, account, lease_info,
+                bw = BucketWriter(self, account,
+                                  prefix, storage_index, shnum,
                                   incominghome, finalhome,
                                   max_space_per_bucket, canary)
                 if self.no_storage:
@@ -368,31 +346,6 @@ class StorageServer(service.MultiService):
         self.add_latency("allocate", time.time() - start)
         return alreadygot, bucketwriters
 
-    def client_add_lease(self, storage_index, renew_secret, cancel_secret,
-                         account):
-        start = time.time()
-        self.count("add-lease")
-        new_expire_time = time.time() + 31*24*60*60
-        for sf in self._iter_share_files(storage_index):
-            lease_info = (storage_index, SHNUM,
-                          renew_secret, cancel_secret, new_expire_time)
-            account.add_lease(lease_info, FILENAME)
-        self.add_latency("add-lease", time.time() - start)
-        return None
-
-    def client_renew_lease(self, storage_index, renew_secret):
-        start = time.time()
-        self.count("renew")
-        new_expire_time = time.time() + 31*24*60*60
-        found_buckets = False
-        for sf in self._iter_share_files(storage_index):
-            found_buckets = True
-            # XXX
-            sf.renew_lease(renew_secret, new_expire_time)
-        self.add_latency("renew", time.time() - start)
-        if not found_buckets:
-            raise IndexError("no such lease to renew")
-
     def client_get_buckets(self, storage_index, account):
         start = time.time()
         self.count("get")
@@ -406,7 +359,7 @@ class StorageServer(service.MultiService):
         return bucketreaders
 
     def client_slot_testv_and_readv_and_writev(self, storage_index,
-                                               secrets,
+                                               write_enabler,
                                                test_and_write_vectors,
                                                read_vector, account):
         start = time.time()
@@ -414,7 +367,8 @@ class StorageServer(service.MultiService):
         si_s = si_b2a(storage_index)
         log.msg("storage: slot_writev %s" % si_s)
         si_dir = storage_index_to_dir(storage_index)
-        (write_enabler, renew_secret, cancel_secret) = secrets
+        prefix = storage_index_to_prefix(storage_index)
+
         # shares exist if there is a file for them
         bucketdir = os.path.join(self.sharedir, si_dir)
         shares = {}
@@ -453,9 +407,6 @@ class StorageServer(service.MultiService):
         for sharenum, share in shares.items():
             read_data[sharenum] = share.readv(read_vector)
 
-        ownerid = 1 # TODO
-        expire_time = time.time() + 31*24*60*60   # one month
-
         if testv_is_good:
             # now apply the write vectors
             for sharenum in test_and_write_vectors:
@@ -463,20 +414,26 @@ class StorageServer(service.MultiService):
                 if new_length == 0:
                     if sharenum in shares:
                         shares[sharenum].unlink()
+                        account.remove_share_and_leases(storage_index, sharenum)
                 else:
                     if sharenum not in shares:
                         # allocate a new share
                         allocated_size = 2000 # arbitrary, really
-                        share = self._allocate_slot_share(bucketdir, secrets,
+                        share = self._allocate_slot_share(bucketdir,
+                                                          write_enabler,
                                                           sharenum,
-                                                          allocated_size,
-                                                          owner_num=0)
+                                                          allocated_size)
                         shares[sharenum] = share
-                    shares[sharenum].writev(datav, new_length)
-                    lease_info = (storage_index, sharenum,
-                                  renew_secret, cancel_secret, expire_time)
-                    # and add/update the lease
-                    shares[sharenum].add_lease(account, lease_info)
+                        shares[sharenum].writev(datav, new_length)
+                        account.add_share(prefix, storage_index, sharenum,
+                                          shares[sharenum].home)
+                    else:
+                        # apply the write vector and update the lease
+                        shares[sharenum].writev(datav, new_length)
+                        account.update_share(storage_index, sharenum,
+                                             shares[sharenum].home)
+                    account.add_lease(storage_index, sharenum)
+            account.commit()
 
             if new_length == 0:
                 # delete empty bucket directories

@@ -1,4 +1,4 @@
-import os, stat, struct
+import os, struct
 
 from allmydata.interfaces import BadWriteEnablerError
 from allmydata.util import idlib, log

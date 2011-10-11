@@ -38,9 +38,7 @@ CREATE TABLE leases
  -- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
  `share_id` INTEGER,
  `account_id` INTEGER,
- `expiration_time` INTEGER,
- `renew_secret` VARCHAR(52),
- `cancel_secret` VARCHAR(52)
+ `expiration_time` INTEGER
 );
 
 CREATE INDEX `account_id` ON `leases` (`account_id`);
@@ -105,21 +103,28 @@ class LeaseDB:
     def add_starter_lease(self, shareid):
         self._dirty = True
         self._cursor.execute("INSERT INTO `leases`"
-                             " VALUES (?,?,?,?,?,?)",
+                             " VALUES (?,?,?,?)",
                              (None, shareid, self.STARTER_LEASE_ACCOUNTID,
-                              int(time.time()+self.STARTER_LEASE_DURATION),
-                              None, None))
+                              int(time.time()+self.STARTER_LEASE_DURATION)))
         leaseid = self._cursor.lastrowid
         return leaseid
 
     def remove_deleted_shares(self, shareids):
-        if shareids:
-            self._dirty = True
+        # TODO: replace this with a sensible DELETE, join, and sub-SELECT
+        shareids2 = []
         for deleted_shareid in shareids:
             storage_index, shnum = deleted_shareid
-            self._cursor.execute("DELETE FROM `shares`"
+            self._cursor.execute("SELECT `id` FROM `shares`"
                                  " WHERE `storage_index`=? AND `shnum`=?",
-                                 (storage_index, str(shnum)))
+                                 (storage_index, shnum))
+            row = self._cursor.fetchone()
+            if row:
+                shareids2.append(row[0])
+        for shareid2 in shareids2:
+            self._dirty = True
+            self._cursor.execute("DELETE FROM `leases`"
+                                 " WHERE `share_id`=?",
+                                 (shareid2,))
 
     def change_share_size(self, storage_index, shnum, size):
         self._dirty = True
@@ -129,62 +134,35 @@ class LeaseDB:
 
     # lease management
 
-    def add_lease(self, storage_index, shnum,
-                  ownerid, expiration_time, renew_secret, cancel_secret):
+    def add_or_renew_leases(self, storage_index, shnum, ownerid,
+                            expiration_time):
+        # shnum=None means renew leases on all shares
         self._dirty = True
-        self._cursor.execute("SELECT `id` FROM `shares`"
-                             " WHERE `storage_index`=? AND `shnum`=?",
-                             (storage_index, shnum))
-        row = self._cursor.fetchone()
-        if not row:
-            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
-                             % (storage_index, shnum))
-        shareid = row[0]
-        self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?,?)",
-                             (None, shareid, ownerid, expiration_time,
-                              renew_secret, cancel_secret))
-
-    def add_or_renew_lease(self, storage_index, shnum,
-                           ownerid, expiration_time,
-                           renew_secret, cancel_secret):
-        self._dirty = True
-        self._cursor.execute("SELECT `id` FROM `shares`"
-                             " WHERE `storage_index`=? AND `shnum`=?",
-                             (storage_index, shnum))
-        row = self._cursor.fetchone()
-        if not row:
-            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
-                             % (storage_index, shnum))
-        shareid = row[0]
-        self._cursor.execute("SELECT `id` FROM `leases`"
-                             " WHERE `share_id`=? AND `account_id`=?"
-                             "  AND `renew_secret`=? AND `cancel_secret`=?",
-                             (shareid, ownerid, renew_secret, cancel_secret))
-        row = self._cursor.fetchone()
-        if row:
-            leaseid = row[0]
-            self._cursor.execute("UPDATE `leases` SET expiration_time=?"
-                                 " WHERE `id`=?",
-                                 (expiration_time, leaseid))
+        if shnum is None:
+            self._cursor.execute("SELECT `id` FROM `shares`"
+                                 " WHERE `storage_index`=?",
+                                 (storage_index,))
         else:
-            self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?,?)",
-                                 (None, shareid, ownerid, expiration_time,
-                                  renew_secret, cancel_secret))
-
-    def cancel_lease(self, storage_index, shnum, cancel_secret):
-        assert isinstance(cancel_secret, type("")) # not None
-        self._dirty = True
-        self._cursor.execute("SELECT `id` FROM `shares`"
-                             " WHERE `storage_index`=? AND `shnum`=?",
-                             (storage_index, shnum))
-        row = self._cursor.fetchone()
-        if not row:
+            self._cursor.execute("SELECT `id` FROM `shares`"
+                                 " WHERE `storage_index`=? AND `shnum`=?",
+                                 (storage_index, shnum))
+        rows = self._cursor.fetchall()
+        if not rows:
             raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
                              % (storage_index, shnum))
-        shareid = row[0]
-        self._cursor.execute("DELETE FROM `leases`"
-                             " WHERE `share_id`=? AND `cancel_secret`=?",
-                             (shareid, cancel_secret))
+        for (shareid,) in rows:
+            self._cursor.execute("SELECT `id` FROM `leases`"
+                                 " WHERE `share_id`=? AND `account_id`=?",
+                                 (shareid, ownerid))
+            row = self._cursor.fetchone()
+            if row:
+                leaseid = row[0]
+                self._cursor.execute("UPDATE `leases` SET expiration_time=?"
+                                     " WHERE `id`=?",
+                                     (expiration_time, leaseid))
+            else:
+                self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?)",
+                                     (None, shareid, ownerid, expiration_time))
 
     # account management
 
@@ -239,8 +217,22 @@ class LeaseDB:
             self._dirty = False
 
 
-class BaseAccount(Referenceable):
+def size_of_disk_file(filename):
+    s = os.stat(filename)
+    sharebytes = s.st_size
+    try:
+        # note that stat(2) says that st_blocks is 512 bytes, and that
+        # st_blksize is "optimal file sys I/O ops blocksize", which is
+        # independent of the block-size that st_blocks uses.
+        diskbytes = s.st_blocks * 512
+    except AttributeError:
+        # the docs say that st_blocks is only on linux. I also see it on
+        # MacOS. But it isn't available on windows.
+        diskbytes = sharebytes
+    return diskbytes
 
+
+class BaseAccount(Referenceable):
     def __init__(self, owner_num, server, leasedb):
         self.owner_num = owner_num
         self.server = server
@@ -251,13 +243,50 @@ class BaseAccount(Referenceable):
     def get_owner_num(self):
         return self.owner_num
 
-    def add_lease(self, lease_info, filename):
-        (storage_index, shnum, renew_secret, cancel_secret,
-         expire_time) = lease_info
+    def get_expiration_time(self):
+        return time.time() + 31*24*60*60
+
+    # immutable.BucketWriter.close() does add_share() and add_lease()
+
+    # mutable_writev() does:
+    #  deleted shares: remove_share_and_leases()
+    #  new shares: add_share(), add_lease()
+    #  changed shares: update_share(), add_lease()
+
+    def add_share(self, prefix, storage_index, shnum, filename, commit=True):
         size = size_of_disk_file(filename)
-        self._leasedb.add_lease(storage_index, shnum,
-                                self.owner_num, expire_time,
-                                renew_secret, cancel_secret)
+        self._leasedb.add_new_share(prefix, storage_index, shnum, size)
+        if commit:
+            self._leasedb.commit()
+
+    def add_lease(self, storage_index, shnum, commit=True):
+        expire_time = self.get_expiration_time()
+        self._leasedb.add_or_renew_leases(storage_index, shnum,
+                                          self.owner_num, expire_time)
+        if commit:
+            self._leasedb.commit()
+
+    def update_share(self, storage_index, shnum, filename, commit=True):
+        size = size_of_disk_file(filename)
+        self._leasedb.change_share_size(storage_index, shnum, size)
+        if commit:
+            self._leasedb.commit()
+
+    def remove_share_and_leases(self, storage_index, shnum):
+        self._leasedb.remove_deleted_shares([storage_index, shnum])
+
+    # remote_add_lease() and remote_renew_lease() do this
+    def add_lease_for_bucket(self, storage_index, commit=True):
+        expire_time = self.get_expiration_time()
+        self._leasedb.add_or_renew_leases(storage_index, None,
+                                          self.owner_num, expire_time)
+        if commit:
+            self._leasedb.commit()
+
+    def commit(self):
+        self._leasedb.commit()
+
+    # The following RIStorageServer methods are called by remote clients
 
     def remote_get_version(self):
         return self.server.client_get_version(self)
@@ -268,30 +297,27 @@ class BaseAccount(Referenceable):
                                 renew_secret, cancel_secret,
                                 sharenums, allocated_size,
                                 canary):
-        return self.server.client_allocate_buckets(
-            storage_index,
-            renew_secret, cancel_secret,
-            sharenums, allocated_size,
-            canary, self)
+        return self.server.client_allocate_buckets(storage_index,
+                                                   sharenums, allocated_size,
+                                                   canary, self)
     def remote_add_lease(self, storage_index, renew_secret, cancel_secret):
-        return self.server.client_add_lease(
-            storage_index, renew_secret, cancel_secret, self)
+        self.add_lease_for_bucket(storage_index)
+        return None
     def remote_renew_lease(self, storage_index, renew_secret):
-        return self.server.client_renew_lease(storage_index, renew_secret, self)
+        self.add_lease_for_bucket(storage_index)
+        return None
     #def remote_cancel_lease(self, storage_index, cancel_secret):
-    #    return self.server.client_cancel_lease(storage_index, cancel_secret, self)
+    #    raise NotImplementedError
     def remote_get_buckets(self, storage_index):
         return self.server.client_get_buckets(storage_index, self)
-    # TODO: add leases and ownernums to mutable shares
     def remote_slot_testv_and_readv_and_writev(self, storage_index,
                                                secrets,
                                                test_and_write_vectors,
                                                read_vector):
-        return self.server.client_slot_testv_and_readv_and_writev(
-            storage_index,
-            secrets,
-            test_and_write_vectors,
-            read_vector, self)
+        (write_enabler, renew_secret, cancel_secret) = secrets
+        meth = self.server.client_slot_testv_and_readv_and_writev
+        return meth(storage_index, write_enabler,
+                    test_and_write_vectors, read_vector, self)
     def remote_slot_readv(self, storage_index, shares, readv):
         return self.server.client_slot_readv(storage_index, shares, readv, self)
     def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
@@ -402,20 +428,6 @@ class Account(BaseAccount):
                 "created": self.get_account_attribute("created"),
                 }
 
-
-def size_of_disk_file(filename):
-    s = os.stat(filename)
-    sharebytes = s.st_size
-    try:
-        # note that stat(2) says that st_blocks is 512 bytes, and that
-        # st_blksize is "optimal file sys I/O ops blocksize", which is
-        # independent of the block-size that st_blocks uses.
-        diskbytes = s.st_blocks * 512
-    except AttributeError:
-        # the docs say that st_blocks is only on linux. I also see it on
-        # MacOS. But it isn't available on windows.
-        diskbytes = sharebytes
-    return diskbytes
 
 class AccountingCrawler(ShareCrawler):
     """I manage a SQLite table of which leases are owned by which ownerid, to
