@@ -58,7 +58,7 @@ def dump_immutable_share(options):
     f = ShareFile(options['filename'])
     if not options["leases-only"]:
         dump_immutable_chk_share(f, out, options)
-    dump_immutable_lease_info(f, out)
+    #dump_immutable_lease_info(f, out)
     print >>out
     return 0
 
@@ -142,7 +142,7 @@ def dump_immutable_chk_share(f, out, options):
             name = {"data": "block data"}.get(k,k)
             offset = f._data_offset + offsets[k]
             print >>out, "  %20s: %s   (0x%x)" % (name, offset, offset)
-        print >>out, "%20s: %s" % ("leases", f._lease_offset)
+        #print >>out, "%20s: %s" % ("leases", f._lease_offset)
 
 def dump_immutable_lease_info(f, out):
     # display lease information too
@@ -722,9 +722,10 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
         m = MutableShareFile(abs_sharefile)
         WE, nodeid = m._read_write_enabler_and_nodeid(f)
         data_length = m._read_data_length(f)
-        expiration_time = min( [lease.expiration_time
-                                for (i,lease) in m._enumerate_leases(f)] )
-        expiration = max(0, expiration_time - now)
+        #expiration_time = min( [lease.expiration_time
+        #                        for (i,lease) in m._enumerate_leases(f)] )
+        #expiration = max(0, expiration_time - now)
+        expiration = 0
 
         share_type = "unknown"
         f.seek(m.DATA_OFFSET)
@@ -803,9 +804,10 @@ def describe_share(abs_sharefile, si_s, shnum_s, now, out):
         sf = ShareFile(abs_sharefile)
         bp = ImmediateReadBucketProxy(sf)
 
-        expiration_time = min( [lease.expiration_time
-                                for lease in sf.get_leases()] )
-        expiration = max(0, expiration_time - now)
+        #expiration_time = min( [lease.expiration_time
+        #                        for lease in sf.get_leases()] )
+        #expiration = max(0, expiration_time - now)
+        expiration = 0
 
         UEB_data = call(bp.get_uri_extension)
         unpacked = uri.unpack_extension_readable(UEB_data)
