@@ -343,7 +343,7 @@ class Root(rend.Page):
         ctx.fillSlots("since", since)
         ctx.fillSlots("created", time.strftime(TIME_FORMAT,
                                                time.localtime(c["created"])))
-        ctx.fillSlots("usage", "XXX") #abbreviate_size(account.get_current_usage()))
+        ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
         return ctx.tag
 
     def render_download_form(self, ctx, data):
