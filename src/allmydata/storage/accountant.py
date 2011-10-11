@@ -222,6 +222,15 @@ class LeaseDB:
         self._db.commit()
         return accountid
 
+    def get_account_creation_time(self, owner_num):
+        self._cursor.execute("SELECT `creation_time` from `accounts`"
+                             " WHERE `id`=?",
+                             (owner_num,))
+        row = self._cursor.fetchone()
+        if row:
+            return row[0]
+        return None
+
     def get_all_accounts(self):
         self._cursor.execute("SELECT `id`,`pubkey_vs`"
                              " FROM `accounts` ORDER BY `id` ASC")
@@ -366,6 +375,8 @@ class Account(BaseAccount):
         return self._leasedb.get_account_attribute(self.owner_num, name)
     def set_account_attribute(self, name, value):
         self._leasedb.set_account_attribute(self.owner_num, name, value)
+    def get_account_creation_time(self):
+        return self._leasedb.get_account_creation_time(self.owner_num)
 
     def remote_get_status(self):
         return self.status
@@ -441,7 +452,7 @@ class Account(BaseAccount):
 
         last_seen = int_or_none(self.get_account_attribute("last_seen"))
         last_connected_from = self.get_account_attribute("last_connected_from")
-        created = int_or_none(self.get_account_attribute("created"))
+        created = int_or_none(self.get_account_creation_time())
 
         return {"connected": self.connected,
                 "connected_since": self.connected_since,

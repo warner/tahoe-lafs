@@ -342,8 +342,10 @@ class Root(rend.Page):
         else:
             since = ""
         ctx.fillSlots("since", since)
-        ctx.fillSlots("created", time.strftime(TIME_FORMAT,
-                                               time.localtime(c["created"])))
+        created = "?"
+        if c["created"]:
+            created = time.strftime(TIME_FORMAT, time.localtime(c["created"]))
+        ctx.fillSlots("created", created)
         ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
         return ctx.tag
 
