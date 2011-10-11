@@ -290,16 +290,16 @@ class Root(rend.Page):
         #    and send queries to update it
         #  that means get_claimed_usage() returns immediately, can return
         #  None, and fires off requests in the background.
-
-        usage_d = server.get_claimed_usage()
-        def _format_usage(usage):
-            if usage is None:
-                return "?"
-            return abbreviate_size(usage)
-        usage_d.addCallback(_format_usage)
-        ctx.fillSlots("usage", usage_d)
-
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
+
+        bytes,when = server.get_claimed_usage()
+        if bytes is None:
+            usage = T.span(title="no data")["?"]
+        else:
+            when = time.strftime(TIME_FORMAT, time.localtime(when))
+            usage = T.span(title="as of %s" % when)[abbreviate_size(bytes)]
+        ctx.fillSlots("usage", usage)
+
         ctx.fillSlots("connected", connected)
         ctx.fillSlots("connected-bool", bool(rhost))
         ctx.fillSlots("since", time.strftime(TIME_FORMAT,
@@ -327,9 +327,10 @@ class Root(rend.Page):
             # None.
             cs = "No: last from %s" % c["last_connected_from"]
         ctx.fillSlots("nickname", account.get_nickname())
-        ctx.fillSlots("clientid", id)
+        ctx.fillSlots("clientid", account.get_id())
         ctx.fillSlots("connected-bool", c["connected"])
         ctx.fillSlots("connected", cs)
+
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         if c["connected"]:
             since = time.strftime(TIME_FORMAT,
@@ -342,7 +343,7 @@ class Root(rend.Page):
         ctx.fillSlots("since", since)
         ctx.fillSlots("created", time.strftime(TIME_FORMAT,
                                                time.localtime(c["created"])))
-        ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
+        ctx.fillSlots("usage", "XXX") #abbreviate_size(account.get_current_usage()))
         return ctx.tag
 
     def render_download_form(self, ctx, data):

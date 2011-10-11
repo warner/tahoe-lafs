@@ -13,6 +13,11 @@ class BadAccountName(Exception):
 class BadShareID(Exception):
     pass
 
+def int_or_none(s):
+    if s is None:
+        return s
+    return int(s)
+
 LEASE_SCHEMA_V1 = """
 CREATE TABLE version
 (
@@ -329,8 +334,9 @@ class AnonymousAccount(BaseAccount):
     implements(RIStorageServer)
 
 class Account(BaseAccount):
-    def __init__(self, owner_num, server, leasedb):
+    def __init__(self, owner_num, pubkey_vs, server, leasedb):
         BaseAccount.__init__(self, owner_num, server, leasedb)
+        self.pubkey_vs = pubkey_vs
         self.connected = False
         self.connected_since = None
         self.connection = None
@@ -367,6 +373,9 @@ class Account(BaseAccount):
         if n:
             return n
         return u""
+
+    def get_id(self):
+        return self.pubkey_vs
 
     def remote_get_current_usage(self):
         return self.get_current_usage()
@@ -421,11 +430,15 @@ class Account(BaseAccount):
         # after disconnect: connected=False, connected_since=None,
         #                   last_connected_from=HOST, last_seen=STOP
 
+        last_seen = int_or_none(self.get_account_attribute("last_seen"))
+        last_connected_from = self.get_account_attribute("last_connected_from")
+        created = int_or_none(self.get_account_attribute("created"))
+
         return {"connected": self.connected,
                 "connected_since": self.connected_since,
-                "last_connected_from": self.get_account_attribute("last_connected_from"),
-                "last_seen": self.get_account_attribute("last_seen"),
-                "created": self.get_account_attribute("created"),
+                "last_connected_from": last_connected_from,
+                "last_seen": last_seen,
+                "created": created,
                 }
 
 
@@ -531,7 +544,7 @@ class Accountant(service.MultiService):
     def get_account(self, pubkey_vs):
         if pubkey_vs not in self._active_accounts:
             ownernum = self._leasedb.get_or_allocate_ownernum(pubkey_vs)
-            a = Account(ownernum, self.storage_server, self._leasedb)
+            a = Account(ownernum, pubkey_vs, self.storage_server, self._leasedb)
             self._active_accounts[pubkey_vs] = a
             # the client's RemoteReference will keep the Account alive. When
             # it disconnects, that reference will lapse, and it will be
@@ -546,7 +559,9 @@ class Accountant(service.MultiService):
         for ownerid, pubkey_vs in self._leasedb.get_all_accounts():
             if pubkey_vs in self._active_accounts:
                 yield self._active_accounts[pubkey_vs]
-            yield Account(ownerid, self.storage_server, self._leasedb)
+            else:
+                yield Account(ownerid, pubkey_vs,
+                              self.storage_server, self._leasedb)
 
 
 class AccountantWindow(Referenceable):

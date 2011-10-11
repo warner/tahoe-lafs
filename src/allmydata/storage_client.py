@@ -227,6 +227,11 @@ class NativeStorageServer(Referenceable):
         self._reconnector = None
         self._trigger_cb = None
 
+        self.account_status = {"write": True, "read": True, "save": True}
+        self.account_message = {}
+        self._latest_claimed_usage = None
+        self._latest_claimed_usage_time = None
+
     # Special methods used by copy.copy() and copy.deepcopy(). When those are
     # used in allmydata.immutable.filenode to copy CheckResults during
     # repair, we want it to treat the IServer instances as singletons, and
@@ -372,9 +377,19 @@ class NativeStorageServer(Referenceable):
         self._reconnector.reset()
 
     def get_claimed_usage(self):
+        # return (bytes, when). If we've never been told our usage, both will
+        # be None. Asking returns the previous value, and sends off a request
+        # for an update. To get an up-to-date value, call this twice, not too
+        # fast.
         if self.rref and self.accounting_enabled:
-            return self.rref.callRemote("get_current_usage")
-        return defer.succeed(None)
+            d = self.rref.callRemote("get_current_usage")
+            def _got(usage):
+                self._latest_claimed_usage = usage
+                self._latest_claimed_usage_time = time.time()
+            d.addCallback(_got)
+            d.addErrback(log.err, umid="ivcMgA")
+            return self._latest_claimed_usage, self._latest_claimed_usage_time
+        return None, None
 
     def get_account_status(self):
         if self.rref and self.accounting_enabled:

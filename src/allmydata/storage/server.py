@@ -414,7 +414,8 @@ class StorageServer(service.MultiService):
                 if new_length == 0:
                     if sharenum in shares:
                         shares[sharenum].unlink()
-                        account.remove_share_and_leases(storage_index, sharenum)
+                        account.remove_share_and_leases(si_b2a(storage_index),
+                                                        sharenum)
                 else:
                     if sharenum not in shares:
                         # allocate a new share
@@ -425,14 +426,15 @@ class StorageServer(service.MultiService):
                                                           allocated_size)
                         shares[sharenum] = share
                         shares[sharenum].writev(datav, new_length)
-                        account.add_share(prefix, storage_index, sharenum,
+                        account.add_share(prefix,
+                                          si_b2a(storage_index), sharenum,
                                           shares[sharenum].home)
                     else:
                         # apply the write vector and update the lease
                         shares[sharenum].writev(datav, new_length)
-                        account.update_share(storage_index, sharenum,
+                        account.update_share(si_b2a(storage_index), sharenum,
                                              shares[sharenum].home)
-                    account.add_lease(storage_index, sharenum)
+                    account.add_lease(si_b2a(storage_index), sharenum)
             account.commit()
 
             if new_length == 0:
