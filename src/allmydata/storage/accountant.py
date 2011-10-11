@@ -172,20 +172,15 @@ class LeaseDB:
     # account management
 
     def get_account_usage(self, accountid):
-        # TODO: use proper SQL SUM() and a join
-        self._cursor.execute("SELECT DISTINCT `share_id` FROM `leases`"
-                             " WHERE `account_id`=?",
+        self._cursor.execute("SELECT SUM(`size`) FROM shares"
+                             " WHERE `id` IN"
+                             "  (SELECT DISTINCT `share_id` FROM `leases`"
+                             "   WHERE `account_id`=?)",
                              (accountid,))
-        shareids = self._cursor.fetchall()
-        total = 0
-        for (shareid,) in shareids:
-            self._cursor.execute("SELECT `size` FROM `shares`"
-                                 " WHERE `id`=?",
-                                 (shareid,))
-            row = self._cursor.fetchone()
-            assert row is not None
-            total += row[0]
-        return total
+        row = self._cursor.fetchone()
+        if not row or not row[0]: # XXX why did I need the second clause?
+            return 0
+        return row[0]
 
     def get_account_attribute(self, accountid, name):
         self._cursor.execute("SELECT `value` FROM `account_attributes`"
