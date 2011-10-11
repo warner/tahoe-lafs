@@ -171,6 +171,22 @@ class LeaseDB:
 
     # account management
 
+    def get_account_usage(self, accountid):
+        # TODO: use proper SQL SUM() and a join
+        self._cursor.execute("SELECT DISTINCT `share_id` FROM `leases`"
+                             " WHERE `account_id`=?",
+                             (accountid,))
+        shareids = self._cursor.fetchall()
+        total = 0
+        for (shareid,) in shareids:
+            self._cursor.execute("SELECT `size` FROM `shares`"
+                                 " WHERE `id`=?",
+                                 (shareid,))
+            row = self._cursor.fetchone()
+            assert row is not None
+            total += row[0]
+        return total
+
     def get_account_attribute(self, accountid, name):
         self._cursor.execute("SELECT `value` FROM `account_attributes`"
                              " WHERE account_id=? AND name=?",
@@ -381,9 +397,7 @@ class Account(BaseAccount):
         return self.get_current_usage()
 
     def get_current_usage(self):
-        # read something out of a database, or something. For now, fake it.
-        from random import random, randint
-        return int(random() * (10**randint(1, 12)))
+        return self._leasedb.get_account_usage(self.owner_num)
 
     def connection_from(self, rx):
         self.connected = True
