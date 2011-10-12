@@ -311,6 +311,14 @@ class Root(rend.Page):
 
         return ctx.tag
 
+    def data_connected_clients(self, ctx, data):
+        ac = self.client.get_accountant()
+        return len(list([a for a in ac.get_all_accounts() if a.connected]))
+
+    def data_known_accounts(self, ctx, data):
+        ac = self.client.get_accountant()
+        return len(list(ac.get_all_accounts()))
+
     def render_download_form(self, ctx, data):
         # this is a form where users can download files by URI
         form = T.form(action="uri", method="get",
