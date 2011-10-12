@@ -1,0 +1,51 @@
+<html xmlns:n="http://nevow.com/ns/nevow/0.1">
+<head>
+  <title>Client Control Panel</title>
+  <link href="/webform_css" rel="stylesheet" type="text/css"/>
+  <link href="/tahoe_css" rel="stylesheet" type="text/css"/>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+</head>
+
+<body>
+<h1>Server Control Panel</h1>
+
+<div class="section" id="grid">
+
+  <p>Connected to <span n:render="string" n:data="connected_storage_servers" />
+     of <span n:render="string" n:data="known_storage_servers" /> known storage servers:</p>
+
+  <div>
+    <table class="services table-headings-top" n:render="sequence" n:data="services">
+      <tr n:pattern="header">
+        <th class="nickname-and-peerid" title="The server tells us what their nickname is: they can say anything they like, including pretending to be someone else. The PeerID, however, is unspoofable.">
+            <div class="service-nickname">Nickname</div>
+            <div class="nodeid data-chars">PeerID</div></th>
+        <th title="The server claims we are using this much space">Usage (bytes)</th>
+        <th>Account Status</th>
+        <th>Server Message</th>
+        <th>Connected?</th>
+        <th title="Time of most recent connection or disconnection">Since</th>
+        <th>First Announced</th>
+        <th>Version</th>
+      </tr>
+      <tr n:pattern="item" n:render="service_row">
+        <td class="nickname-and-peerid">
+          <div class="nickname"><n:slot name="nickname"/></div>
+          <div class="nodeid data-chars"><n:slot name="peerid"/></div></td>
+        <td class="service-usage"><n:slot name="usage"/></td>
+        <td class="service-account-status"><n:slot name="status"/></td>
+        <td class="server-message"><n:slot name="server_message"/></td>
+        <td>
+          <n:attr name="class">service-connected connected-<n:slot name="connected-bool"/></n:attr>
+          <n:slot name="connected"/>
+        </td>
+        <td class="service-since">       <n:slot name="since"/></td>
+        <td class="service-announced">   <n:slot name="announced"/></td>
+        <td class="service-version">     <n:slot name="version"/></td>
+      </tr>
+      <tr n:pattern="empty"><td>no peers!</td></tr>
+    </table>
+  </div>
+</div>
+
+</body> </html>

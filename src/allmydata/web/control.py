@@ -1,9 +1,10 @@
 
 import time
-from nevow.util import resource_filename
-from nevow import rend
+from twisted.internet import address
 from twisted.web import static
 from twisted.web.resource import Resource
+from nevow.util import resource_filename
+from nevow import rend, tags as T
 from hashlib import sha256
 
 from allmydata.web.common import getxmlfile, WebError, abbreviate_size
@@ -63,6 +64,101 @@ class Clients(rend.Page):
         ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
         return ctx.tag
 
+class Servers(rend.Page):
+    addSlash = True
+    docFactory = getxmlfile("servers.xhtml")
+    def __init__(self, client):
+        rend.Page.__init__(self, client)
+        self.client = client
+
+    def data_known_storage_servers(self, ctx, data):
+        sb = self.client.get_storage_broker()
+        return len(sb.get_all_serverids())
+
+    def data_connected_storage_servers(self, ctx, data):
+        sb = self.client.get_storage_broker()
+        return len(sb.get_connected_servers())
+
+    def data_services(self, ctx, data):
+        sb = self.client.get_storage_broker()
+        return sorted(sb.get_known_servers(), key=lambda s: s.get_nickname())
+
+    def render_service_row(self, ctx, server):
+        nodeid = server.get_serverid()
+
+        ctx.fillSlots("peerid", server.get_longname())
+        ctx.fillSlots("nickname", server.get_nickname())
+        rhost = server.get_remote_host()
+        if rhost:
+            if nodeid == self.client.nodeid:
+                rhost_s = "(loopback)"
+            elif isinstance(rhost, address.IPv4Address):
+                rhost_s = "%s:%d" % (rhost.host, rhost.port)
+            else:
+                rhost_s = str(rhost)
+            connected = "Yes: to " + rhost_s
+            since = server.get_last_connect_time()
+        else:
+            connected = "No"
+            since = server.get_last_loss_time()
+        announced = server.get_announcement_time()
+        announcement = server.get_announcement()
+        version = announcement["my-version"]
+
+        status = server.get_account_status()
+        def _format_status(status):
+            # WRS= FFF FFT FTT TTT
+            if not status.get("save",True):
+                return "deleted: all shares deleted"
+            if not status.get("read",True):
+                return "disabled: no read or write"
+            if not status.get("write",True):
+                return "frozen: read, but no write"
+            return "normal: full read+write"
+        ctx.fillSlots("status", _format_status(status))
+
+        message = server.get_account_message()
+        def _format_message(msg):
+            bits = T.span()
+            if "message" in msg:
+                bits[msg["message"]]
+            keys = set(msg.keys())
+            keys.discard("message")
+            if keys:
+                keys = sorted(keys)
+                for k in keys:
+                    bits[T.br()]
+                    bits["%s: %s" % (k, msg[k])]
+            return bits
+        ctx.fillSlots("server_message", _format_message(message))
+
+        # consider this:
+        #  cache the usage, with a timestamp
+        #  if the usage is more than 5 minutes out of date:
+        #    put a "?" here
+        #    and send queries to update it
+        #  that means get_claimed_usage() returns immediately, can return
+        #  None, and fires off requests in the background.
+        TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
+
+        bytes,when = server.get_claimed_usage()
+        if bytes is None:
+            usage = T.span(title="no data")["?"]
+        else:
+            when = time.strftime(TIME_FORMAT, time.localtime(when))
+            usage = T.span(title="as of %s" % when)[abbreviate_size(bytes)]
+        ctx.fillSlots("usage", usage)
+
+        ctx.fillSlots("connected", connected)
+        ctx.fillSlots("connected-bool", bool(rhost))
+        ctx.fillSlots("since", time.strftime(TIME_FORMAT,
+                                             time.localtime(since)))
+        ctx.fillSlots("announced", time.strftime(TIME_FORMAT,
+                                                 time.localtime(announced)))
+        ctx.fillSlots("version", version)
+
+        return ctx.tag
+
 class ControlPanel(Resource):
     def __init__(self, client):
         Resource.__init__(self)
@@ -72,6 +168,7 @@ class ControlPanel(Resource):
         # this page
         self.putChild("", self)
         self.putChild("clients", Clients(self.client))
+        self.putChild("servers", Servers(self.client))
 
     def render_GET(self, request):
         return contents("control.html")
