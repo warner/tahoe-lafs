@@ -1,0 +1,43 @@
+<html xmlns:n="http://nevow.com/ns/nevow/0.1">
+<head>
+  <title>Client Control Panel</title>
+  <link href="/webform_css" rel="stylesheet" type="text/css"/>
+  <link href="/tahoe_css" rel="stylesheet" type="text/css"/>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+</head>
+
+<body>
+<h1>Client Control Panel</h1>
+
+<div class="section" id="clients">
+  <h2>All Clients</h2>
+
+  <div>
+    <table class="clients table-headings-top" n:render="sequence" n:data="clients">
+      <tr n:pattern="header">
+        <th class="nickname-and-peerid" title="The client tells us what their nickname is: they can say anything they like, including pretending to be someone else. The ClientID, however, is unspoofable.">
+            <div class="service-nickname">Nickname</div>
+            <div class="nodeid data-chars">ClientID</div></th>
+        <th>Connected?</th>
+        <th title="Time of most recent connection or disconnection">Since</th>
+        <th title="When this account was first created">First Created</th>
+        <th>Usage (bytes)</th>
+      </tr>
+      <tr n:pattern="item" n:render="client_row">
+        <td class="nickname-and-peerid">
+          <div class="nickname"><n:slot name="nickname"/></div>
+          <div class="nodeid data-chars"><n:slot name="clientid"/></div></td>
+        <td>
+          <n:attr name="class">service-connected connected-<n:slot name="connected-bool"/></n:attr>
+          <n:slot name="connected"/>
+        </td>
+        <td class="service-since">       <n:slot name="since"/></td>
+        <td class="service-announced">   <n:slot name="created"/></td>
+        <td class="service-version">     <n:slot name="usage"/></td>
+      </tr>
+      <tr n:pattern="empty"><td>no clients!</td></tr>
+    </table>
+  </div>
+</div>
+
+</body> </html>

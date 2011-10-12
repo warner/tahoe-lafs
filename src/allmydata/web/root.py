@@ -311,49 +311,6 @@ class Root(rend.Page):
 
         return ctx.tag
 
-    def data_clients(self, ctx, data):
-        a = self.client.get_accountant()
-        if a:
-            return sorted(a.get_all_accounts(),
-                          key=lambda account: account.get_nickname())
-        return []
-
-    def render_client_row(self, ctx, account):
-        c = account.get_connection_status()
-        if c["connected"]:
-            cs = "Yes: from %s" % c["last_connected_from"]
-        elif c["last_connected_from"]:
-            # there is a window (between Account creation and our connection
-            # to the 'rxFURL' receiver) during which the Account exists but
-            # we've never connected to it. So c["last_connected_from"] can be
-            # None. Also the pseudo-accounts ("anonymous" and "starter")
-            # never have connection data.
-            cs = "No: last from %s" % c["last_connected_from"]
-        else:
-            cs = "Never"
-
-        ctx.fillSlots("nickname", account.get_nickname())
-        ctx.fillSlots("clientid", account.get_id())
-        ctx.fillSlots("connected-bool", c["connected"])
-        ctx.fillSlots("connected", cs)
-
-        TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
-        if c["connected"]:
-            since = time.strftime(TIME_FORMAT,
-                                  time.localtime(c["connected_since"]))
-        elif c["last_seen"]:
-            since = time.strftime(TIME_FORMAT,
-                                  time.localtime(c["last_seen"]))
-        else:
-            since = ""
-        ctx.fillSlots("since", since)
-        created = ""
-        if c["created"]:
-            created = time.strftime(TIME_FORMAT, time.localtime(c["created"]))
-        ctx.fillSlots("created", created)
-        ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))
-        return ctx.tag
-
     def render_download_form(self, ctx, data):
         # this is a form where users can download files by URI
         form = T.form(action="uri", method="get",
