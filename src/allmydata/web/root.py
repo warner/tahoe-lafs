@@ -1,13 +1,11 @@
 import time, os
 
 from twisted.internet import address
-from twisted.web import http, static
-from twisted.web.resource import Resource
+from twisted.web import http
 from nevow import rend, url, tags as T
 from nevow.inevow import IRequest
 from nevow.static import File as nevow_File # TODO: merge with static.File?
 from nevow.util import resource_filename
-from hashlib import sha256
 
 import allmydata # to display import path
 from allmydata import get_package_versions_string
@@ -17,7 +15,7 @@ from allmydata.web import filenode, directory, unlinked, status, operations
 from allmydata.web import storage
 from allmydata.web.common import abbreviate_size, getxmlfile, WebError, \
      get_arg, RenderMixin, get_format, get_mutable_type
-
+from allmydata.web.control import ControlPanelGuard
 
 class URIHandler(RenderMixin, rend.Page):
     # I live at /uri . There are several operations defined on /uri itself,
@@ -128,38 +126,6 @@ class IncidentReporter(RenderMixin, rend.Page):
         return "Thank you for your report!"
 
 SPACE = u"\u00A0"*2
-
-def sfile(name):
-    return static.File(resource_filename("allmydata.web", name))
-def contents(name):
-    return open(resource_filename("allmydata.web", name), "rb").read()
-
-class ControlPanel(Resource):
-    def __init__(self, client):
-        Resource.__init__(self)
-        self.client = client
-        # putChild("") makes /control/KEY/ work (as opposed to /control/KEY
-        # without the trailing slash), which lets us use relative links from
-        # this page
-        self.putChild("", self)
-
-    def render_GET(self, request):
-        return contents("control.html")
-
-class ControlPanelGuard(Resource):
-    def __init__(self, client):
-        Resource.__init__(self)
-        self.client = client
-
-    def render_GET(self, request):
-        return "I want a key. Look in ~/.tahoe/private/control.key\n"
-
-    def getChild(self, name, request):
-        key = self.client.get_control_url_key()
-        # constant-time comparison
-        if sha256(key).digest() != sha256(name).digest():
-            raise WebError("bad key in /control/KEY request\n")
-        return ControlPanel(self.client)
 
 class Root(rend.Page):
 
