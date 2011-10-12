@@ -31,7 +31,6 @@ the foolscap-based server implemented in src/allmydata/storage/*.py .
 
 import re, time, simplejson
 from zope.interface import implements
-from twisted.internet import defer
 from foolscap.api import eventually, Referenceable
 from allmydata.interfaces import IStorageBroker, IDisplayableServer, IServer
 from allmydata.util import log, base32
