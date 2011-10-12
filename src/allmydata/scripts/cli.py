@@ -399,6 +399,7 @@ class BackupOptions(VDriveOptions):
 class WebopenOptions(VDriveOptions):
     optFlags = [
         ("info", "i", "Open the t=info page for the file"),
+        ("control", "c", "Open the private control panel"),
         ]
     def parseArgs(self, where=''):
         self.where = argv_to_unicode(where)
@@ -408,7 +409,7 @@ class WebopenOptions(VDriveOptions):
 
     longdesc = """Open a web browser to the contents of some file or
     directory on the grid. When run without arguments, open the Welcome
-    page."""
+    page. When run with only --control, open the Control Panel."""
 
 class ManifestOptions(VDriveOptions):
     optFlags = [

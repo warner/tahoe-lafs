@@ -399,6 +399,16 @@ class Client(node.Node, pollmixin.PollMixin):
         return self.history
 
     def init_control(self):
+        if False:
+            # persistent
+            def make_control_key():
+                return os.urandom(128/8).encode("hex")
+            self._control_key = self.get_or_create_private_config(
+                "control.key", make_control_key)
+        else:
+            # changes each reboot
+            self._control_key = os.urandom(128/8).encode("hex")
+            self.write_private_config("control.key", self._control_key+"\n")
         d = self.when_tub_ready()
         def _publish(res):
             c = ControlServer()
@@ -408,6 +418,9 @@ class Client(node.Node, pollmixin.PollMixin):
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="d3tNXA")
+
+    def get_control_url_key(self):
+        return self._control_key
 
     def init_helper(self):
         d = self.when_tub_ready()
