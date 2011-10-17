@@ -302,8 +302,8 @@ class NativeStorageServer:
         return self.rref
 
     def get_storage_URL(self):
-        if "storage-URL" in ann_d:
-            return str(ann_d["storage-URL"])
+        if "storage-URL" in self.announcement:
+            return str(self.announcement["storage-URL"])
         return None
 
     def _lost(self):
