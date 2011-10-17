@@ -22,6 +22,31 @@ class LayoutInvalid(Exception):
 class DataUnavailable(Exception):
     pass
 
+# adapted from twisted.test.proto_helpers.AccumulatingProtocol
+from twisted.internet import protocol, defer
+class AccumulatingProtocol(protocol.Protocol):
+    def __init__(self):
+        self.d = defer.Deferred()
+        self.data = []
+
+    def getBody(self):
+        return self.d
+
+    def dataReceived(self, data):
+        self.data.append(data)
+
+    def connectionLost(self, reason):
+        if reason.check(client.ResponseDone):
+            self.d.callback("".join(self.data))
+        else:
+            self.d.errback(reason)
+
+def accumulate(producer):
+    a = AccumulatingProtocol()
+    d = a.getBody()
+    producer.deliverBody(a)
+    return d
+
 class Share:
     """I represent a single instance of a single share (e.g. I reference the
     shnum2 for share SI=abcde on server xy12t, not the one on server ab45q).
@@ -732,6 +757,36 @@ class Share:
         # Reconsider the removal: maybe bring it back.
         ds = self._download_status
 
+        v = self._server.get_version()
+        storage_URL = self._server.get_storage_URL()
+        if (v["http://allmydata.org/tahoe/protocols/storage/v1"]
+            .get("http-v1", False) and storage_URL):
+            readv = list(ask)
+            if not readv:
+                return # nothing to do
+            lp = log.msg(format="%(share)s send_HTTP_readv [%(span)s]",
+                         share=repr(self), span=ask.dump(),
+                         level=log.NOISY, parent=self._lp, umid="nByhWA")
+            block_ev = ds.add_block_request(self._server, self._shnum,
+                                            readv[0][0], readv[0][1], now())
+            for (start, length) in readv:
+                self._pending.add(start, length)
+            url = storage_URL+ ("/imm/SI/%s/share/%d" %
+                                (base32.b2a(self._storage_index), self._shnum))
+            range_header = "bytes="+",".join(["%d-%d" % (start, start+length-1)
+                                              for (start, length) in readv])
+            from twisted.internet import reactor
+            a = client.Agent(reactor)
+            d = a.request("GET", url, headers=client.Headers({"Range": [range_header]}))
+            d.addCallback(self._got_http_response, readv, lp)
+            d.addErrback(self._got_error, readv[0][0], readv[0][1], block_ev, lp)
+            d.addCallback(self._trigger_loop)
+            d.addErrback(lambda f:
+                         log.err(format="unhandled error during send_request",
+                                 failure=f, parent=self._lp,
+                                 level=log.WEIRD, umid="qZu0wg"))
+            return d
+
         for (start, length) in ask:
             # TODO: quantize to reasonably-large blocks
             self._pending.add(start, length)
@@ -752,14 +807,27 @@ class Share:
                                  level=log.WEIRD, umid="qZu0wg"))
 
     def _send_request(self, start, length):
-        storage_URL = self._server.get_storage_URL()
-        if not storage_URL:
-            return self._rref.callRemote("read", start, length)
-        url = storage_URL+ ("/imm/SI/%s/share/%d" %
-                            (base32.b2a(self._storage_index), self._shnum))
-        rangeheader = "bytes=%d-%d" % (start, start+length-1)
-        d = client.getPage(url, headers={"Range": rangeheader})
+        return self._rref.callRemote("read", start, length)
+
+    def _got_http_response(self, response, readv, lp):
+        d = accumulate(response)
+        d.addCallback(self._got_http_datav, response, readv, lp)
         return d
+    def _got_http_datav(self, datav, response, readv, lp):
+        content_range = response.headers.getRawHeaders("content-range")[0]
+        from allmydata.web.filenode import parse_range_header
+        got = parse_range_header(content_range)
+        assert len(got) == len(readv)
+        cursor = 0
+        for i,(start,requested_length) in enumerate(readv):
+            first,last = got[i]
+            got_length = last-first+1
+            data = datav[cursor:cursor+got_length]
+            cursor += got_length
+            self._pending.remove(start, requested_length)
+            self._received.add(start, data)
+            if len(data) < requested_length:
+                self._unavailable.add(start+len(data), requested_length-len(data))
 
     def _got_data(self, data, start, length, block_ev, lp):
         block_ev.finished(len(data), now())

@@ -5,14 +5,12 @@ from allmydata.web.common import getxmlfile, abbreviate_time, get_arg
 from allmydata.web.filenode import parse_range_header
 from allmydata.util.abbreviate import abbreviate_space
 from allmydata.util import time_format, idlib, base32
-from twisted.web import resource, static
+from twisted.web import resource
 
 def remove_prefix(s, prefix):
     if not s.startswith(prefix):
         return None
     return s[len(prefix):]
-
-import re
 
 class Storage(resource.Resource):
     isLeaf = True
@@ -21,7 +19,6 @@ class Storage(resource.Resource):
         self.storage = storage
 
     def render_GET(self, req):
-        print "render_GET", req.postpath
         pieces = req.postpath
         assert pieces[0] == "SI"
         si = base32.a2b(pieces[1])
@@ -30,8 +27,13 @@ class Storage(resource.Resource):
         r = req.getHeader("range")# or "bytes=1-10"
         parsed = parse_range_header(r)
         readv = [(first, last-first+1) for (first,last) in parsed]
-        data = self.storage.get_immutable_data(si, shnum, readv)
-        print "GET %s -> %d bytes" % (r, len(data))
+        datav = self.storage.get_immutable_data(si, shnum, readv)
+        cr = []
+        for i,(start, length) in enumerate(readv):
+            cr.append("%d-%d" % (start, start+len(datav[i])-1))
+        req.setHeader("Content-Range", "bytes="+",".join(cr))
+        data = "".join(datav)
+        req.setHeader("Content-Length", len(data))
         return data
 
 class StorageStatus(rend.Page):
@@ -45,7 +47,6 @@ class StorageStatus(rend.Page):
         self.child_imm = Storage(self.storage)
 
     def renderHTTP(self, ctx):
-        print "HEASDS"
         req = inevow.IRequest(ctx)
         t = get_arg(req, "t")
         if t == "json":
