@@ -346,59 +346,60 @@ class FileNodeHandler(RenderMixin, rend.Page, ReplaceMeMixin):
         return d
 
 
+def parse_range_header(range, filesize=None):
+    # Parse a byte ranges according to RFC 2616 "14.35.1 Byte
+    # Ranges".  Returns None if the range doesn't make sense so it
+    # can be ignored (per the spec).  When successful, returns a
+    # list of (first,last) inclusive range tuples.
+
+    assert isinstance(filesize, (int,long,type(None))), filesize
+
+    try:
+        # byte-ranges-specifier
+        units, rangeset = range.split('=', 1)
+        if units != 'bytes':
+            return None     # nothing else supported
+
+        def parse_range(r):
+            first, last = r.split('-', 1)
+
+            if first is '':
+                # suffix-byte-range-spec
+                assert filesize is not None
+                first = filesize - long(last)
+                last = filesize - 1
+            else:
+                # byte-range-spec
+
+                # first-byte-pos
+                first = long(first)
+
+                # last-byte-pos
+                if last is '':
+                    assert filesize is not None
+                    last = filesize - 1
+                else:
+                    last = long(last)
+
+            if last < first:
+                raise ValueError
+
+            return (first, last)
+
+        # byte-range-set
+        #
+        # Note: the spec uses "1#" for the list of ranges, which
+        # implicitly allows whitespace around the ',' separators,
+        # so strip it.
+        return [ parse_range(r.strip()) for r in rangeset.split(',') ]
+    except ValueError:
+        return None
+
 class FileDownloader(rend.Page):
     def __init__(self, filenode, filename):
         rend.Page.__init__(self)
         self.filenode = filenode
         self.filename = filename
-
-    def parse_range_header(self, range):
-        # Parse a byte ranges according to RFC 2616 "14.35.1 Byte
-        # Ranges".  Returns None if the range doesn't make sense so it
-        # can be ignored (per the spec).  When successful, returns a
-        # list of (first,last) inclusive range tuples.
-
-        filesize = self.filenode.get_size()
-        assert isinstance(filesize, (int,long)), filesize
-
-        try:
-            # byte-ranges-specifier
-            units, rangeset = range.split('=', 1)
-            if units != 'bytes':
-                return None     # nothing else supported
-
-            def parse_range(r):
-                first, last = r.split('-', 1)
-
-                if first is '':
-                    # suffix-byte-range-spec
-                    first = filesize - long(last)
-                    last = filesize - 1
-                else:
-                    # byte-range-spec
-
-                    # first-byte-pos
-                    first = long(first)
-
-                    # last-byte-pos
-                    if last is '':
-                        last = filesize - 1
-                    else:
-                        last = long(last)
-
-                if last < first:
-                    raise ValueError
-
-                return (first, last)
-
-            # byte-range-set
-            #
-            # Note: the spec uses "1#" for the list of ranges, which
-            # implicitly allows whitespace around the ',' separators,
-            # so strip it.
-            return [ parse_range(r.strip()) for r in rangeset.split(',') ]
-        except ValueError:
-            return None
 
     def renderHTTP(self, ctx):
         req = IRequest(ctx)
@@ -429,7 +430,8 @@ class FileDownloader(rend.Page):
         # or maybe just use the URI for CHK and LIT.
         rangeheader = req.getHeader('range')
         if rangeheader:
-            ranges = self.parse_range_header(rangeheader)
+            ranges = self.parse_range_header(rangeheader,
+                                             self.filenode.get_size())
 
             # ranges = None means the header didn't parse, so ignore
             # the header as if it didn't exist.  If is more than one
