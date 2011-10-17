@@ -544,3 +544,8 @@ class StorageServer(service.MultiService, Referenceable):
                 share_type=share_type, si=si_s, shnum=shnum, reason=reason,
                 level=log.SCARY, umid="SGx2fA")
         return None
+
+    def get_immutable_data(self, si, shnum, start, length):
+        br = self.client_get_buckets(si, None)
+        b = br[shnum]
+        return b.remote_read(start, length)

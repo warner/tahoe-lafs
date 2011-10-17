@@ -4,6 +4,7 @@ import time
 now = time.time
 
 from twisted.python.failure import Failure
+from twisted.web import client
 from foolscap.api import eventually
 from allmydata.util import base32, log, hashutil, mathutil
 from allmydata.util.spans import Spans, DataSpans
@@ -751,7 +752,14 @@ class Share:
                                  level=log.WEIRD, umid="qZu0wg"))
 
     def _send_request(self, start, length):
-        return self._rref.callRemote("read", start, length)
+        storage_URL = self._server.get_storage_URL()
+        if not storage_URL:
+            return self._rref.callRemote("read", start, length)
+        url = storage_URL+ ("/imm/SI/%s/share/%d" %
+                            (base32.b2a(self._storage_index), self._shnum))
+        rangeheader = "bytes=%d-%d" % (start, start+length-1)
+        d = client.getPage(url, headers={"Range": rangeheader})
+        return d
 
     def _got_data(self, data, start, length, block_ev, lp):
         block_ev.finished(len(data), now())

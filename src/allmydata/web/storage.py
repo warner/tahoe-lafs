@@ -3,12 +3,36 @@ import time, simplejson
 from nevow import rend, tags as T, inevow
 from allmydata.web.common import getxmlfile, abbreviate_time, get_arg
 from allmydata.util.abbreviate import abbreviate_space
-from allmydata.util import time_format, idlib
+from allmydata.util import time_format, idlib, base32
+from twisted.web import resource, static
 
 def remove_prefix(s, prefix):
     if not s.startswith(prefix):
         return None
     return s[len(prefix):]
+
+import re
+
+class Storage(resource.Resource):
+    isLeaf = True
+    def __init__(self, storage):
+        resource.Resource.__init__(self)
+        self.storage = storage
+
+    def getChild(self, path, req):
+        print "GETCHILD", path, req.postpath
+        pieces = req.postpath.split("/")
+        assert path == "SI"
+        si = base32.a2b(pieces[0])
+        assert pieces[1] == "share"
+        shnum = int(pieces[2])
+        r = req.getHeader("range")
+        assert r.startswith("bytes=")
+        mo = re.search(r'=(\d+)-(\d+)$')
+        first,last = int(mo.group(1)), int(mo.group(2))
+        length = last-first+1
+        data = self.storage.get_immutable_data(si, shnum, first, length)
+        return static.Data(data, "text/plain")
 
 class StorageStatus(rend.Page):
     docFactory = getxmlfile("storage_status.xhtml")
@@ -18,8 +42,10 @@ class StorageStatus(rend.Page):
         rend.Page.__init__(self, storage)
         self.storage = storage
         self.nickname = nickname
+        self.child_imm = Storage(self.storage)
 
     def renderHTTP(self, ctx):
+        print "HEASDS"
         req = inevow.IRequest(ctx)
         t = get_arg(req, "t")
         if t == "json":
