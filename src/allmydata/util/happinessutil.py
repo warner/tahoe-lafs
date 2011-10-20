@@ -56,7 +56,7 @@ def shares_by_server(servermap):
 
 def merge_servers(servermap, upload_trackers=None):
     """
-    I accept a dict of shareid -> set(serverid) mappings, and optionally a
+    I accept a dict of shareid -> set(server) mappings, and optionally a
     set of ServerTrackers. If no set of ServerTrackers is provided, I return
     my first argument unmodified. Otherwise, I update a copy of my first
     argument to include the shareid -> serverid mappings implied in the
@@ -74,7 +74,7 @@ def merge_servers(servermap, upload_trackers=None):
 
     for tracker in upload_trackers:
         for shnum in tracker.buckets:
-            servermap.setdefault(shnum, set()).add(tracker.get_serverid())
+            servermap.setdefault(shnum, set()).add(tracker.get_server())
     return servermap
 
 def servers_of_happiness(sharemap):

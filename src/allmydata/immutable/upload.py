@@ -66,7 +66,7 @@ EXTENSION_SIZE = 1000
 # this.
 
 def pretty_print_shnum_to_servers(s):
-    return ', '.join([ "sh%s: %s" % (k, '+'.join([idlib.shortnodeid_b2a(x) for x in v])) for k, v in s.iteritems() ])
+    return ', '.join([ "sh%s: %s" % (k, '+'.join([s2.get_name() for s2 in v])) for k, v in s.iteritems() ])
 
 class ServerTracker:
     def __init__(self, server,
@@ -95,6 +95,8 @@ class ServerTracker:
         return ("<ServerTracker for server %s and SI %s>"
                 % (self._server.get_name(), si_b2a(self.storage_index)[:5]))
 
+    def get_server(self):
+        return self._server
     def get_serverid(self):
         return self._server.get_serverid()
     def get_name(self):
@@ -172,12 +174,11 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                          num_segments, total_shares, needed_shares,
                          servers_of_happiness):
         """
-        @return: (upload_trackers, already_serverids), where upload_trackers
+        @return: (upload_trackers, already_servers), where upload_trackers
                  is a set of ServerTracker instances that have agreed to hold
                  some shares for us (the shareids are stashed inside the
-                 ServerTracker), and already_serverids is a dict mapping
-                 shnum to a set of serverids for servers which claim to
-                 already have the share.
+                 ServerTracker), and already_servers is a dict mapping shnum
+                 to a set of servers which claim to already have the share.
         """
 
         if self._status:
@@ -190,7 +191,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         self.homeless_shares = set(range(total_shares))
         self.use_trackers = set() # ServerTrackers that have shares assigned
                                   # to them
-        self.preexisting_shares = {} # shareid => set(serverids) holding shareid
+        self.preexisting_shares = {} # shareid => set(servers) holding shareid
 
         # These servers have shares -- any shares -- for our SI. We keep
         # track of these to write an error message with them later.
@@ -296,6 +297,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         I handle responses to the queries sent by
         Tahoe2ServerSelector._existing_shares.
         """
+        server = tracker.get_server()
         serverid = tracker.get_serverid()
         if isinstance(res, failure.Failure):
             self.log("%s got error during existing shares check: %s"
@@ -310,7 +312,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                     % (tracker.get_name(), tuple(sorted(buckets))),
                     level=log.NOISY)
             for bucket in buckets:
-                self.preexisting_shares.setdefault(bucket, set()).add(serverid)
+                self.preexisting_shares.setdefault(bucket, set()).add(server)
                 self.homeless_shares.discard(bucket)
             self.full_count += 1
             self.bad_query_count += 1
@@ -934,15 +936,15 @@ class CHKUploader:
         d.addCallback(_done)
         return d
 
-    def set_shareholders(self, (upload_trackers, already_serverids), encoder):
+    def set_shareholders(self, (upload_trackers, already_servers), encoder):
         """
         @param upload_trackers: a sequence of ServerTracker objects that
                                 have agreed to hold some shares for us (the
                                 shareids are stashed inside the ServerTracker)
 
         @paran already_serverids: a dict mapping sharenum to a set of
-                                  serverids for servers that claim to already
-                                  have this share
+                                  servers that claim to already have this
+                                  share
         """
         msgtempl = "set_shareholders; upload_trackers is %s, already_serverids is %s"
         values = ([', '.join([str_shareloc(k,v)
