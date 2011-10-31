@@ -1,0 +1,180 @@
+# -*- org -*-
+* plan:
+** DONE port viz-d3 to current trunk
+** DONE add misc-events (frontend should switch on presence of .misc in data)
+** add ?data=URL
+***  build server to render pre-generated datasets
+***  tell people about it, show them how to save datasets
+***  add misc-event to /down-N/timeline?misc=true , maybe
+** add summary timing (AES, zfec, waiting, fetching) back to list page
+** clamp zoom/pan to avoid negatives
+** make SVG fill page, add y-scrolling
+** glue axis to bottom and top of page
+*** consider scrolling block() requests in a separate region, so
+    read/segment/misc events can be seen at the same time as arbitrary block
+    requests.
+*** consider color-coded list of shares/servers used, clicking on one can
+    vertical-scroll the block() region to that section
+** determine why blockreads for second share don't appear to happen before
+   first share's blockreads have returned
+   - sometimes. Maybe there's actually just a lot of computation happening
+     before sending out the first blockreads. That computation could be moved
+     up, before the DHYB responses return, at least the blockhashtree part.
+     (the sharehashtree part depends upon which shnum we end up using). Find
+     a way to measure and display it.
+   - on a 13MB file on my laptop grid, the first blockread was sent 14ms
+     after the first DYHB response
+   - on a 1MB file, that delay was 5ms
+     - maybe just the kernel giving time to the other 9 servers, need more
+       realistic hardware and slower/longer pipes to really test it
+*** processing time *is* significant, sometimes knowledge of a better server
+    arrives *before* we send multiple-blockreads-per-server, but yet somehow
+    it's too late to avoid it.
+**** reduce requests and loops
+     - generic way to avoid leap-before-look is to merge Share.loop()-type
+       calls (get all the responses that are pending before taking any
+       action), and to combine as many requests as possible (to reduce the
+       number of things that need merging)
+** add data-is-fetching/data-is-rendering spinner
+** find way to make zoom/pan faster with lots of elements but when most are
+   off-screen (probably winnowing dataset to overlapping events)
+** record timestamps on server too, return in a bundle after download
+   finishes, add to timeline. Actually accumulate them in the BucketReader
+
+
+* #1264 speedup attempts
+** get trace of atlasperf LAN k=60, analyze for slowdowns
+*** wow that's a lot of reads
+*** I see too many satisfy/desire calls, but it's probably correct, one per
+    share per segment (not one per read span returned). Each one takes about
+    1.2ms to process.
+*** need to count total read calls
+*** sending each read call (on an odd segnum, one read per share) seems to
+    take about 12.5ms per share. On segnum16, the individual read calls (8
+    small, one large) take about 1ms each. Wow, that's a lot of cycles..
+    what's taking so long?
+** reducing number of reads by fetching whole hash tree at once
+*** I think old-downloader took a shortcut and downloaded the entire hash
+    tree, instead of asking for just the necessary pieces
+*** changing new-downloader to do the same reduces 10MB/k=60 from 48s to 39s
+    - increases memory footprint, O(filesize) (actually 2*32*2*numsegs)
+      versus O(ln(filesize))
+    - actually the test was invalid: the #1170 fix meant I was re-fetching
+      the whole hash tree on each segment. Removing that fix makes it 33s.
+    - actually still invalid. Better fix is to only add whole tree to want_it
+      when segnum==0 (since adding it each time causes desire/requested code
+      to re-fetch all the used parts over again). Still 33s.
+    - actually still not right. looks like it's still fetching lots of small
+      spans. Current patch looks like
+#+BEGIN_EXAMPLE
+diff --git a/src/allmydata/immutable/downloader/share.py b/src/allmydata/immutable/downloader/share.py
+index ae94af9..ba3c68d 100644
+--- a/src/allmydata/immutable/downloader/share.py
++++ b/src/allmydata/immutable/downloader/share.py
+@@ -549,7 +549,7 @@ class Share:
+                 o.notify(state=COMPLETE, block=block)
+             # now clear our received data, to dodge the #1170 spans.py
+             # complexity bug
+-            self._received = DataSpans()
++            #self._received = DataSpans()
+         except (BadHashError, NotEnoughHashesError), e:
+             # rats, we have a corrupt block. Notify our clients that they
+             # need to look elsewhere, and advise the server. Unlike
+@@ -684,6 +684,12 @@ class Share:
+     def _desire_block_hashes(self, desire, o, segnum):
+         (want_it, need_it, gotta_gotta_have_it) = desire
+ 
++        # I WANT IT ALL
++        if segnum == 1:
++            want_it.add(o["block_hashes"], o["share_hashes"]-o["block_hashes"])
++            want_it.add(o["crypttext_hash_tree"], o["block_hashes"]-o["crypttext_hash_tree"])
++            return
++
+         # block hash chain
+         for hashnum in self._commonshare.get_desired_block_hashes(segnum):
+             need_it.add(o["block_hashes"]+hashnum*HASH_SIZE, HASH_SIZE)
+#+END_EXAMPLE
+
+** add immutable-share readv API, see if it improves speed
+***  find a way to fake/remove specific potential slowdowns and measure results
+     like replace foolscap fetch with pre-fetched RAM
+     (copy whole share into ram, fetch spans from ram)
+** measure WAN speeds, see if k matters
+
+** implement HTTP-based readv, see if reduced marshalling helps
+
+* bugs
+** DONE scroll events fail on FF5 (work on Chrome)
+   - both scroll-up and scroll-down cause zoom-in
+   - scroll-up should be zoom-in, -down should be zoom-out
+   - fixed in d3-v2.0.0, maybe v2.2.0
+** DONE some rules get left on screen
+** DONE range of x() changes, ticks narrow to only part of width
+** tooltips (title=) fails on chrome, works on FF
+** tooltips don't trigger when hovering on text, only on rect
+   - maybe draw rect over text? maybe draw invisible rect over both?
+* new features
+** should clip text to size of rect, to avoid overlap
+   - look at svg:clipPath, or svg:mask
+** add zoom/unzoom +/- buttons
+*** get buttons to work with drag-based pan+zoom
+    - mouse clicks are firing two actions: button click and pan
+    - I suspect they're happening reentrantly, and the pan is undoing the
+      zoom
+*** make zoom/unzoom buttons float above rest of chart
+*** add zoom/unzoom slider
+** add landscape (like in d3/examples/zoom/, calls it "context view")
+   - want decimated dataset
+   - just use read() and segment() sections
+** double-click on box should zoom to make that box 80% of width
+*** pan/zoom currently uses double-click to mean "zoom in"
+*** need to distinguish between 2click-on-bar and 2click-on-background
+** add misc-events, show Coalesce patch is working
+*** measure overhead of misc-events, consider whether to enable or not
+** BIG: live data update, incremental. Server-Sent Events (FF6)
+
+* d3 current: v2.2.0
+** I was working with v1.29.1 before
+** hm, d3.behavior.js is gone .. now in d3.js? yes, same import name though
+** fixed firefox mousewheel zoom
+** d3 v2.0.0 moved 'axis' into core (from d3.chart), looks handy for tickmarks
+   xAxis = d3.svg.axis .scale(x) .tickSize(-4)
+   major ticks, minor ticks, tickFormat, orient=top/bottom/left/right, .scale,
+   svg.append("svg:g").attr("transform", "translate(0,h)").call(xAxis)
+** stringifies numbers for uniqueness, but stores original
+   (probably no longer necessary to stringify myself)
+** remember svg origin is top-left, so y=d3.scale.linear().range([h,0])
+
+
+
+* layout
+** read() requests
+   - possibly overlapping: code should find minimum number of rows
+** segment events (request/delivery/error)
+   - also possibly overlapping, use minimum rows
+   - might be nice to show which is active at any given time
+** DYHB queries+responses
+   - completely overlapping, use exactly one row per server
+** server block-read requests (send/receive/error)
+   - use one cluster per server
+   - lots of overlapping reads
+   - within a cluster, use lowest available row
+   - 3-tuple Y axis: (serverid, shnum, overlaps)
+** ideally, tahoe should serve raw data and let JS do the sorting
+   - but my JS is not that good
+   - maybe just provide a hint: include a row number in each event, which
+     tells you how to overlap them
+   - multiple parts, joined with "-", use as JS dict keys
+
+* a graph that shows Y=segment-offset, X=start/finish time
+* a scatter plot that shows segnum-tree-height versus finish-start
+  - a local download showed segments that needed a lot of hash nodes taking
+    way more time than others
+
+* misc-events:
+  - process_block
+  - decode
+  - crypttext_hash_tree.set_hashes ("CThash")
+  - satisfy/desire
+  - check-desire
+  - AES
