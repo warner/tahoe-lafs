@@ -82,6 +82,16 @@ class URIHandler(RenderMixin, rend.Page):
 
     def childFactory(self, ctx, name):
         # 'name' is expected to be a URI
+        print "URI is", name
+        if name.startswith("tahoe:"):
+            # once JS does:
+            #  navigator.registerProtocolHandler("tahoe",
+            #                      "http://localhost:3456/uri/%s",
+            #                      "My Local Gateway")
+            # then links like tahoe:... get serviced by doing a GET to
+            # the corresponding expanded URL. The protocol/scheme prefix
+            # stays on, so we need to strip it off here.
+            name = name[len("tahoe:"):]
         try:
             node = self.client.create_node_from_uri(name)
             return directory.make_handler_for(node, self.client)
