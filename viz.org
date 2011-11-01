@@ -178,3 +178,8 @@ index ae94af9..ba3c68d 100644
   - satisfy/desire
   - check-desire
   - AES
+* zoom
+  my notes say: To zoom to [0s:1s]:
+  - globals.x.domain([0,1.0])
+  - globals.redraw()
+
