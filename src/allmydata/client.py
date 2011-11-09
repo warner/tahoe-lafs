@@ -213,6 +213,7 @@ class Client(node.Node, pollmixin.PollMixin):
         if not seed:
             have_shares = ss.have_shares()
             if have_shares:
+                # explain compatiblity goals here
                 seed = base32.b2a(self.nodeid)
             else:
                 vk = self._server_key.get_verifying_key()

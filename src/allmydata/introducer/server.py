@@ -47,7 +47,7 @@ class IntroducerNode(node.Node):
         ws = IntroducerWebishServer(self, webport, nodeurl_path)
         self.add_service(ws)
 
-class SubscriberAdapter_v1: # for_v1
+class SubscriberAdapter_v1: # for_v1 # TODO: include v2_to_v1/v1_to_v2 in name
     """I wrap a RemoteReference that points at an old v1 subscriber, enabling
     it to be treated like a v2 subscriber.
     """
@@ -73,6 +73,7 @@ class SubscriberAdapter_v1: # for_v1
         anns_v1 = [convert_announcement_v2_to_v1(ann) for ann in announcements]
         return self.original.callRemote("announce", set(anns_v1))
     def wrap_set_encoding_parameters(self, parameters):
+        # note: unused
         return self.original.callRemote("set_encoding_parameters", parameters)
     def notifyOnDisconnect(self, *args, **kwargs):
         return self.original.notifyOnDisconnect(*args, **kwargs)
@@ -81,14 +82,14 @@ class IntroducerService(service.MultiService, Referenceable):
     implements(RIIntroducerPublisherAndSubscriberService_v2)
     name = "introducer"
     VERSION = { "http://allmydata.org/tahoe/protocols/introducer/v1":
-                 { },
+                 { }, # TODO: huh?
                 "application-version": str(allmydata.__full_version__),
                 }
 
     def __init__(self, basedir="."):
         service.MultiService.__init__(self)
         self.introducer_url = None
-        # 'index' is (service_name, tubid)
+        # 'index' is (service_name, tubid) # TODO: wrong?
         self._announcements = {} # dict of index ->
                                  # (ann_s, canary, ann_d, timestamp)
 

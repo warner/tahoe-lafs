@@ -86,7 +86,7 @@ class StorageFarmBroker:
         self.introducer_client = ic = introducer_client
         ic.subscribe_to("storage", self._got_announcement)
 
-    def _got_announcement(self, key_s, ann_d):
+    def _got_announcement(self, key_s, ann_d): # change to ann_dict?
         if key_s is not None:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)

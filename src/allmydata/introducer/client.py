@@ -133,6 +133,7 @@ class IntroducerClient(service.Service, Referenceable):
         # we require a V1 introducer
         needed = "http://allmydata.org/tahoe/protocols/introducer/v1"
         if needed not in publisher.version:
+            # why? what about when we want to remove the v1 code?
             raise InsufficientVersionError(needed, publisher.version)
         self._publisher = publisher
         publisher.notifyOnDisconnect(self._disconnected)
@@ -165,7 +166,8 @@ class IntroducerClient(service.Service, Referenceable):
         for service_name in self._subscribed_service_names:
             if service_name not in self._subscriptions:
                 # there is a race here, but the subscription desk ignores
-                # duplicate requests.
+                # duplicate requests. DS says no to "subscription desk"
+                # POTENTIAL, not necessarily possible
                 self._subscriptions.add(service_name)
                 self._debug_outstanding += 1
                 d = self._publisher.callRemote("subscribe_v2",
@@ -180,7 +182,7 @@ class IntroducerClient(service.Service, Referenceable):
         f.trap(Violation, NameError)
         # they don't have a 'subscribe_v2' method: must be a v1 introducer.
         # Fall back to the v1 'subscribe' method, using a client adapter.
-        ca = ClientAdapter_v1(self)
+        ca = ClientAdapter_v1(self) # DS says "v2_to_v1
         self._debug_outstanding += 1
         d = self._publisher.callRemote("subscribe", ca, service_name)
         d.addBoth(self._debug_retired)
@@ -292,7 +294,8 @@ class IntroducerClient(service.Service, Referenceable):
         index = make_index(ann_d, key_s)
 
         # is this announcement a duplicate?
-        if self._current_announcements.get(index, [None]*3)[0] == ann_d:
+        if (index in self._current_announcements
+            and self._current_announcements[index][0] == ann_d):
             self.log(format="reannouncement for [%(service)s]:%(description)s, ignoring",
                      service=service_name, description=description,
                      parent=lp2, level=log.UNUSUAL, umid="B1MIdA")

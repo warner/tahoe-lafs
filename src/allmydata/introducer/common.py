@@ -10,6 +10,8 @@ def make_index(ann_d, key_s):
 
     service_name = str(ann_d["service-name"])
     if key_s:
+        # consider (service_name, key_s, None) and (service_name, None, tubid)
+        # or (service_name, key_s__or__tubid, tag)
         return (service_name, key_s)
     else:
         tubid = get_tubid_string_from_ann_d(ann_d)
@@ -60,9 +62,9 @@ def convert_announcement_v2_to_v1(ann_v2):
 
 
 def sign_to_foolscap(ann_d, sk):
-    # return (bytes, None, None) or (bytes, str, str). A future HTTP-based
-    # serialization will use JSON({msg:b64(JSON(msg).utf8), sig:v0-b64(sig),
-    # pubkey:v0-b64(pubkey)}) .
+    # return (bytes, None, None) or (bytes, sig-str, pubkey-str). A future
+    # HTTP-based serialization will use JSON({msg:b64(JSON(msg).utf8),
+    # sig:v0-b64(sig), pubkey:v0-b64(pubkey)}) .
     msg = simplejson.dumps(ann_d).encode("utf-8")
     if sk:
         vk = sk.get_verifying_key()
@@ -76,13 +78,16 @@ class UnknownKeyError(Exception):
     pass
 
 def unsign_from_foolscap(ann_t):
-    (msg_s, sig_vs, key_vs) = ann_t
-    if sig_vs and key_vs:
+    (msg_s, sig_vs, claimed_key_vs) = ann_t
+    key_vs = None
+    if sig_vs and claimed_key_vs:
         if not sig_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- signatures recognized")
-        if not key_vs.startswith("v0-"):
+        if not claimed_key_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- keys recognized")
-        key = keyutil.parse_pubkey("pub-"+key_vs)
-        key.verify(base32.a2b(sig_vs[3:]), msg_s)
+        claimed_key = keyutil.parse_pubkey("pub-"+claimed_key_vs)
+        claimed_key.verify(base32.a2b(sig_vs[3:]), msg_s)
+        key_vs = claimed_key_vs
     msg = simplejson.loads(msg_s.decode("utf-8"))
+    # TODO: add unit test with sig_vs=None, claimed_key_vs=not
     return (msg, key_vs)

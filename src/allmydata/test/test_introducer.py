@@ -85,6 +85,9 @@ def make_ann_d(furl):
 def make_ann_t(ic, furl, privkey):
     return ic.create_announcement("storage", make_ann_d(furl), privkey)
 
+# TODO: test replacement case where tubid equals a keyid (one should not
+# replace the other)
+
 class Client(unittest.TestCase):
     def test_duplicate_receive_v1(self):
         ic = IntroducerClient(None,
@@ -489,6 +492,8 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
         d.addCallback(_wait_until_idle)
         d.addCallback(lambda _ign: log.msg(" reconnected"))
 
+        # TODO: publish something while the introducer is offline, then
+        # confirm it gets delivered when the connection is reestablished
         def _check2(res):
             log.msg("doing _check2")
             # assert that the introducer sent out new messages, one per
