@@ -128,6 +128,7 @@ class MutableShareFile:
             # They are expanding their data size.
 
             pass # TODO: think about this, without leases
+            # copy this logic from the s3 backend code
 
             # Their data now fits in the current container. We must write
             # their new data and modify the recorded data size.

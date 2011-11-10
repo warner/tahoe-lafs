@@ -227,6 +227,7 @@ class NativeStorageServer(Referenceable):
         self._trigger_cb = None
 
         self.account_status = {"write": True, "read": True, "save": True}
+        # use "retain", not "save"
         self.account_message = {}
         self._latest_claimed_usage = None
         self._latest_claimed_usage_time = None
@@ -352,6 +353,7 @@ class NativeStorageServer(Referenceable):
         # it's worth sending data to this server
 
     def remote_account_message(self, account_message):
+        # name is vague
         self.account_message = account_message
         # maybe notify
 

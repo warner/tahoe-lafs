@@ -419,7 +419,7 @@ class StorageServer(service.MultiService):
                 else:
                     if sharenum not in shares:
                         # allocate a new share
-                        allocated_size = 2000 # arbitrary, really
+                        allocated_size = 2000 # arbitrary, really # REMOVE
                         share = self._allocate_slot_share(bucketdir,
                                                           write_enabler,
                                                           sharenum,

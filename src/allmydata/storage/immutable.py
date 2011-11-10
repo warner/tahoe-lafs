@@ -39,6 +39,8 @@ from allmydata.storage.common import UnknownImmutableContainerVersionError, \
 # whatever value was left over when the server was upgraded. All lease
 # information is now kept in the leasedb, managed by accounting.py
 
+# try to match new-s3 code: it computes the end-of-share at start, and then
+# forgets about leases and only remembers end-of-share
 class ShareFile:
     sharetype = "immutable"
 
