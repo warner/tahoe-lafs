@@ -285,6 +285,8 @@ class Root(rend.Page):
         announcement = server.get_announcement()
         version = announcement["my-version"]
         service_name = announcement["service-name"]
+        available_space = server.get_version().get('http://allmydata.org/tahoe/protocols/storage/v1',{}).get('maximum-immutable-share-size', 0)
+        available_space_string = "%s bytes" % abbreviate_size(available_space)
 
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         ctx.fillSlots("connected", connected)
@@ -295,6 +297,7 @@ class Root(rend.Page):
                                                  time.localtime(announced)))
         ctx.fillSlots("version", version)
         ctx.fillSlots("service_name", service_name)
+        ctx.fillSlots("available_space", available_space_string)
 
         return ctx.tag
 

@@ -66,6 +66,7 @@
         <th>Since</th>
         <th>First Announced</th>
         <th>Version</th>
+        <th>Space Available</th>
       </tr>
       <tr n:pattern="item" n:render="service_row">
         <td class="service-service-name"><n:slot name="service_name"/></td>
@@ -76,9 +77,10 @@
           <n:attr name="class">service-connected connected-<n:slot name="connected-bool"/></n:attr>
           <n:slot name="connected"/>
         </td>
-        <td class="service-since">       <n:slot name="since"/></td>
-        <td class="service-announced">   <n:slot name="announced"/></td>
-        <td class="service-version">     <n:slot name="version"/></td>
+        <td class="service-since">            <n:slot name="since"/></td>
+        <td class="service-announced">        <n:slot name="announced"/></td>
+        <td class="service-version">          <n:slot name="version"/></td>
+        <td class="service-available-space">  <n:slot name="available_space"/></td>
       </tr>
       <tr n:pattern="empty"><td>no peers!</td></tr>
     </table>
