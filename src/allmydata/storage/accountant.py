@@ -55,7 +55,12 @@ CREATE INDEX `expiration_time` ON `leases` (`expiration_time`);
 CREATE TABLE accounts
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
- -- do some performance testing. Z+DS propose using pubkey_vs as the primary key
+ -- do some performance testing. Z+DS propose using pubkey_vs as the primary
+ -- key. That would increase the size of the DB and the index (repeated
+ -- pubkeys instead of repeated small integers), right? Also, I think we
+ -- actually want to retain the account.id as an abstraction barrier: you
+ -- might have sub-accounts which are controlled by signed messages, for
+ -- which there is no single pubkey associated with the account.
  `pubkey_vs` VARCHAR(52),
  `creation_time` INTEGER
 );
