@@ -1,6 +1,7 @@
 
 import os, re
 from base64 import b32decode
+import simplejson
 
 from twisted.trial import unittest
 from twisted.internet import defer
@@ -13,11 +14,12 @@ from allmydata.introducer.client import IntroducerClient, \
      WrapV2ClientInV1Interface
 from allmydata.introducer.server import IntroducerService
 from allmydata.introducer.common import get_tubid_string_from_ann, \
-     get_tubid_string
+     get_tubid_string, sign_to_foolscap, unsign_from_foolscap, \
+     UnknownKeyError
 from allmydata.introducer import old
 # test compatibility with old introducer .tac files
 from allmydata.introducer import IntroducerNode
-from allmydata.util import pollmixin, ecdsa, base32, hashutil
+from allmydata.util import pollmixin, ecdsa, base32, hashutil, keyutil
 import allmydata.test.common_util as testutil
 
 class LoggingMultiService(service.MultiService):
@@ -783,6 +785,37 @@ class DecodeFurl(unittest.TestCase):
         assert m
         nodeid = b32decode(m.group(1).upper())
         self.failUnlessEqual(nodeid, "\x9fM\xf2\x19\xcckU0\xbf\x03\r\x10\x99\xfb&\x9b-\xc7A\x1d")
+
+class Signatures(unittest.TestCase):
+    def test_sign(self):
+        ann = {"key1": "value1"}
+        sk_s,vk_s = keyutil.make_keypair()
+        sk,ignored = keyutil.parse_privkey(sk_s)
+        ann_t = sign_to_foolscap(ann, sk)
+        (msg, sig, key) = ann_t
+        self.failUnlessEqual(type(msg), type("".encode("utf-8"))) # bytes
+        self.failUnlessEqual(simplejson.loads(msg.decode("utf-8")), ann)
+        self.failUnless(sig.startswith("v0-"))
+        self.failUnless(key.startswith("v0-"))
+        (ann2,key2) = unsign_from_foolscap(ann_t)
+        self.failUnlessEqual(ann2, ann)
+        self.failUnlessEqual("pub-"+key2, vk_s)
+
+        # bad signature
+        bad_ann = {"key1": "value2"}
+        bad_msg = simplejson.dumps(bad_ann).encode("utf-8")
+        self.failUnlessRaises(keyutil.BadSignatureError,
+                              unsign_from_foolscap, (bad_msg,sig,key))
+        # sneaky bad signature should be ignored
+        (ann2,key2) = unsign_from_foolscap( (bad_msg,None,key) )
+        self.failUnlessEqual(key2, None)
+        self.failUnlessEqual(ann2, bad_ann)
+
+        # unrecognized signatures
+        self.failUnlessRaises(UnknownKeyError,
+                              unsign_from_foolscap, (bad_msg,"v999-sig",key))
+        self.failUnlessRaises(UnknownKeyError,
+                              unsign_from_foolscap, (bad_msg,sig,"v999-key"))
 
 
 # add tests of StorageFarmBroker: if it receives duplicate announcements, it

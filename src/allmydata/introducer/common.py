@@ -77,7 +77,7 @@ class UnknownKeyError(Exception):
     pass
 
 def unsign_from_foolscap(ann_t):
-    (msg_s, sig_vs, claimed_key_vs) = ann_t
+    (msg, sig_vs, claimed_key_vs) = ann_t
     key_vs = None
     if sig_vs and claimed_key_vs:
         if not sig_vs.startswith("v0-"):
@@ -85,8 +85,7 @@ def unsign_from_foolscap(ann_t):
         if not claimed_key_vs.startswith("v0-"):
             raise UnknownKeyError("only v0- keys recognized")
         claimed_key = keyutil.parse_pubkey("pub-"+claimed_key_vs)
-        claimed_key.verify(base32.a2b(sig_vs[3:]), msg_s)
+        claimed_key.verify(base32.a2b(sig_vs[3:]), msg)
         key_vs = claimed_key_vs
-    msg = simplejson.loads(msg_s.decode("utf-8"))
-    # TODO: add unit test with sig_vs=None, claimed_key_vs=not
-    return (msg, key_vs)
+    ann = simplejson.loads(msg.decode("utf-8"))
+    return (ann, key_vs)
