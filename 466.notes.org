@@ -1,0 +1,43 @@
+
+* committing to the binary form of certain identifiers. think about versioning,
+  backwards compability:
+** serverid
+   - serverid is really a VerifyingKey instance (class plus key material)
+   - it comes (in serialized form) from third component of the ann_t tuple
+   - any subsequent stringifications are up to the receiver, and only matter
+     in the long term if they record the stringification for later use
+     - e.g. UI. But I want that to be driven by petnames anyways
+** permutation-seed
+   - base32.b2a(vk.to_bytes())
+   - should we include a version identifier?
+   - should we hash it for some reason?
+
+* committing to location and name of server.key
+
+* fixes/pay-attention-to-and-clean-up:
+** update to new ed25519 API
+   - client.py _init_permutation_seed(): vk.to_bytes(), not to_string()
+** DONE VERSION dicts
+   - 1.2 was missing get_version
+   - 1.3 did have it, published "../v1":{}
+   - 1.9 is same as 1.3
+** DONE index (should make sure tubid-based and serverid-based cannot collide)
+*** DONE _attach_stub_client()
+*** DONE self._announcements key
+
+** DONE ann_d -> ann_dict (at least make it consistent and clear)
+** additional tests
+*** two TODOs in test_introducer
+*** DONE one TODO in common.py (test with sig_vs=None, claimed_key_vs=not)
+
+* manual tests:
+   create old server
+   connect old client
+    upload a file (make sure server gets a share)
+    record what permutation seed it uses (Tubid-based)
+   upgrade client
+    confirm permutation seed remains the same
+   upgrade introducer
+    repeat
+   upgrade server
+    repeat
