@@ -9,7 +9,8 @@ from twisted.python import log
 from foolscap.api import Tub, Referenceable, fireEventually, flushEventualQueue
 from twisted.application import service
 from allmydata.interfaces import InsufficientVersionError
-from allmydata.introducer.client import IntroducerClient, ClientAdapter_v1
+from allmydata.introducer.client import IntroducerClient, \
+     WrapV2ClientInV1Interface
 from allmydata.introducer.server import IntroducerService
 from allmydata.introducer.common import get_tubid_string_from_ann_d, \
      get_tubid_string
@@ -99,7 +100,7 @@ class Client(unittest.TestCase):
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnpigj2ja2qr2srq4ikjwnl7xfgbra"
         ann1 = (furl1, "storage", "RIStorage", "nick1", "ver23", "ver0")
         ann1b = (furl1, "storage", "RIStorage", "nick1", "ver24", "ver0")
-        ca = ClientAdapter_v1(ic)
+        ca = WrapV2ClientInV1Interface(ic)
 
         ca.remote_announce([ann1])
         d = fireEventually()
@@ -615,7 +616,8 @@ class ClientInfo(unittest.TestCase):
         s = introducer.get_subscribers()
         self.failUnlessEqual(len(s), 1)
         sn, when, si, rref = s[0]
-        # rref will be a SubscriberAdapter_v1 around the real subscriber
+        # rref will be a WrapV1SubscriberInV2Interface around the real
+        # subscriber
         self.failUnlessIdentical(rref.original, subscriber)
         self.failUnlessEqual(si, None) # not known yet
         self.failUnlessEqual(sn, "storage")

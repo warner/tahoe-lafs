@@ -13,7 +13,7 @@ from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.keyutil import BadSignatureError
 
-class ClientAdapter_v1(Referenceable): # for_v1
+class WrapV2ClientInV1Interface(Referenceable): # for_v1
     """I wrap a v2 IntroducerClient to make it look like a v1 client, so it
     can be attached to an old server."""
     implements(RIIntroducerSubscriberClient_v1)
@@ -179,7 +179,7 @@ class IntroducerClient(service.Service, Referenceable):
         f.trap(Violation, NameError)
         # they don't have a 'subscribe_v2' method: must be a v1 introducer.
         # Fall back to the v1 'subscribe' method, using a client adapter.
-        ca = ClientAdapter_v1(self) # DS says "v2_to_v1
+        ca = WrapV2ClientInV1Interface(self)
         self._debug_outstanding += 1
         d = self._publisher.callRemote("subscribe", ca, service_name)
         d.addBoth(self._debug_retired)

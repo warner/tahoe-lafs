@@ -47,7 +47,7 @@ class IntroducerNode(node.Node):
         ws = IntroducerWebishServer(self, webport, nodeurl_path)
         self.add_service(ws)
 
-class SubscriberAdapter_v1: # for_v1 # TODO: include v2_to_v1/v1_to_v2 in name
+class WrapV1SubscriberInV2Interface: # for_v1
     """I wrap a RemoteReference that points at an old v1 subscriber, enabling
     it to be treated like a v2 subscriber.
     """
@@ -116,7 +116,7 @@ class IntroducerService(service.MultiService, Referenceable):
                               "outbound_message": 0,
                               "outbound_announcements": 0,
                               "inbound_subscribe": 0}
-        self._debug_outstanding = 0 # also covers SubscriberAdapter_v1
+        self._debug_outstanding = 0 # also covers WrapV1SubscriberInV2Interface
 
     def _debug_retired(self, res):
         self._debug_outstanding -= 1
@@ -250,7 +250,7 @@ class IntroducerService(service.MultiService, Referenceable):
     def remote_subscribe(self, subscriber, service_name): # for_v1
         self.log("introducer: old (v1) subscription[%s] request at %s"
                  % (service_name, subscriber), umid="hJlGUg")
-        return self.add_subscriber(SubscriberAdapter_v1(subscriber),
+        return self.add_subscriber(WrapV1SubscriberInV2Interface(subscriber),
                                    service_name, None)
 
     def remote_subscribe_v2(self, subscriber, service_name, subscriber_info):
