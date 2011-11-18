@@ -9,7 +9,8 @@ from allmydata.util import log
 from allmydata.introducer.interfaces import \
      RIIntroducerPublisherAndSubscriberService_v2
 from allmydata.introducer.common import convert_announcement_v1_to_v2, \
-     convert_announcement_v2_to_v1, unsign_from_foolscap, make_index
+     convert_announcement_v2_to_v1, unsign_from_foolscap, make_index, \
+     get_tubid_string_from_ann_d
 
 class IntroducerNode(node.Node):
     PORTNUMFILE = "introducer.port"
@@ -89,7 +90,8 @@ class IntroducerService(service.MultiService, Referenceable):
     def __init__(self, basedir="."):
         service.MultiService.__init__(self)
         self.introducer_url = None
-        # 'index' is (service_name, tubid) # TODO: wrong?
+        # 'index' is (service_name, key_s, tubid), where key_s or tubid is
+        # None
         self._announcements = {} # dict of index ->
                                  # (ann_s, canary, ann_d, timestamp)
 
@@ -170,7 +172,7 @@ class IntroducerService(service.MultiService, Referenceable):
 
         service_name = str(ann_d["service-name"])
         if service_name == "stub_client": # for_v1
-            self._attach_stub_client(ann_d, index, lp)
+            self._attach_stub_client(ann_d, lp)
             return
 
         old = self._announcements.get(index)
@@ -203,7 +205,7 @@ class IntroducerService(service.MultiService, Referenceable):
                          ann=ann_t, facility="tahoe.introducer",
                          level=log.UNUSUAL, umid="jfGMXQ")
 
-    def _attach_stub_client(self, ann_d, index, lp):
+    def _attach_stub_client(self, ann_d, lp):
         # There might be a v1 subscriber for whom this is a stub_client.
         # We might have received the subscription before the stub_client
         # announcement, in which case we now need to fix up the record in
@@ -212,7 +214,7 @@ class IntroducerService(service.MultiService, Referenceable):
         # record it for later, in case the stub_client arrived before the
         # subscription
         subscriber_info = self._get_subscriber_info_from_ann_d(ann_d)
-        ann_tubid = index[1]
+        ann_tubid = get_tubid_string_from_ann_d(ann_d)
         self._stub_client_announcements[ann_tubid] = subscriber_info
 
         lp2 = self.log("stub_client announcement, "

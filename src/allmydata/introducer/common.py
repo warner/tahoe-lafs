@@ -5,17 +5,16 @@ from allmydata.util import base32, keyutil
 def make_index(ann_d, key_s):
     """Return something that can be used as an index (e.g. a tuple of
     strings), such that two messages that refer to the same 'thing' will have
-    the same index. This is a tuple of (service-name, signing-key) for signed
-    announcements, or (service-name, tubid) for unsigned announcements."""
+    the same index. This is a tuple of (service-name, signing-key, None) for
+    signed announcements, or (service-name, None, tubid) for unsigned
+    announcements."""
 
     service_name = str(ann_d["service-name"])
     if key_s:
-        # consider (service_name, key_s, None) and (service_name, None, tubid)
-        # or (service_name, key_s__or__tubid, tag)
-        return (service_name, key_s)
+        return (service_name, key_s, None)
     else:
         tubid = get_tubid_string_from_ann_d(ann_d)
-        return (service_name, tubid)
+        return (service_name, None, tubid)
 
 def get_tubid_string_from_ann_d(ann_d):
     return get_tubid_string(str(ann_d.get("anonymous-storage-FURL")

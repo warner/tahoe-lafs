@@ -666,7 +666,7 @@ class Announcements(unittest.TestCase):
         client_v2 = IntroducerClient(tub, introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        serverid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
+        tubid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
         ann_s0 = make_ann_t(client_v2, furl1, None)
         canary0 = Referenceable()
         introducer.remote_publish_v2(ann_s0, canary0)
@@ -674,7 +674,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(len(a), 1)
         (index, (ann_s, canary, ann_d, when)) = a.items()[0]
         self.failUnlessIdentical(canary, canary0)
-        self.failUnlessEqual(index, ("storage", serverid))
+        self.failUnlessEqual(index, ("storage", None, tubid))
         self.failUnlessEqual(ann_d["app-versions"], app_versions)
         self.failUnlessEqual(ann_d["nickname"], u"nick-v2")
         self.failUnlessEqual(ann_d["service-name"], "storage")
@@ -699,7 +699,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(len(a), 1)
         (index, (ann_s, canary, ann_d, when)) = a.items()[0]
         self.failUnlessIdentical(canary, canary0)
-        self.failUnlessEqual(index, ("storage", pks)) # index is pubkey string
+        self.failUnlessEqual(index, ("storage", pks, None))
         self.failUnlessEqual(ann_d["app-versions"], app_versions)
         self.failUnlessEqual(ann_d["nickname"], u"nick-v2")
         self.failUnlessEqual(ann_d["service-name"], "storage")
@@ -710,7 +710,7 @@ class Announcements(unittest.TestCase):
         introducer = IntroducerService()
 
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
-        serverid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
+        tubid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
         ann = (furl1, "storage", "RIStorage",
                u"nick-v1".encode("utf-8"), "my_version", "oldest")
         introducer.remote_publish(ann)
@@ -719,7 +719,7 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(len(a), 1)
         (index, (ann_s, canary, ann_d, when)) = a.items()[0]
         self.failUnlessEqual(canary, None)
-        self.failUnlessEqual(index, ("storage", serverid))
+        self.failUnlessEqual(index, ("storage", None, tubid))
         self.failUnlessEqual(ann_d["app-versions"], {})
         self.failUnlessEqual(ann_d["nickname"], u"nick-v1".encode("utf-8"))
         self.failUnlessEqual(ann_d["service-name"], "storage")
