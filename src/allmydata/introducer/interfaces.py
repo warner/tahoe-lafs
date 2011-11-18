@@ -78,7 +78,7 @@ class IIntroducerClient(Interface):
     publish their services to the rest of the world, and I help them learn
     about services available on other nodes."""
 
-    def publish(service_name, ann_d, signing_key=None):
+    def publish(service_name, ann, signing_key=None):
         """Publish the given announcement dictionary (which must be
         JSON-serializable), plus some additional keys, to the world.
 

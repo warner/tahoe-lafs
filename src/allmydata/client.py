@@ -290,10 +290,10 @@ class Client(node.Node, pollmixin.PollMixin):
         def _publish(res):
             furl_file = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
             furl = self.tub.registerReference(ss, furlFile=furl_file)
-            ann_d = {"anonymous-storage-FURL": furl,
-                     "permutation-seed-base32": self._init_permutation_seed(ss),
-                     }
-            self.introducer_client.publish("storage", ann_d, self._server_key)
+            ann = {"anonymous-storage-FURL": furl,
+                   "permutation-seed-base32": self._init_permutation_seed(ss),
+                   }
+            self.introducer_client.publish("storage", ann, self._server_key)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")

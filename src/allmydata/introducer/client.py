@@ -8,7 +8,7 @@ from allmydata.introducer.interfaces import IIntroducerClient, \
      RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
 from allmydata.introducer.common import sign_to_foolscap, unsign_from_foolscap,\
      convert_announcement_v1_to_v2, convert_announcement_v2_to_v1, \
-     make_index, get_tubid_string_from_ann_d, get_tubid_string
+     make_index, get_tubid_string_from_ann, get_tubid_string
 from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.keyutil import BadSignatureError
@@ -81,7 +81,7 @@ class IntroducerClient(service.Service, Referenceable):
         # _current_announcements remembers one announcement per
         # (servicename,serverid) pair. Anything that arrives with the same
         # pair will displace the previous one. This stores tuples of
-        # (unpacked announcement dictionary, verifyingkey, rxtime). The ann_d
+        # (unpacked announcement dictionary, verifyingkey, rxtime). The ann
         # dicts can be compared for equality to distinguish re-announcement
         # from updates. It also provides memory for clients who subscribe
         # after startup.
@@ -154,10 +154,10 @@ class IntroducerClient(service.Service, Referenceable):
         self._local_subscribers.append( (service_name,cb,args,kwargs) )
         self._subscribed_service_names.add(service_name)
         self._maybe_subscribe()
-        for index,(ann_d,key_s,when) in self._current_announcements.items():
+        for index,(ann,key_s,when) in self._current_announcements.items():
             servicename = index[0]
             if servicename == service_name:
-                eventually(cb, key_s, ann_d, *args, **kwargs)
+                eventually(cb, key_s, ann, *args, **kwargs)
 
     def _maybe_subscribe(self):
         if not self._publisher:
@@ -201,20 +201,20 @@ class IntroducerClient(service.Service, Referenceable):
         d.addCallback(_publish_stub_client)
         return d
 
-    def create_announcement(self, service_name, ann_d, signing_key):
-        full_ann_d = { "version": 0,
-                       "nickname": self._nickname,
-                       "app-versions": self._app_versions,
-                       "my-version": self._my_version,
-                       "oldest-supported": self._oldest_supported,
+    def create_announcement(self, service_name, ann, signing_key):
+        full_ann = { "version": 0,
+                     "nickname": self._nickname,
+                     "app-versions": self._app_versions,
+                     "my-version": self._my_version,
+                     "oldest-supported": self._oldest_supported,
 
-                       "service-name": service_name,
-                       }
-        full_ann_d.update(ann_d)
-        return sign_to_foolscap(full_ann_d, signing_key)
+                     "service-name": service_name,
+                     }
+        full_ann.update(ann)
+        return sign_to_foolscap(full_ann, signing_key)
 
-    def publish(self, service_name, ann_d, signing_key=None):
-        ann_t = self.create_announcement(service_name, ann_d, signing_key)
+    def publish(self, service_name, ann, signing_key=None):
+        ann_t = self.create_announcement(service_name, ann, signing_key)
         self._published_announcements[service_name] = ann_t
         self._maybe_publish()
 
@@ -258,7 +258,7 @@ class IntroducerClient(service.Service, Referenceable):
         for ann_t in announcements:
             try:
                 # this might raise UnknownKeyError or bad-sig error
-                ann_d, key_s = unsign_from_foolscap(ann_t)
+                ann, key_s = unsign_from_foolscap(ann_t)
                 # key is "v0-base32abc123"
             except BadSignatureError:
                 self.log("bad signature on inbound announcement: %s" % (ann_t,),
@@ -266,38 +266,38 @@ class IntroducerClient(service.Service, Referenceable):
                 # process other announcements that arrived with the bad one
                 continue
 
-            self._process_announcement(ann_d, key_s)
+            self._process_announcement(ann, key_s)
 
-    def _process_announcement(self, ann_d, key_s):
+    def _process_announcement(self, ann, key_s):
         self._debug_counts["inbound_announcement"] += 1
-        service_name = str(ann_d["service-name"])
+        service_name = str(ann["service-name"])
         if service_name not in self._subscribed_service_names:
             self.log("announcement for a service we don't care about [%s]"
                      % (service_name,), level=log.UNUSUAL, umid="dIpGNA")
             self._debug_counts["wrong_service"] += 1
             return
         # for ASCII values, simplejson might give us unicode *or* bytes
-        if "nickname" in ann_d and isinstance(ann_d["nickname"], str):
-            ann_d["nickname"] = unicode(ann_d["nickname"])
-        nick_s = ann_d.get("nickname",u"").encode("utf-8")
+        if "nickname" in ann and isinstance(ann["nickname"], str):
+            ann["nickname"] = unicode(ann["nickname"])
+        nick_s = ann.get("nickname",u"").encode("utf-8")
         lp2 = self.log(format="announcement for nickname '%(nick)s', service=%(svc)s: %(ann)s",
-                       nick=nick_s, svc=service_name, ann=ann_d, umid="BoKEag")
+                       nick=nick_s, svc=service_name, ann=ann, umid="BoKEag")
 
         # how do we describe this node in the logs?
         desc_bits = []
         if key_s:
             desc_bits.append("serverid=" + key_s[:20])
-        if "anonymous-storage-FURL" in ann_d:
-            tubid_s = get_tubid_string_from_ann_d(ann_d)
+        if "anonymous-storage-FURL" in ann:
+            tubid_s = get_tubid_string_from_ann(ann)
             desc_bits.append("tubid=" + tubid_s[:8])
         description = "/".join(desc_bits)
 
         # the index is used to track duplicates
-        index = make_index(ann_d, key_s)
+        index = make_index(ann, key_s)
 
         # is this announcement a duplicate?
         if (index in self._current_announcements
-            and self._current_announcements[index][0] == ann_d):
+            and self._current_announcements[index][0] == ann):
             self.log(format="reannouncement for [%(service)s]:%(description)s, ignoring",
                      service=service_name, description=description,
                      parent=lp2, level=log.UNUSUAL, umid="B1MIdA")
@@ -306,19 +306,19 @@ class IntroducerClient(service.Service, Referenceable):
         # does it update an existing one?
         if index in self._current_announcements:
             self._debug_counts["update"] += 1
-            self.log("replacing old announcement: %s" % (ann_d,),
+            self.log("replacing old announcement: %s" % (ann,),
                      parent=lp2, level=log.NOISY, umid="wxwgIQ")
         else:
             self._debug_counts["new_announcement"] += 1
             self.log("new announcement[%s]" % service_name,
                      parent=lp2, level=log.NOISY)
 
-        self._current_announcements[index] = (ann_d, key_s, time.time())
+        self._current_announcements[index] = (ann, key_s, time.time())
         # note: we never forget an index, but we might update its value
 
         for (service_name2,cb,args,kwargs) in self._local_subscribers:
             if service_name2 == service_name:
-                eventually(cb, key_s, ann_d, *args, **kwargs)
+                eventually(cb, key_s, ann, *args, **kwargs)
 
     def remote_set_encoding_parameters(self, parameters):
         self.encoding_parameters = parameters

@@ -41,8 +41,8 @@ class IntroducerRoot(rend.Page):
         announcement_summary = {}
         service_hosts = {}
         for a in self.introducer_service.get_announcements().values():
-            (_, _, ann_d, when) = a
-            service_name = ann_d["service-name"]
+            (_, _, ann, when) = a
+            service_name = ann["service-name"]
             if service_name not in announcement_summary:
                 announcement_summary[service_name] = 0
             announcement_summary[service_name] += 1
@@ -55,7 +55,7 @@ class IntroducerRoot(rend.Page):
             # enough: when multiple services are run on a single host,
             # they're usually either configured with the same addresses,
             # or setLocationAutomatically picks up the same interfaces.
-            furl = ann_d["anonymous-storage-FURL"]
+            furl = ann["anonymous-storage-FURL"]
             locations = SturdyRef(furl).getTubRef().getLocations()
             # list of tuples, ("ipv4", host, port)
             host = frozenset([hint[1]
@@ -81,8 +81,8 @@ class IntroducerRoot(rend.Page):
     def render_announcement_summary(self, ctx, data):
         services = {}
         for a in self.introducer_service.get_announcements().values():
-            (_, _, ann_d, when) = a
-            service_name = ann_d["service-name"]
+            (_, _, ann, when) = a
+            service_name = ann["service-name"]
             if service_name not in services:
                 services[service_name] = 0
             services[service_name] += 1
@@ -103,31 +103,31 @@ class IntroducerRoot(rend.Page):
 
     def data_services(self, ctx, data):
         introsvc = self.introducer_service
-        ann = []
+        services = []
         for a in introsvc.get_announcements().values():
-            (_, _, ann_d, when) = a
-            if ann_d["service-name"] == "stub_client":
+            (_, _, ann, when) = a
+            if ann["service-name"] == "stub_client":
                 continue
-            ann.append( (when, ann_d) )
-        ann.sort(key=lambda x: (x[1]["service-name"], x[1]["nickname"]))
+            services.append( (when, ann) )
+        services.sort(key=lambda x: (x[1]["service-name"], x[1]["nickname"]))
         # this used to be:
-        #ann.sort(lambda a,b: cmp( (a[1][1], a), (b[1][1], b) ) )
+        #services.sort(lambda a,b: cmp( (a[1][1], a), (b[1][1], b) ) )
         # service_name was the primary key, then the whole tuple (starting
         # with the furl) was the secondary key
-        return ann
+        return services
 
-    def render_service_row(self, ctx, (since,ann_d)):
-        sr = SturdyRef(ann_d["anonymous-storage-FURL"])
+    def render_service_row(self, ctx, (since,ann)):
+        sr = SturdyRef(ann["anonymous-storage-FURL"])
         nodeid = sr.tubID
         advertised = self.show_location_hints(sr)
-        ctx.fillSlots("peerid", "%s %s" % (nodeid, ann_d["nickname"]))
+        ctx.fillSlots("peerid", "%s %s" % (nodeid, ann["nickname"]))
         ctx.fillSlots("advertised", " ".join(advertised))
         ctx.fillSlots("connected", "?")
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         ctx.fillSlots("announced",
                       time.strftime(TIME_FORMAT, time.localtime(since)))
-        ctx.fillSlots("version", ann_d["my-version"])
-        ctx.fillSlots("service_name", ann_d["service-name"])
+        ctx.fillSlots("version", ann["my-version"])
+        ctx.fillSlots("service_name", ann["service-name"])
         return ctx.tag
 
     def data_subscribers(self, ctx, data):

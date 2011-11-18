@@ -2,23 +2,23 @@
 import re, simplejson
 from allmydata.util import base32, keyutil
 
-def make_index(ann_d, key_s):
+def make_index(ann, key_s):
     """Return something that can be used as an index (e.g. a tuple of
     strings), such that two messages that refer to the same 'thing' will have
     the same index. This is a tuple of (service-name, signing-key, None) for
     signed announcements, or (service-name, None, tubid) for unsigned
     announcements."""
 
-    service_name = str(ann_d["service-name"])
+    service_name = str(ann["service-name"])
     if key_s:
         return (service_name, key_s, None)
     else:
-        tubid = get_tubid_string_from_ann_d(ann_d)
+        tubid = get_tubid_string_from_ann(ann)
         return (service_name, None, tubid)
 
-def get_tubid_string_from_ann_d(ann_d):
-    return get_tubid_string(str(ann_d.get("anonymous-storage-FURL")
-                                or ann_d.get("FURL")))
+def get_tubid_string_from_ann(ann):
+    return get_tubid_string(str(ann.get("anonymous-storage-FURL")
+                                or ann.get("FURL")))
 
 def get_tubid_string(furl):
     m = re.match(r'pb://(\w+)@', furl)
@@ -33,38 +33,38 @@ def convert_announcement_v1_to_v2(ann_t):
     assert type(nickname) is str
     assert type(ver) is str
     assert type(oldest) is str
-    ann_d = {"version": 0,
-             "nickname": nickname.decode("utf-8"),
-             "app-versions": {},
-             "my-version": ver,
-             "oldest-supported": oldest,
+    ann = {"version": 0,
+           "nickname": nickname.decode("utf-8"),
+           "app-versions": {},
+           "my-version": ver,
+           "oldest-supported": oldest,
 
-             "service-name": service_name,
-             "anonymous-storage-FURL": furl,
-             "permutation-seed-base32": get_tubid_string(furl),
-             }
-    msg = simplejson.dumps(ann_d).encode("utf-8")
+           "service-name": service_name,
+           "anonymous-storage-FURL": furl,
+           "permutation-seed-base32": get_tubid_string(furl),
+           }
+    msg = simplejson.dumps(ann).encode("utf-8")
     return (msg, None, None)
 
 def convert_announcement_v2_to_v1(ann_v2):
     (msg, sig, pubkey) = ann_v2
-    ann_d = simplejson.loads(msg)
-    assert ann_d["version"] == 0
-    ann_t = (str(ann_d["anonymous-storage-FURL"]),
-             str(ann_d["service-name"]),
+    ann = simplejson.loads(msg)
+    assert ann["version"] == 0
+    ann_t = (str(ann["anonymous-storage-FURL"]),
+             str(ann["service-name"]),
              "remoteinterface-name is unused",
-             ann_d["nickname"].encode("utf-8"),
-             str(ann_d["my-version"]),
-             str(ann_d["oldest-supported"]),
+             ann["nickname"].encode("utf-8"),
+             str(ann["my-version"]),
+             str(ann["oldest-supported"]),
              )
     return ann_t
 
 
-def sign_to_foolscap(ann_d, sk):
+def sign_to_foolscap(ann, sk):
     # return (bytes, None, None) or (bytes, sig-str, pubkey-str). A future
     # HTTP-based serialization will use JSON({msg:b64(JSON(msg).utf8),
     # sig:v0-b64(sig), pubkey:v0-b64(pubkey)}) .
-    msg = simplejson.dumps(ann_d).encode("utf-8")
+    msg = simplejson.dumps(ann).encode("utf-8")
     if sk:
         vk = sk.get_verifying_key()
         sig = sk.sign(msg)

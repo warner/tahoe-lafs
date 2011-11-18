@@ -74,8 +74,8 @@ class StorageFarmBroker:
         self.introducer_client = None
 
     # these two are used in unit tests
-    def test_add_rref(self, serverid, rref, ann_d):
-        s = NativeStorageServer(serverid, ann_d.copy())
+    def test_add_rref(self, serverid, rref, ann):
+        s = NativeStorageServer(serverid, ann.copy())
         s.rref = rref
         self.servers[serverid] = s
 
@@ -86,16 +86,16 @@ class StorageFarmBroker:
         self.introducer_client = ic = introducer_client
         ic.subscribe_to("storage", self._got_announcement)
 
-    def _got_announcement(self, key_s, ann_d): # change to ann_dict?
+    def _got_announcement(self, key_s, ann):
         if key_s is not None:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
-        assert ann_d["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann_d)
+        assert ann["service-name"] == "storage"
+        s = NativeStorageServer(key_s, ann)
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
         if old:
-            if old.get_announcement() == ann_d:
+            if old.get_announcement() == ann:
                 return # duplicate
             # replacement
             del self.servers[serverid]
@@ -175,19 +175,19 @@ class NativeStorageServer:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann_d, min_shares=1):
+    def __init__(self, key_s, ann, min_shares=1):
         self.key_s = key_s
-        self.announcement = ann_d
+        self.announcement = ann
         self.min_shares = min_shares
 
-        assert "anonymous-storage-FURL" in ann_d, ann_d
-        furl = str(ann_d["anonymous-storage-FURL"])
+        assert "anonymous-storage-FURL" in ann, ann
+        furl = str(ann["anonymous-storage-FURL"])
         m = re.match(r'pb://(\w+)@', furl)
         assert m, furl
         tubid_s = m.group(1).lower()
         self._tubid = base32.a2b(tubid_s)
-        assert "permutation-seed-base32" in ann_d, ann_d
-        ps = base32.a2b(str(ann_d["permutation-seed-base32"]))
+        assert "permutation-seed-base32" in ann, ann
+        ps = base32.a2b(str(ann["permutation-seed-base32"]))
         self._permutation_seed = ps
 
         name = key_s or tubid_s

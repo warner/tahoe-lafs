@@ -10,7 +10,7 @@ from allmydata.introducer.interfaces import \
      RIIntroducerPublisherAndSubscriberService_v2
 from allmydata.introducer.common import convert_announcement_v1_to_v2, \
      convert_announcement_v2_to_v1, unsign_from_foolscap, make_index, \
-     get_tubid_string_from_ann_d
+     get_tubid_string_from_ann
 
 class IntroducerNode(node.Node):
     PORTNUMFILE = "introducer.port"
@@ -95,11 +95,11 @@ class IntroducerService(service.MultiService, Referenceable):
         # 'index' is (service_name, key_s, tubid), where key_s or tubid is
         # None
         self._announcements = {} # dict of index ->
-                                 # (ann_s, canary, ann_d, timestamp)
+                                 # (ann_s, canary, ann, timestamp)
 
-        # ann_d is cleaned up (nickname is always unicode, servicename is
-        # always ascii, etc, even though simplejson.loads sometimes returns
-        # either)
+        # ann (the announcement dictionary) is cleaned up: nickname is always
+        # unicode, servicename is always ascii, etc, even though
+        # simplejson.loads sometimes returns either
 
         # self._subscribers is a dict mapping servicename to subscriptions
         # 'subscriptions' is a dict mapping rref to a subscription
@@ -169,18 +169,18 @@ class IntroducerService(service.MultiService, Referenceable):
         self._debug_counts["inbound_message"] += 1
         self.log("introducer: announcement published: %s" % (ann_t,),
                  umid="wKHgCw")
-        ann_d, key = unsign_from_foolscap(ann_t) # might raise BadSignatureError
-        index = make_index(ann_d, key)
+        ann, key = unsign_from_foolscap(ann_t) # might raise BadSignatureError
+        index = make_index(ann, key)
 
-        service_name = str(ann_d["service-name"])
+        service_name = str(ann["service-name"])
         if service_name == "stub_client": # for_v1
-            self._attach_stub_client(ann_d, lp)
+            self._attach_stub_client(ann, lp)
             return
 
         old = self._announcements.get(index)
         if old:
-            (old_ann_t, canary, old_ann_d, timestamp) = old
-            if old_ann_d == ann_d:
+            (old_ann_t, canary, old_ann, timestamp) = old
+            if old_ann == ann:
                 self.log("but we already knew it, ignoring", level=log.NOISY,
                          umid="myxzLw")
                 self._debug_counts["inbound_duplicate"] += 1
@@ -189,7 +189,7 @@ class IntroducerService(service.MultiService, Referenceable):
                 self.log("old announcement being updated", level=log.NOISY,
                          umid="304r9g")
                 self._debug_counts["inbound_update"] += 1
-        self._announcements[index] = (ann_t, canary, ann_d, time.time())
+        self._announcements[index] = (ann_t, canary, ann, time.time())
         #if canary:
         #    canary.notifyOnDisconnect ...
         # use a CanaryWatcher? with cw.is_connected()?
@@ -207,7 +207,7 @@ class IntroducerService(service.MultiService, Referenceable):
                          ann=ann_t, facility="tahoe.introducer",
                          level=log.UNUSUAL, umid="jfGMXQ")
 
-    def _attach_stub_client(self, ann_d, lp):
+    def _attach_stub_client(self, ann, lp):
         # There might be a v1 subscriber for whom this is a stub_client.
         # We might have received the subscription before the stub_client
         # announcement, in which case we now need to fix up the record in
@@ -215,8 +215,8 @@ class IntroducerService(service.MultiService, Referenceable):
 
         # record it for later, in case the stub_client arrived before the
         # subscription
-        subscriber_info = self._get_subscriber_info_from_ann_d(ann_d)
-        ann_tubid = get_tubid_string_from_ann_d(ann_d)
+        subscriber_info = self._get_subscriber_info_from_ann(ann)
+        ann_tubid = get_tubid_string_from_ann(ann)
         self._stub_client_announcements[ann_tubid] = subscriber_info
 
         lp2 = self.log("stub_client announcement, "
@@ -242,12 +242,12 @@ class IntroducerService(service.MultiService, Referenceable):
             # and we don't remember or announce stub_clients beyond what we
             # need to get the subscriber_info set up
 
-    def _get_subscriber_info_from_ann_d(self, ann_d): # for_v1
-        sinfo = { "version": ann_d["version"],
-                  "nickname": ann_d["nickname"],
-                  "app-versions": ann_d["app-versions"],
-                  "my-version": ann_d["my-version"],
-                  "oldest-supported": ann_d["oldest-supported"],
+    def _get_subscriber_info_from_ann(self, ann): # for_v1
+        sinfo = { "version": ann["version"],
+                  "nickname": ann["nickname"],
+                  "app-versions": ann["app-versions"],
+                  "my-version": ann["my-version"],
+                  "oldest-supported": ann["oldest-supported"],
                   }
         return sinfo
 
@@ -291,7 +291,7 @@ class IntroducerService(service.MultiService, Referenceable):
 
         # now tell them about any announcements they're interested in
         announcements = set( [ ann_t
-                               for idx,(ann_t,canary,ann_d,when)
+                               for idx,(ann_t,canary,ann,when)
                                in self._announcements.items()
                                if idx[0] == service_name] )
         if announcements:

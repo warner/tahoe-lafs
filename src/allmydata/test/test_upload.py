@@ -197,9 +197,9 @@ class FakeClient:
                     for fakeid in range(self.num_servers) ]
         self.storage_broker = StorageFarmBroker(None, permute_peers=True)
         for (serverid, rref) in servers:
-            ann_d = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(serverid),
-                     "permutation-seed-base32": base32.b2a(serverid) }
-            self.storage_broker.test_add_rref(serverid, rref, ann_d)
+            ann = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(serverid),
+                   "permutation-seed-base32": base32.b2a(serverid) }
+            self.storage_broker.test_add_rref(serverid, rref, ann)
         self.last_servers = [s[1] for s in servers]
 
     def log(self, *args, **kwargs):
