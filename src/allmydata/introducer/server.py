@@ -82,8 +82,10 @@ class WrapV1SubscriberInV2Interface: # for_v1
 class IntroducerService(service.MultiService, Referenceable):
     implements(RIIntroducerPublisherAndSubscriberService_v2)
     name = "introducer"
-    VERSION = { "http://allmydata.org/tahoe/protocols/introducer/v1":
-                 { }, # TODO: huh?
+    # v1 is the original protocol, supported since 1.0 (but only advertised
+    # starting in 1.3). v2 is the new signed protocol, supported after 1.9
+    VERSION = { "http://allmydata.org/tahoe/protocols/introducer/v1": { },
+                "http://allmydata.org/tahoe/protocols/introducer/v2": { },
                 "application-version": str(allmydata.__full_version__),
                 }
 

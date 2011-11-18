@@ -2,7 +2,7 @@
 import time
 from zope.interface import implements
 from twisted.application import service
-from foolscap.api import Referenceable, eventually, RemoteInterface, Violation
+from foolscap.api import Referenceable, eventually, RemoteInterface
 from allmydata.interfaces import InsufficientVersionError
 from allmydata.introducer.interfaces import IIntroducerClient, \
      RIIntroducerSubscriberClient_v1, RIIntroducerSubscriberClient_v2
@@ -42,6 +42,8 @@ class RIStubClient(RemoteInterface): # for_v1
 class StubClient(Referenceable): # for_v1
     implements(RIStubClient)
 
+V1 = "http://allmydata.org/tahoe/protocols/introducer/v1"
+V2 = "http://allmydata.org/tahoe/protocols/introducer/v2"
 
 class IntroducerClient(service.Service, Referenceable):
     implements(RIIntroducerSubscriberClient_v2, IIntroducerClient)
@@ -130,11 +132,9 @@ class IntroducerClient(service.Service, Referenceable):
 
     def _got_versioned_introducer(self, publisher):
         self.log("got introducer version: %s" % (publisher.version,))
-        # we require a V1 introducer
-        needed = "http://allmydata.org/tahoe/protocols/introducer/v1"
-        if needed not in publisher.version:
-            # why? what about when we want to remove the v1 code?
-            raise InsufficientVersionError(needed, publisher.version)
+        # we require an introducer that speaks at least one of (V1, V2)
+        if not (V1 in publisher.version or V2 in publisher.version):
+            raise InsufficientVersionError("V1 or V2", publisher.version)
         self._publisher = publisher
         publisher.notifyOnDisconnect(self._disconnected)
         self._maybe_publish()
@@ -165,21 +165,23 @@ class IntroducerClient(service.Service, Referenceable):
                      level=log.NOISY)
             return
         for service_name in self._subscribed_service_names:
-            if service_name not in self._subscriptions:
-                self._subscriptions.add(service_name)
+            if service_name in self._subscriptions:
+                continue
+            self._subscriptions.add(service_name)
+            if V2 in self._publisher.version:
                 self._debug_outstanding += 1
                 d = self._publisher.callRemote("subscribe_v2",
                                                self, service_name,
                                                self._my_subscriber_info)
                 d.addBoth(self._debug_retired)
-                d.addErrback(self._subscribe_handle_v1, service_name) # for_v1
-                d.addErrback(log.err, facility="tahoe.introducer.client",
-                             level=log.WEIRD, umid="2uMScQ")
+            else:
+                d = self._subscribe_handle_v1(service_name) # for_v1
+            d.addErrback(log.err, facility="tahoe.introducer.client",
+                         level=log.WEIRD, umid="2uMScQ")
 
-    def _subscribe_handle_v1(self, f, service_name): # for_v1
-        f.trap(Violation, NameError)
-        # they don't have a 'subscribe_v2' method: must be a v1 introducer.
-        # Fall back to the v1 'subscribe' method, using a client adapter.
+    def _subscribe_handle_v1(self, service_name): # for_v1
+        # they don't speak V2: must be a v1 introducer. Fall back to the v1
+        # 'subscribe' method, using a client adapter.
         ca = WrapV2ClientInV1Interface(self)
         self._debug_outstanding += 1
         d = self._publisher.callRemote("subscribe", ca, service_name)
@@ -223,20 +225,22 @@ class IntroducerClient(service.Service, Referenceable):
         # this re-publishes everything. The Introducer ignores duplicates
         for ann_t in self._published_announcements.values():
             self._debug_counts["outbound_message"] += 1
-            self._debug_outstanding += 1
-            d = self._publisher.callRemote("publish_v2", ann_t, self._canary)
-            d.addBoth(self._debug_retired)
-            d.addErrback(self._handle_v1_publisher, ann_t) # for_v1
+            if V2 in self._publisher.version:
+                self._debug_outstanding += 1
+                d = self._publisher.callRemote("publish_v2", ann_t,
+                                               self._canary)
+                d.addBoth(self._debug_retired)
+            else:
+                d = self._handle_v1_publisher(ann_t) # for_v1
             d.addErrback(log.err, ann_t=ann_t,
                          facility="tahoe.introducer.client",
                          level=log.WEIRD, umid="xs9pVQ")
 
-    def _handle_v1_publisher(self, f, ann_t): # for_v1
-        f.trap(Violation, NameError)
-        # they don't have the 'publish_v2' method, so fall back to the old
-        # 'publish' method (which takes an unsigned tuple of bytestrings)
+    def _handle_v1_publisher(self, ann_t): # for_v1
+        # they don't speak V2, so fall back to the old 'publish' method
+        # (which takes an unsigned tuple of bytestrings)
         self.log("falling back to publish_v1",
-                 level=log.UNUSUAL, umid="9RCT1A", failure=f)
+                 level=log.UNUSUAL, umid="9RCT1A")
         ann_v1 = convert_announcement_v2_to_v1(ann_t)
         self._debug_outstanding += 1
         d = self._publisher.callRemote("publish", ann_v1)

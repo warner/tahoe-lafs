@@ -769,7 +769,8 @@ class NonV1Server(SystemTestMixin, unittest.TestCase):
         d = self.poll(_got_bad)
         def _done(res):
             self.failUnless(c._introducer_error)
-            self.failUnless(c._introducer_error.check(InsufficientVersionError))
+            self.failUnless(c._introducer_error.check(InsufficientVersionError),
+                            c._introducer_error)
         d.addCallback(_done)
         return d
 
