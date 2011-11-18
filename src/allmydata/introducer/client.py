@@ -165,9 +165,6 @@ class IntroducerClient(service.Service, Referenceable):
             return
         for service_name in self._subscribed_service_names:
             if service_name not in self._subscriptions:
-                # there is a race here, but the subscription desk ignores
-                # duplicate requests. DS says no to "subscription desk"
-                # POTENTIAL, not necessarily possible
                 self._subscriptions.add(service_name)
                 self._debug_outstanding += 1
                 d = self._publisher.callRemote("subscribe_v2",

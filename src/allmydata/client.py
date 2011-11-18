@@ -213,9 +213,17 @@ class Client(node.Node, pollmixin.PollMixin):
         if not seed:
             have_shares = ss.have_shares()
             if have_shares:
-                # explain compatiblity goals here
+                # if the server has shares but not a recorded
+                # permutation-seed, then it has been around since pre-#466
+                # days, and the clients who uploaded those shares used our
+                # TubID as a permutation-seed. We should keep using that same
+                # seed to keep the shares in the same place in the permuted
+                # ring, so those clients don't have to perform excessive
+                # searches.
                 seed = base32.b2a(self.nodeid)
             else:
+                # otherwise, we're free to use the more natural seed of our
+                # pubkey-based serverid
                 vk = self._server_key.get_verifying_key()
                 seed = base32.b2a(vk.to_string())
             self.write_config("permutation-seed", seed+"\n")
