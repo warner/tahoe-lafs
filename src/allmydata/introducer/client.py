@@ -154,7 +154,8 @@ class IntroducerClient(service.Service, Referenceable):
         self._local_subscribers.append( (service_name,cb,args,kwargs) )
         self._subscribed_service_names.add(service_name)
         self._maybe_subscribe()
-        for (servicename,unique),(ann_d,key_s,when) in self._current_announcements.items():
+        for index,(ann_d,key_s,when) in self._current_announcements.items():
+            servicename = index[0]
             if servicename == service_name:
                 eventually(cb, key_s, ann_d, *args, **kwargs)
 
