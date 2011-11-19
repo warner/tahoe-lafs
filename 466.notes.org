@@ -1,16 +1,38 @@
 
 * committing to the binary form of certain identifiers. think about versioning,
   backwards compability:
-** serverid
+** DONE serverid
    - serverid is really a VerifyingKey instance (class plus key material)
    - it comes (in serialized form) from third component of the ann_t tuple
+     - the "v0-" prefix in that component means "this is
+       ed25519.VerifyKey.to_ascii(encoding=base32)"
    - any subsequent stringifications are up to the receiver, and only matter
      in the long term if they record the stringification for later use
      - e.g. UI. But I want that to be driven by petnames anyways
-** permutation-seed
-   - base32.b2a(vk.to_bytes())
+** DONE permutation-seed
+   - base32.b2a(vk.to_bytes()) or base32.b2a(nodeid)
+     - nodeid = b32decode(tubID) , so binary
    - should we include a version identifier?
+     - naw, "permutation-seed-base32" implies a reason for using it
    - should we hash it for some reason?
+     - no, the -base32 aspect allows us to send arbitrary binary, and there's
+       nothing secret about it
+   - should we tolerate it being missing?
+     - what would we do it if were missing? either derive it from something
+       else, or set it to None and let it sort randomly
+     - naw. anonymous-storage-FURL (or accountant-FURL) implies a particular
+       kind of search order. If/when we can tolerate those being missing,
+       then we'll want to provide something else instead of the permutation
+       seed.
+   - should we deliver it as part of get_version()?
+     - no. get_version() should really return the same thing for two nodes
+       running the same code, and this would be different per-server.
+       (get_version currently violates this guideline by returning
+       maximum-immutable-share-size =get_available_space(), but let's not
+       make it worse)
+     - so either send it as part of announcement, or add another
+       at-connection-time method to fetch it, which means another roundtrip.
+   - so leave it as-is
 
 * committing to location and name of server.key
 
