@@ -34,7 +34,7 @@ from allmydata.storage.common import UnknownImmutableContainerVersionError, \
 # then the value stored in this field will be the actual share data length
 # modulo 2**32.
 
-# Footnote 2: as of Tahoe v(post-Accountint) this field is not used by
+# Footnote 2: as of Tahoe v(post-Accounting) this field is not used by
 # storage servers. New shares will have a 0 here. Old shares will have
 # whatever value was left over when the server was upgraded. All lease
 # information is now kept in the leasedb, managed by accounting.py
