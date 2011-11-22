@@ -98,6 +98,16 @@ class LeaseDB:
         return db_shares
 
     def add_new_share(self, prefix, storage_index, shnum, size):
+        # XXX: when test_repairer.Repairer.test_repair_from_deletion_of_1
+        # runs, it deletes the share from disk, then the repairer replaces it
+        # (in the same place). That results in a duplicate entry in the
+        # 'shares' table, which causes a sqlite.IntegrityError . The
+        # add_new_share() code needs to tolerate surprises like this: the
+        # share might have been manually deleted, and the crawler may not
+        # have noticed it yet, so test for an existing entry and use it if
+        # present. (and check the code paths carefully to make sure that
+        # doesn't get too weird).
+        print "ADD_NEW_SHARE", storage_index, shnum
         self._dirty = True
         self._cursor.execute("INSERT INTO `shares`"
                              " VALUES (?,?,?,?,?)",
@@ -115,6 +125,7 @@ class LeaseDB:
         return leaseid
 
     def remove_deleted_shares(self, shareids):
+        print "REMOVE_DELETED_SHARES", shareids
         # TODO: replace this with a sensible DELETE, join, and sub-SELECT
         shareids2 = []
         for deleted_shareid in shareids:
