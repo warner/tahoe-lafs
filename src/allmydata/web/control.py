@@ -29,26 +29,32 @@ class Clients(rend.Page):
         return []
 
     def render_client_row(self, ctx, account):
+        ctx.fillSlots("nickname", account.get_nickname())
+        ctx.fillSlots("clientid", account.get_id())
+
         c = account.get_connection_status()
-        if c["connected"]:
-            cs = "Yes: from %s" % c["last_connected_from"]
+        static = account.is_static()
+        if static:
+            cs = "-"; cb = "NA"
+        elif c["connected"]:
+            cs = "Yes: from %s" % c["last_connected_from"] ; cb = "True"
         elif c["last_connected_from"]:
             # there is a window (between Account creation and our connection
             # to the 'rxFURL' receiver) during which the Account exists but
             # we've never connected to it. So c["last_connected_from"] can be
             # None. Also the pseudo-accounts ("anonymous" and "starter")
             # never have connection data.
-            cs = "No: last from %s" % c["last_connected_from"]
+            cs = "No: last from %s" % c["last_connected_from"] ; cb = "False"
         else:
-            cs = "Never"
+            cs = "Never" ; cb = "False"
 
-        ctx.fillSlots("nickname", account.get_nickname())
-        ctx.fillSlots("clientid", account.get_id())
-        ctx.fillSlots("connected-bool", c["connected"])
+        ctx.fillSlots("connected-bool", cb)
         ctx.fillSlots("connected", cs)
 
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
-        if c["connected"]:
+        if static:
+            since = "-"
+        elif c["connected"]:
             since = time.strftime(TIME_FORMAT,
                                   time.localtime(c["connected_since"]))
         elif c["last_seen"]:
@@ -58,7 +64,9 @@ class Clients(rend.Page):
             since = ""
         ctx.fillSlots("since", since)
         created = ""
-        if c["created"]:
+        if static:
+            created = "-"
+        elif c["created"]:
             created = time.strftime(TIME_FORMAT, time.localtime(c["created"]))
         ctx.fillSlots("created", created)
         ctx.fillSlots("usage", abbreviate_size(account.get_current_usage()))

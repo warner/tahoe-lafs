@@ -263,6 +263,9 @@ class BaseAccount(Referenceable):
         self.server = server
         self._leasedb = leasedb
 
+    def is_static(self):
+        return self.owner_num in (0,1)
+
     # these methods are called by StorageServer
 
     def get_owner_num(self):

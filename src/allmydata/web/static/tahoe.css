@@ -52,6 +52,10 @@ legend {
   border: 1px solid #F00;
   background-color: #FBB;
 }
+.connected-NA {
+  border: 1px solid #CCC;
+  background-color: #FFF;
+}
 
 .encoded, .nodeid {
   font-family: monospace;
