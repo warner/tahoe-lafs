@@ -30,7 +30,8 @@ CREATE TABLE shares
  `prefix` VARCHAR(2),
  `storage_index` VARCHAR(26),
  `shnum` INTEGER,
- `size` INTEGER
+ `size` INTEGER,
+ `garbage` INTEGER -- set after last lease is removed, before file is deleted
 );
 
 CREATE INDEX `prefix` ON shares (`prefix`);
