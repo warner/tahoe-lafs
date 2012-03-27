@@ -468,9 +468,10 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                                         " %d shares left.."
                                         % (tracker.get_name(),
                                            len(self.homeless_shares)))
+            start = time.time()
             d = tracker.query(shares_to_ask)
             d.addBoth(self._got_response, tracker, shares_to_ask,
-                      self.second_pass_trackers)
+                      self.second_pass_trackers, start)
             return d
         elif self.second_pass_trackers:
             # ask a server that we've already asked.
@@ -489,9 +490,10 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                                         " %d shares left.."
                                         % (tracker.get_name(),
                                            len(self.homeless_shares)))
+            start = time.time()
             d = tracker.query(shares_to_ask)
             d.addBoth(self._got_response, tracker, shares_to_ask,
-                      self.next_pass_trackers)
+                      self.next_pass_trackers, start)
             return d
         elif self.next_pass_trackers:
             # we've finished the second-or-later pass. Move all the remaining
@@ -523,7 +525,9 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 self.log(msg, level=log.OPERATIONAL)
                 return (self.use_trackers, self.preexisting_shares)
 
-    def _got_response(self, res, tracker, shares_to_ask, put_tracker_here):
+    def _got_response(self, res, tracker, shares_to_ask, put_tracker_here,
+                      start):
+        stop = time.time()
         if isinstance(res, failure.Failure):
             # This is unusual, and probably indicates a bug or a network
             # problem.
@@ -547,9 +551,10 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 self.last_failure_msg = msg
         else:
             (alreadygot, allocated) = res
-            self.log("response to allocate_buckets() from server %s: alreadygot=%s, allocated=%s"
+            self.log("response to allocate_buckets() from server %s: alreadygot=%s, allocated=%s, duration=%s"
                     % (tracker.get_name(),
-                       tuple(sorted(alreadygot)), tuple(sorted(allocated))),
+                       tuple(sorted(alreadygot)), tuple(sorted(allocated)),
+                       (stop-start)),
                     level=log.NOISY)
             progress = False
             for s in alreadygot:

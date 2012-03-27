@@ -1,9 +1,9 @@
-import struct
+import struct, time
 from zope.interface import implements
 from twisted.internet import defer
 from allmydata.interfaces import IStorageBucketWriter, IStorageBucketReader, \
      FileTooLargeError, HASH_SIZE
-from allmydata.util import mathutil, observer, pipeline
+from allmydata.util import mathutil, observer, pipeline, log
 from allmydata.util.assertutil import precondition
 from allmydata.storage.server import si_b2a
 
@@ -232,13 +232,31 @@ class WriteBucketProxy:
         # would reduce the foolscap CPU overhead per share, but wouldn't
         # reduce the number of round trips, so it might not be worth the
         # effort.
-
-        return self._pipeline.add(len(data),
-                                  self._rref.callRemote, "write", offset, data)
+        start = time.time()
+        lp = log.msg("adding %d bytes to pipeline for %s"
+                     % (len(data), self._server.get_name()))
+        d = self._pipeline.add(len(data),
+                               self._rref.callRemote, "write", offset, data)
+        log.msg(" callRemote took %s" % (time.time() - start))
+        def _done(res):
+            elapsed = time.time() - start
+            log.msg(" add(%d bytes) to %s took %s" %
+                    (len(data), self._server.get_name(), elapsed),
+                    parent=lp)
+            return res
+        d.addBoth(_done)
+        return d
 
     def close(self):
+        start = time.time()
         d = self._pipeline.add(0, self._rref.callRemote, "close")
         d.addCallback(lambda ign: self._pipeline.flush())
+        def _done(res):
+            elapsed = time.time() - start
+            log.msg(" close(%s)+flush took %s" %
+                    (self._server.get_name(), elapsed))
+            return res
+        d.addBoth(_done)
         return d
 
     def abort(self):
