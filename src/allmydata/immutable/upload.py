@@ -582,6 +582,7 @@ class EncryptAnUploadable:
         self._encoding_parameters = None
         self._file_size = None
         self._ciphertext_bytes_read = 0
+        self._cumulative_encryption_time = 0.0
         self._status = None
 
     def set_upload_status(self, upload_status):
@@ -744,12 +745,14 @@ class EncryptAnUploadable:
             bytes_processed += len(chunk)
             self._plaintext_hasher.update(chunk)
             self._update_segment_hash(chunk)
+            start = time.time()
             # TODO: we have to encrypt the data (even if hash_only==True)
             # because pycryptopp's AES-CTR implementation doesn't offer a
             # way to change the counter value. Once pycryptopp acquires
             # this ability, change this to simply update the counter
             # before each call to (hash_only==False) _encryptor.process()
             ciphertext = self._encryptor.process(chunk)
+            self._cumulative_encryption_time += (time.time() - start)
             if hash_only:
                 self.log("  skipping encryption", level=log.NOISY)
             else:
@@ -784,6 +787,9 @@ class EncryptAnUploadable:
     def get_plaintext_hash(self):
         h = self._plaintext_hasher.digest()
         return defer.succeed(h)
+
+    def get_cumulative_encryption_time(self):
+        return self._cumulative_encryption_time
 
     def close(self):
         return self.original.close()

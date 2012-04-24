@@ -650,6 +650,8 @@ class Encoder(object):
         self._times["hashes_and_close"] = h_and_c_elapsed
         total_elapsed = now - self._start_total_timestamp
         self._times["total_encode_and_push"] = total_elapsed
+        encrypt_time = self._uploadable.get_cumulative_encryption_time()
+        self._times["cumulative_encryption"] = encrypt_time
 
         # update our sharemap
         self._shares_placed = set(self.landlords.keys())

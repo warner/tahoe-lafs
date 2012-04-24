@@ -99,6 +99,9 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
     def data_time_cumulative_encoding(self, ctx, data):
         return self._get_time("cumulative_encoding")
 
+    def data_time_cumulative_encryption(self, ctx, data):
+        return self._get_time("cumulative_encryption")
+
     def data_time_cumulative_sending(self, ctx, data):
         return self._get_time("cumulative_sending")
 
@@ -122,6 +125,9 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
 
     def data_rate_encode(self, ctx, data):
         return self._get_rate("cumulative_encoding")
+
+    def data_rate_encrypt(self, ctx, data):
+        return self._get_rate("cumulative_encryption")
 
     def data_rate_push(self, ctx, data):
         return self._get_rate("cumulative_sending")
