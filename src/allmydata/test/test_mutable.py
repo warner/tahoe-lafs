@@ -21,7 +21,7 @@ from allmydata.storage.common import storage_index_to_dir
 from allmydata.scripts import debug
 
 from allmydata.mutable.filenode import MutableFileNode, BackoffAgent
-from allmydata.mutable.common import ResponseCache, \
+from allmydata.mutable.common import \
      MODE_CHECK, MODE_ANYTHING, MODE_WRITE, MODE_READ, \
      NeedMoreDataError, UnrecoverableFileError, UncoordinatedWriteError, \
      NotEnoughServersError, CorruptShareError
@@ -639,8 +639,8 @@ class Filenode(unittest.TestCase, testutil.ShouldFailMixin):
         d.addCallback(_created)
         return d
 
-
     def test_response_cache_memory_leak(self):
+        raise unittest.SkipTest("The ResponseCache has been excised")
         d = self.nodemaker.create_mutable_file("contents")
         def _created(n):
             d = n.download_best_version()
@@ -2319,6 +2319,8 @@ class MultipleEncodings(unittest.TestCase):
             # the current specified behavior is "first version recoverable"
             self.failUnlessEqual(new_contents, contents1)
         d.addCallback(_retrieved)
+        import twisted
+        twisted.internet.base.DelayedCall.debug = True 
         return d
 
 
@@ -2402,40 +2404,6 @@ class MultipleVersions(unittest.TestCase, PublishMixin, CheckerMixin):
         d.addCallback(_check_smap)
         return d
 
-
-class Utils(unittest.TestCase):
-    def test_cache(self):
-        c = ResponseCache()
-        # xdata = base62.b2a(os.urandom(100))[:100]
-        xdata = "1Ex4mdMaDyOl9YnGBM3I4xaBF97j8OQAg1K3RBR01F2PwTP4HohB3XpACuku8Xj4aTQjqJIR1f36mEj3BCNjXaJmPBEZnnHL0U9l"
-        ydata = "4DCUQXvkEPnnr9Lufikq5t21JsnzZKhzxKBhLhrBB6iIcBOWRuT4UweDhjuKJUre8A4wOObJnl3Kiqmlj4vjSLSqUGAkUD87Y3vs"
-        c.add("v1", 1, 0, xdata)
-        c.add("v1", 1, 2000, ydata)
-        self.failUnlessEqual(c.read("v2", 1, 10, 11), None)
-        self.failUnlessEqual(c.read("v1", 2, 10, 11), None)
-        self.failUnlessEqual(c.read("v1", 1, 0, 10), xdata[:10])
-        self.failUnlessEqual(c.read("v1", 1, 90, 10), xdata[90:])
-        self.failUnlessEqual(c.read("v1", 1, 300, 10), None)
-        self.failUnlessEqual(c.read("v1", 1, 2050, 5), ydata[50:55])
-        self.failUnlessEqual(c.read("v1", 1, 0, 101), None)
-        self.failUnlessEqual(c.read("v1", 1, 99, 1), xdata[99:100])
-        self.failUnlessEqual(c.read("v1", 1, 100, 1), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 9), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 10), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 11), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 15), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 19), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 20), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 21), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 25), None)
-        self.failUnlessEqual(c.read("v1", 1, 1999, 25), None)
-
-        # test joining fragments
-        c = ResponseCache()
-        c.add("v1", 1, 0, xdata[:10])
-        c.add("v1", 1, 10, xdata[10:20])
-        self.failUnlessEqual(c.read("v1", 1, 0, 20), xdata[:20])
-
 class Exceptions(unittest.TestCase):
     def test_repr(self):
         nmde = NeedMoreDataError(100, 50, 100)
@@ -2514,7 +2482,8 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
         self.basedir = "mutable/Problems/test_retrieve_surprise"
         self.set_up_grid()
         nm = self.g.clients[0].nodemaker
-        d = nm.create_mutable_file(MutableData("contents 1"))
+        content = "content1"
+        d = nm.create_mutable_file(MutableData(content))
         def _created(n):
             d = defer.succeed(None)
             d.addCallback(lambda res: n.get_servermap(MODE_READ))
@@ -2528,7 +2497,7 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
             # now attempt to retrieve the old version with the old servermap.
             # This will look like someone has changed the file since we
             # updated the servermap.
-            d.addCallback(lambda res: n._cache._clear())
+
             d.addCallback(lambda res: log.msg("starting doomed read"))
             d.addCallback(lambda res:
                           self.shouldFail(NotEnoughSharesError,
