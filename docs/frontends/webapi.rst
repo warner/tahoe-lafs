@@ -29,8 +29,9 @@ The Tahoe REST-ful Web API
     6.  `Attaching An Existing File Or Directory (by URI)`_
     7.  `Unlinking A Child`_
     8.  `Renaming A Child`_
-    9.  `Other Utilities`_
-    10. `Debugging and Testing Features`_
+    9.  `Moving A Child`_
+    10. `Other Utilities`_
+    11. `Debugging and Testing Features`_
 
 7.  `Other Useful Pages`_
 8.  `Static Files in /public_html`_
@@ -1277,6 +1278,26 @@ Renaming A Child
  This operation will replace any existing child of the new name, making it
  behave like the UNIX "``mv -f``" command.
 
+Moving A Child
+----------------
+
+``POST /uri/$DIRCAP/[SUBDIRS../]?t=move&from_name=OLD&to_dir=TARGET``
+
+ This instructs the node to move a child of the given directory to a
+ different directory, both of which must be mutable. The child can also
+ be renamed in the process. The to_dir parameter should contain the name
+ of a subdirectory of the dircap from which the child is being moved
+ (multiple levels of descent are supported), unless the file is to be
+ moved to an unrelated directory. In the latter case, this can be
+ specified by passing a target_type=uri argument and the target URI in
+ to_dir=. If the target is the name of a subdirectory, this can be
+ signified by passing target_type=name. A new name for the child can
+ also be specified using the to_name= parameter.
+
+ This operation will replace any existing child of the new name, making
+ it behave like the UNIX "``mv -f``" command. The original child is not
+ unlinked until it is linked into the target directory.
+
 Other Utilities
 ---------------
 
@@ -1298,6 +1319,8 @@ Other Utilities
   functionality described above, with the provided $CHILDNAME present in the
   'from_name' field of that form. I.e. this presents a form offering to
   rename $CHILDNAME, requesting the new name, and submitting POST rename.
+  This same URL format can also be used with "move-form" with the expected
+  results.
 
 ``GET /uri/$DIRCAP/[SUBDIRS../]CHILDNAME?t=uri``
 
