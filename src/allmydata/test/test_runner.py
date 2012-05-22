@@ -683,6 +683,19 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
             self.failUnlessEqual(rc_or_sig, 1)
             self.failUnless("does not look like a directory at all" in err, err)
         d.addCallback(_cb3)
+
+        def _then_run_in_unknown_dir(res):
+            unknowndir = os.path.join(basedir, "unknown")
+            fileutil.make_dirs(unknowndir)
+            fileutil.write(os.path.join(unknowndir, "unknown.tac"), "")
+            return self.run_bintahoe(["--quiet", "run", "--basedir", unknowndir])
+        d.addCallback(_then_run_in_unknown_dir)
+        def _cb4(res):
+            out, err, rc_or_sig = res
+            self.failUnlessEqual(rc_or_sig, 1)
+            self.failUnlessIn("I don't know how to start the node in", err)
+        d.addCallback(_cb4)
+
         return d
 
     def test_keygen(self):

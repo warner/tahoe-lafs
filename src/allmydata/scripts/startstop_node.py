@@ -145,7 +145,6 @@ def restart(config, stdout, stderr):
 def run(config, stdout, stderr):
     from twisted.internet import reactor
     from twisted.python import log, logfile
-    from allmydata import client
 
     basedir = config['basedir']
     precondition(isinstance(basedir, unicode), basedir)
@@ -160,13 +159,21 @@ def run(config, stdout, stderr):
     else:
         print >>stderr, "%s does not look like a node directory (no .tac file)" % quote_output(basedir)
         return 1
-    if "client" not in tac:
-        print >>stderr, ("%s looks like it contains a non-client node (%s).\n"
-                         "Use 'tahoe start' instead of 'tahoe run'."
-                         % (quote_output(basedir), tac))
-        return 1
 
     os.chdir(basedir)
+
+    if tac == "tahoe-client.tac":
+        from allmydata import client
+        nodetype = client.Client
+    elif tac == "tahoe-introducer.tac":
+        from allmydata.introducer.server import IntroducerNode
+        nodetype = IntroducerNode
+    else:
+        print >>stderr, ("I don't know how to start the node in %s\n"
+                         "(I only know how to start clients and introducers)\n"
+                         "Please use 'tahoe start' instead of 'tahoe run'."
+                         % (quote_output(basedir),))
+        return 1
 
     # set up twisted logging. this will become part of the node rsn.
     logdir = os.path.join(basedir, 'logs')
@@ -176,7 +183,7 @@ def run(config, stdout, stderr):
     log.startLogging(lf)
 
     # run the node itself
-    c = client.Client(basedir)
+    c = nodetype(basedir)
     reactor.callLater(0, c.startService) # after reactor startup
     reactor.run()
 
