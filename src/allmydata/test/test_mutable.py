@@ -1660,7 +1660,7 @@ class CheckerMixin:
         return r
 
     def check_expected_failure(self, r, expected_exception, substring, where):
-        for (peerid, storage_index, shnum, f) in r.get_share_problems():
+        for (server, storage_index, shnum, f) in r.get_share_problems():
             if f.check(expected_exception):
                 self.failUnless(substring in str(f),
                                 "%s: substring '%s' not in '%s'" %

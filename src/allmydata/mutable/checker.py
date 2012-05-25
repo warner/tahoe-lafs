@@ -192,7 +192,6 @@ class MutableChecker:
             report.append("Corrupt Shares:")
             summary.append("Corrupt Shares:")
         for (server, shnum, f) in sorted(self.bad_shares):
-            serverid = server.get_serverid()
             locator = (server, self._storage_index, shnum)
             corrupt_share_locators.append(locator)
             s = "%s-sh%d" % (server.get_name(), shnum)
@@ -202,7 +201,7 @@ class MutableChecker:
                 ft = str(f)
             report.append(" %s: %s" % (s, ft))
             summary.append(s)
-            p = (serverid, self._storage_index, shnum, f)
+            p = (server, self._storage_index, shnum, f)
             problems.append(p)
             msg = ("CorruptShareError during mutable verify, "
                    "serverid=%(serverid)s, si=%(si)s, shnum=%(shnum)d, "
