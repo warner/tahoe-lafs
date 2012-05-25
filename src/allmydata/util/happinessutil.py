@@ -42,24 +42,24 @@ def failure_message(peer_count, k, happy, effective_happy):
 
 def shares_by_server(servermap):
     """
-    I accept a dict of shareid -> set(peerid) mappings, and return a
-    dict of peerid -> set(shareid) mappings. My argument is a dictionary
-    with sets of peers, indexed by shares, and I transform that into a
-    dictionary of sets of shares, indexed by peerids.
+    I accept a dict of shareid -> set(server) mappings, and return a
+    dict of server -> set(shareid) mappings. My argument is a dictionary
+    with sets of servers, indexed by shares, and I transform that into a
+    dictionary of sets of shares, indexed by servers.
     """
     ret = {}
-    for shareid, peers in servermap.iteritems():
-        assert isinstance(peers, set)
-        for peerid in peers:
-            ret.setdefault(peerid, set()).add(shareid)
+    for shareid, servers in servermap.iteritems():
+        assert isinstance(servers, set)
+        for server in servers:
+            ret.setdefault(server, set()).add(shareid)
     return ret
 
 def merge_servers(servermap, upload_trackers=None):
     """
-    I accept a dict of shareid -> set(serverid) mappings, and optionally a
+    I accept a dict of shareid -> set(server) mappings, and optionally a
     set of ServerTrackers. If no set of ServerTrackers is provided, I return
     my first argument unmodified. Otherwise, I update a copy of my first
-    argument to include the shareid -> serverid mappings implied in the
+    argument to include the shareid -> server mappings implied in the
     set of ServerTrackers, returning the resulting dict.
     """
     # Since we mutate servermap, and are called outside of a
@@ -74,12 +74,12 @@ def merge_servers(servermap, upload_trackers=None):
 
     for tracker in upload_trackers:
         for shnum in tracker.buckets:
-            servermap.setdefault(shnum, set()).add(tracker.get_serverid())
+            servermap.setdefault(shnum, set()).add(tracker.get_server())
     return servermap
 
 def servers_of_happiness(sharemap):
     """
-    I accept 'sharemap', a dict of shareid -> set(peerid) mappings. I
+    I accept 'sharemap', a dict of shareid -> set(server) mappings. I
     return the 'servers_of_happiness' number that sharemap results in.
 
     To calculate the 'servers_of_happiness' number for the sharemap, I
@@ -165,14 +165,14 @@ def servers_of_happiness(sharemap):
 
 def flow_network_for(sharemap):
     """
-    I take my argument, a dict of peerid -> set(shareid) mappings, and
+    I take my argument, a dict of server -> set(shareid) mappings, and
     turn it into a flow network suitable for use with Edmonds-Karp. I
     then return the adjacency list representation of that network.
 
     Specifically, I build G = (V, E), where:
-      V = { peerid in sharemap } U { shareid in sharemap } U {s, t}
-      E = {(s, peerid) for each peerid}
-          U {(peerid, shareid) if peerid is to store shareid }
+      V = { server in sharemap } U { shareid in sharemap } U {s, t}
+      E = {(s, server) for each server}
+          U {(server, shareid) if server is to store shareid }
           U {(shareid, t) for each shareid}
 
     s and t will be source and sink nodes when my caller starts treating
@@ -205,7 +205,7 @@ def flow_network_for(sharemap):
 
 def reindex(sharemap, base_index):
     """
-    Given sharemap, I map peerids and shareids to integers that don't
+    Given sharemap, I map servers and shareids to integers that don't
     conflict with each other, so they're useful as indices in a graph. I
     return a sharemap that is reindexed appropriately, and also the
     number of distinct shares in the resulting sharemap as a convenience
@@ -213,7 +213,7 @@ def reindex(sharemap, base_index):
     """
     shares  = {} # shareid  -> vertex index
     num = base_index
-    ret = {} # peerid -> [shareid], a reindexed sharemap.
+    ret = {} # server -> [shareid], a reindexed sharemap.
     # Number the servers first
     for k in sharemap:
         ret[num] = sharemap[k]

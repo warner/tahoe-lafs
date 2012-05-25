@@ -480,6 +480,9 @@ class Encoder(object):
                       level=log.UNUSUAL, failure=why)
         if shareid in self.landlords:
             self.landlords[shareid].abort()
+            # self.lanlods[shareid] is a.. layout.WriteBucketProxy? we need
+            # to get an IServer out of it. The ServerTracker had one, but it
+            # isn't passed into the WBP. XXX
             peerid = self.landlords[shareid].get_peerid()
             assert peerid
             del self.landlords[shareid]
