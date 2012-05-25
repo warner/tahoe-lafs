@@ -720,9 +720,8 @@ class RetrieveStatusPage(rend.Page, RateAndTimeMixin):
         if not problems:
             return ""
         l = T.ul()
-        for peerid in sorted(problems.keys()):
-            peerid_s = idlib.shortnodeid_b2a(peerid)
-            l[T.li["[%s]: %s" % (peerid_s, problems[peerid])]]
+        for server in sorted(problems.keys()):
+            l[T.li["[%s]: %s" % (server.get_name(), problems[server])]]
         return ctx.tag["Server Problems:", l]
 
     def _get_rate(self, data, name):
@@ -820,11 +819,10 @@ class PublishStatusPage(rend.Page, RateAndTimeMixin):
         if not problems:
             return ""
         l = T.ul()
-        # XXX: is this exercised? I don't think PublishStatus.problems is
-        # ever populated
-        for peerid in sorted(problems.keys()):
-            peerid_s = idlib.shortnodeid_b2a(peerid)
-            l[T.li["[%s]: %s" % (peerid_s, problems[peerid])]]
+        # PublishStatus.problems is not currently populated, but may be some
+        # day
+        for server in sorted(problems.keys()):
+            l[T.li["[%s]: %s" % (server.get_name(), problems[server])]]
         return ctx.tag["Server Problems:", l]
 
     def _get_rate(self, data, name):

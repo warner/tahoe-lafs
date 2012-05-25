@@ -84,8 +84,7 @@ class RetrieveStatus:
     def set_active(self, value):
         self.active = value
     def add_problem(self, server, f):
-        serverid = server.get_serverid()
-        self._problems[serverid] = f
+        self._problems[server] = f
 
 class Marker:
     pass
