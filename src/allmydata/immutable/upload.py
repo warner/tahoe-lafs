@@ -12,7 +12,7 @@ from allmydata.util.hashutil import file_renewal_secret_hash, \
 from allmydata import hashtree, uri
 from allmydata.storage.server import si_b2a
 from allmydata.immutable import encode
-from allmydata.util import base32, dictutil, idlib, log, mathutil
+from allmydata.util import base32, dictutil, log, mathutil
 from allmydata.util.happinessutil import servers_of_happiness, \
                                          shares_by_server, merge_servers, \
                                          failure_message
