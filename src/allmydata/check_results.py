@@ -114,11 +114,11 @@ class CheckResults:
     def as_dict(self):
         sharemap = {}
         for shnum, servers in self._sharemap.items():
-            sharemap[shnum] = sorted([s.get_serverid() for s in servers])
-        responding = [s.get_serverid() for s in self._servers_responding]
-        corrupt = [(s.get_serverid(), SI, shnum)
+            sharemap[shnum] = sorted([s.get_name() for s in servers])
+        responding = [s.get_name() for s in self._servers_responding]
+        corrupt = [(s.get_name(), SI, shnum)
                    for (s, SI, shnum) in self._list_corrupt_shares]
-        incompatible = [(s.get_serverid(), SI, shnum)
+        incompatible = [(s.get_name(), SI, shnum)
                         for (s, SI, shnum) in self._list_incompatible_shares]
         d = {"count-shares-needed": self._count_shares_needed,
              "count-shares-expected": self._count_shares_expected,
