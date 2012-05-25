@@ -940,10 +940,9 @@ class Publish:
 
         serverlist = []
         for i, server in enumerate(self.full_serverlist):
-            serverid = server.get_serverid()
             if server in self.bad_servers:
                 continue
-            entry = (len(old_assignments.get(server, [])), i, serverid, server)
+            entry = (len(old_assignments.get(server, [])), i, server)
             serverlist.append(entry)
         serverlist.sort()
 
@@ -957,7 +956,7 @@ class Publish:
         # to wrap. We update the goal as we go.
         i = 0
         for shnum in homeless_shares:
-            (ignored1, ignored2, ignored3, server) = serverlist[i]
+            (_, _, server) = serverlist[i]
             # if we are forced to send a share to a server that already has
             # one, we may have two write requests in flight, and the
             # servermap (which was computed before either request was sent)
