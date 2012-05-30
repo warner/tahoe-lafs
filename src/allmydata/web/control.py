@@ -38,8 +38,6 @@ class Clients(rend.Page):
             cs = "-"; cb = "NA"
         elif c["connected"]:
             cs = "Yes: from %s" % c["last_connected_from"] ; cb = "True"
-            # don't show the static accounts ("starter" and "anonymous") as
-            # red, that's scary, use white instead.
         elif c["last_connected_from"]:
             # there is a window (between Account creation and our connection
             # to the 'rxFURL' receiver) during which the Account exists but
