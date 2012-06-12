@@ -199,7 +199,7 @@ class ServerTracker:
 
 
 def str_shareloc(shnum, bucketwriter):
-    return "%s: %s" % (shnum, bucketwriter.get_servername(),)
+    return "%s: %s" % (shnum, bucketwriter.get_server().get_name())
 
 class Tahoe2ServerSelector(log.PrefixingLogMixin):
 

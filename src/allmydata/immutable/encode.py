@@ -480,7 +480,7 @@ class Encoder(object):
                       level=log.UNUSUAL, failure=why)
         if shareid in self.landlords:
             self.landlords[shareid].abort()
-            peerid = self.landlords[shareid].get_peerid()
+            peerid = self.landlords[shareid].get_server().get_serverid()
             assert peerid
             del self.landlords[shareid]
             self.servermap[shareid].remove(peerid)

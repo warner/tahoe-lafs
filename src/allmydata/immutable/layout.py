@@ -244,11 +244,8 @@ class WriteBucketProxy:
     def abort(self):
         return self._rref.callRemoteOnly("abort")
 
-
-    def get_servername(self):
-        return self._server.get_name()
-    def get_peerid(self):
-        return self._server.get_serverid()
+    def get_server(self):
+        return self._server
 
 class WriteBucketProxy_v2(WriteBucketProxy):
     fieldsize = 8
@@ -300,9 +297,6 @@ class ReadBucketProxy:
         self._storage_index = storage_index
         self._started = False # sent request to server
         self._ready = observer.OneShotObserverList() # got response from server
-
-    def get_peerid(self):
-        return self._server.get_serverid()
 
     def __repr__(self):
         return "<ReadBucketProxy %s to peer [%s] SI %s>" % \
