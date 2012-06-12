@@ -146,8 +146,6 @@ class ServerTracker:
 
     def get_server(self):
         return self._server
-    def get_serverid(self):
-        return self._server.get_serverid()
     def get_name(self):
         return self._server.get_name()
 
@@ -347,7 +345,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         I handle responses to the queries sent by
         Tahoe2ServerSelector._existing_shares.
         """
-        serverid = tracker.get_serverid()
+        serverid = tracker.get_server().get_serverid()
         if isinstance(res, failure.Failure):
             self.log("%s got error during existing shares check: %s"
                     % (tracker.get_name(), res), level=log.UNUSUAL)
@@ -552,8 +550,9 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                        tuple(sorted(alreadygot)), tuple(sorted(allocated))),
                     level=log.NOISY)
             progress = False
+            serverid = tracker.get_server().get_serverid()
             for s in alreadygot:
-                self.preexisting_shares.setdefault(s, set()).add(tracker.get_serverid())
+                self.preexisting_shares.setdefault(s, set()).add(serverid)
                 if s in self.homeless_shares:
                     self.homeless_shares.remove(s)
                     progress = True
@@ -567,7 +566,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 progress = True
 
             if allocated or alreadygot:
-                self.serverids_with_shares.add(tracker.get_serverid())
+                self.serverids_with_shares.add(serverid)
 
             not_yet_present = set(shares_to_ask) - set(alreadygot)
             still_homeless = not_yet_present - set(allocated)
@@ -1007,17 +1006,18 @@ class CHKUploader:
         buckets = {}
         servermap = already_serverids.copy()
         for tracker in upload_trackers:
+            serverid = tracker.get_server().get_serverid()
             buckets.update(tracker.buckets)
             for shnum in tracker.buckets:
                 self._server_trackers[shnum] = tracker
-                servermap.setdefault(shnum, set()).add(tracker.get_serverid())
+                servermap.setdefault(shnum, set()).add(serverid)
         assert len(buckets) == sum([len(tracker.buckets)
                                     for tracker in upload_trackers]), \
             "%s (%s) != %s (%s)" % (
                 len(buckets),
                 buckets,
                 sum([len(tracker.buckets) for tracker in upload_trackers]),
-                [(t.buckets, t.get_serverid()) for t in upload_trackers]
+                [(t.buckets, t.get_server().get_serverid()) for t in upload_trackers]
                 )
         encoder.set_shareholders(buckets, servermap)
 

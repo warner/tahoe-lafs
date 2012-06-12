@@ -18,7 +18,7 @@ from allmydata.test.no_network import GridTestMixin
 from allmydata.test.common_util import ShouldFailMixin
 from allmydata.util.happinessutil import servers_of_happiness, \
                                          shares_by_server, merge_servers
-from allmydata.storage_client import StorageFarmBroker
+from allmydata.storage_client import StorageFarmBroker, StubServer
 from allmydata.storage.server import storage_index_to_dir
 
 MiB = 1024*1024
@@ -729,10 +729,10 @@ def is_happy_enough(servertoshnums, h, k):
 
 class FakeServerTracker:
     def __init__(self, serverid, buckets):
-        self._serverid = serverid
+        self._server = StubServer(serverid)
         self.buckets = buckets
-    def get_serverid(self):
-        return self._serverid
+    def get_server(self):
+        return self._server
 
 class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
     ShouldFailMixin):
@@ -791,9 +791,10 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
             buckets = {}
             servermap = already_servers.copy()
             for tracker in upload_trackers:
+                serverid = tracker.get_server().get_serverid()
                 buckets.update(tracker.buckets)
                 for bucket in tracker.buckets:
-                    servermap.setdefault(bucket, set()).add(tracker.get_serverid())
+                    servermap.setdefault(bucket, set()).add(serverid)
             encoder.set_shareholders(buckets, servermap)
             d = encoder.start()
             return d
