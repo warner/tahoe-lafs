@@ -728,8 +728,8 @@ def is_happy_enough(servertoshnums, h, k):
     return True
 
 class FakeServerTracker:
-    def __init__(self, serverid, buckets):
-        self._server = StubServer(serverid)
+    def __init__(self, server, buckets):
+        self._server = server
         self.buckets = buckets
     def get_server(self):
         return self._server
@@ -1354,43 +1354,46 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
     def test_merge_servers(self):
         # merge_servers merges a list of upload_servers and a dict of
         # shareid -> serverid mappings.
+        servers = [StubServer("server%d" % i) for i in range(10)]
+        s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 = servers
         shares = {
-                    1 : set(["server1"]),
-                    2 : set(["server2"]),
-                    3 : set(["server3"]),
-                    4 : set(["server4", "server5"]),
-                    5 : set(["server1", "server2"]),
+                    1 : set([s1]),
+                    2 : set([s2]),
+                    3 : set([s3]),
+                    4 : set([s4, s5]),
+                    5 : set([s1, s2]),
                  }
         # if not provided with a upload_servers argument, it should just
         # return the first argument unchanged.
         self.failUnlessEqual(shares, merge_servers(shares, set([])))
         trackers = []
-        for (i, server) in [(i, "server%d" % i) for i in xrange(5, 9)]:
-            t = FakeServerTracker(server, [i])
+        for i in range(5, 9):
+            t = FakeServerTracker(servers[i], [i])
             trackers.append(t)
         expected = {
-                    1 : set(["server1"]),
-                    2 : set(["server2"]),
-                    3 : set(["server3"]),
-                    4 : set(["server4", "server5"]),
-                    5 : set(["server1", "server2", "server5"]),
-                    6 : set(["server6"]),
-                    7 : set(["server7"]),
-                    8 : set(["server8"]),
+                    1 : set([s1]),
+                    2 : set([s2]),
+                    3 : set([s3]),
+                    4 : set([s4, s5]),
+                    5 : set([s1, s2, s5]),
+                    6 : set([s6]),
+                    7 : set([s7]),
+                    8 : set([s8]),
                    }
         self.failUnlessEqual(expected, merge_servers(shares, set(trackers)))
         shares2 = {}
         expected = {
-                    5 : set(["server5"]),
-                    6 : set(["server6"]),
-                    7 : set(["server7"]),
-                    8 : set(["server8"]),
+                    5 : set([s5]),
+                    6 : set([s6]),
+                    7 : set([s7]),
+                    8 : set([s8]),
                    }
         self.failUnlessEqual(expected, merge_servers(shares2, set(trackers)))
         shares3 = {}
         trackers = []
         expected = {}
-        for (i, server) in [(i, "server%d" % i) for i in xrange(10)]:
+        for i in range(10):
+            server = servers[i]
             shares3[i] = set([server])
             t = FakeServerTracker(server, [i])
             trackers.append(t)
@@ -1405,18 +1408,20 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         # elsehwere These tests exist to ensure that
         # servers_of_happiness doesn't under or overcount the happiness
         # value for given inputs.
+        servers = [StubServer("server%d" % i) for i in range(10)]
+        s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 = servers
 
         # servers_of_happiness expects a dict of
         # shnum => set(serverids) as a preexisting shares argument.
         test1 = {
-                 1 : set(["server1"]),
-                 2 : set(["server2"]),
-                 3 : set(["server3"]),
-                 4 : set(["server4"])
+                 1 : set([s1]),
+                 2 : set([s2]),
+                 3 : set([s3]),
+                 4 : set([s4])
                 }
         happy = servers_of_happiness(test1)
         self.failUnlessEqual(4, happy)
-        test1[4] = set(["server1"])
+        test1[4] = set([s1])
         # We've added a duplicate server, so now servers_of_happiness
         # should be 3 instead of 4.
         happy = servers_of_happiness(test1)
@@ -1427,8 +1432,8 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         # FakeServerTracker whose job is to hold those instance variables to
         # test that part.
         trackers = []
-        for (i, server) in [(i, "server%d" % i) for i in xrange(5, 9)]:
-            t = FakeServerTracker(server, [i])
+        for i in range(5, 9):
+            t = FakeServerTracker(servers[i], [i])
             trackers.append(t)
         # Recall that test1 is a server layout with servers_of_happiness
         # = 3.  Since there isn't any overlap between the shnum ->
@@ -1440,7 +1445,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         # Now add an overlapping server to trackers. This is redundant,
         # so it should not cause the previously reported happiness value
         # to change.
-        t = FakeServerTracker("server1", [1])
+        t = FakeServerTracker(s1, [1])
         trackers.append(t)
         test2 = merge_servers(test1, set(trackers))
         happy = servers_of_happiness(test2)
@@ -1451,15 +1456,15 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         # Test a more substantial overlap between the trackers and the
         # existing assignments.
         test = {
-            1 : set(['server1']),
-            2 : set(['server2']),
-            3 : set(['server3']),
-            4 : set(['server4']),
+            1 : set([s1]),
+            2 : set([s2]),
+            3 : set([s3]),
+            4 : set([s4]),
         }
         trackers = []
-        t = FakeServerTracker('server5', [4])
+        t = FakeServerTracker(s5, [4])
         trackers.append(t)
-        t = FakeServerTracker('server6', [3, 5])
+        t = FakeServerTracker(s6, [3, 5])
         trackers.append(t)
         # The value returned by servers_of_happiness is the size
         # of a maximum matching in the bipartite graph that
@@ -1485,9 +1490,9 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         #
         # This should yield happiness of 3.
         test = {
-            0 : set(['server1']),
-            1 : set(['server1', 'server2']),
-            2 : set(['server2', 'server3']),
+            0 : set([s1]),
+            1 : set([s1, s2]),
+            2 : set([s2, s3]),
         }
         self.failUnlessEqual(3, servers_of_happiness(test))
         # Zooko's second puzzle:
@@ -1498,31 +1503,33 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         #
         # This should yield happiness of 2.
         test = {
-            0 : set(['server1']),
-            1 : set(['server1', 'server2']),
+            0 : set([s1]),
+            1 : set([s1, s2]),
         }
         self.failUnlessEqual(2, servers_of_happiness(test))
 
 
     def test_shares_by_server(self):
-        test = dict([(i, set(["server%d" % i])) for i in xrange(1, 5)])
+        servers = [StubServer("server%d" % i) for i in range(10)]
+        s0,s1,s2,s3,s4,s5,s6,s7,s8,s9 = servers
+        test = dict([(i, set([servers[i]])) for i in xrange(1, 5)])
         sbs = shares_by_server(test)
-        self.failUnlessEqual(set([1]), sbs["server1"])
-        self.failUnlessEqual(set([2]), sbs["server2"])
-        self.failUnlessEqual(set([3]), sbs["server3"])
-        self.failUnlessEqual(set([4]), sbs["server4"])
+        self.failUnlessEqual(set([1]), sbs[s1])
+        self.failUnlessEqual(set([2]), sbs[s2])
+        self.failUnlessEqual(set([3]), sbs[s3])
+        self.failUnlessEqual(set([4]), sbs[s4])
         test1 = {
-                    1 : set(["server1"]),
-                    2 : set(["server1"]),
-                    3 : set(["server1"]),
-                    4 : set(["server2"]),
-                    5 : set(["server2"])
+                    1 : set([s1]),
+                    2 : set([s1]),
+                    3 : set([s1]),
+                    4 : set([s2]),
+                    5 : set([s2])
                 }
         sbs = shares_by_server(test1)
-        self.failUnlessEqual(set([1, 2, 3]), sbs["server1"])
-        self.failUnlessEqual(set([4, 5]), sbs["server2"])
+        self.failUnlessEqual(set([1, 2, 3]), sbs[s1])
+        self.failUnlessEqual(set([4, 5]), sbs[s2])
         # This should fail unless the serverid part of the mapping is a set
-        test2 = {1: "server1"}
+        test2 = {1: s1}
         self.shouldFail(AssertionError,
                        "test_shares_by_server",
                        "",

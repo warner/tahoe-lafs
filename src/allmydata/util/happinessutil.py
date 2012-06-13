@@ -3,8 +3,6 @@ I contain utilities useful for calculating servers_of_happiness, and for
 reporting it in messages
 """
 
-from copy import deepcopy
-
 def failure_message(peer_count, k, happy, effective_happy):
     # If peer_count < needed_shares, this error message makes more
     # sense than any of the others, so use it.
@@ -42,30 +40,30 @@ def failure_message(peer_count, k, happy, effective_happy):
 
 def shares_by_server(servermap):
     """
-    I accept a dict of shareid -> set(peerid) mappings, and return a
-    dict of peerid -> set(shareid) mappings. My argument is a dictionary
-    with sets of peers, indexed by shares, and I transform that into a
-    dictionary of sets of shares, indexed by peerids.
+    I accept a dict of shareid -> set(IServer) mappings, and return a
+    dict of IServer -> set(shareid) mappings. My argument is a dictionary
+    with sets of servers, indexed by share, and I transform that into a
+    dictionary of sets of shares, indexed by server.
     """
     ret = {}
-    for shareid, peers in servermap.iteritems():
-        assert isinstance(peers, set)
-        for peerid in peers:
-            ret.setdefault(peerid, set()).add(shareid)
+    for shareid, servers in servermap.iteritems():
+        assert isinstance(servers, set)
+        for server in servers:
+            ret.setdefault(server, set()).add(shareid)
     return ret
 
 def merge_servers(servermap, upload_trackers=None):
     """
-    I accept a dict of shareid -> set(serverid) mappings, and optionally a
+    I accept a dict of shareid -> set(IServer) mappings, and optionally a
     set of ServerTrackers. If no set of ServerTrackers is provided, I return
     my first argument unmodified. Otherwise, I update a copy of my first
-    argument to include the shareid -> serverid mappings implied in the
+    argument to include the shareid -> server mappings implied in the
     set of ServerTrackers, returning the resulting dict.
     """
-    # Since we mutate servermap, and are called outside of a
-    # context where it is okay to do that, make a copy of servermap and
-    # work with it.
-    servermap = deepcopy(servermap)
+    # Since we mutate servermap, and are called outside of a context where it
+    # is okay to do that, make a copy of servermap and work with it.
+    servermap = dict([(shnum, set(servers))
+                      for shnum,servers in servermap.items()])
     if not upload_trackers:
         return servermap
 
@@ -74,8 +72,8 @@ def merge_servers(servermap, upload_trackers=None):
 
     for tracker in upload_trackers:
         for shnum in tracker.buckets:
-            serverid = tracker.get_server().get_serverid()
-            servermap.setdefault(shnum, set()).add(serverid)
+            server = tracker.get_server()
+            servermap.setdefault(shnum, set()).add(server)
     return servermap
 
 def servers_of_happiness(sharemap):

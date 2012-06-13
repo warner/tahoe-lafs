@@ -156,6 +156,10 @@ class StubServer:
         return base32.b2a(self.serverid)
     def get_nickname(self):
         return "?"
+    def __copy__(self):
+        return self
+    def __deepcopy__(self, memodict):
+        return self
 
 class NativeStorageServer:
     """I hold information about a storage server that we want to connect to.

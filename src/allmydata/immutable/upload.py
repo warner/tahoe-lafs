@@ -12,7 +12,7 @@ from allmydata.util.hashutil import file_renewal_secret_hash, \
 from allmydata import hashtree, uri
 from allmydata.storage.server import si_b2a
 from allmydata.immutable import encode
-from allmydata.util import base32, dictutil, idlib, log, mathutil
+from allmydata.util import base32, dictutil, log, mathutil
 from allmydata.util.happinessutil import servers_of_happiness, \
                                          shares_by_server, merge_servers, \
                                          failure_message
@@ -114,8 +114,8 @@ EXTENSION_SIZE = 1000
 # TODO: actual extensions are closer to 419 bytes, so we can probably lower
 # this.
 
-def pretty_print_shnum_to_servers(s):
-    return ', '.join([ "sh%s: %s" % (k, '+'.join([idlib.shortnodeid_b2a(x) for x in v])) for k, v in s.iteritems() ])
+def pretty_print_shnum_to_servers(data):
+    return ', '.join([ "sh%s: %s" % (k, '+'.join([s.get_name() for s in v])) for k, v in data.iteritems() ])
 
 class ServerTracker:
     def __init__(self, server,
@@ -239,11 +239,11 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         self.homeless_shares = set(range(total_shares))
         self.use_trackers = set() # ServerTrackers that have shares assigned
                                   # to them
-        self.preexisting_shares = {} # shareid => set(serverids) holding shareid
+        self.preexisting_shares = {} # shareid => set(IServer) holding shareid
 
         # These servers have shares -- any shares -- for our SI. We keep
         # track of these to write an error message with them later.
-        self.serverids_with_shares = set()
+        self.servers_with_shares = set()
 
         # this needed_hashes computation should mirror
         # Encoder.send_all_share_hash_trees. We use an IncompleteHashTree
@@ -337,6 +337,12 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                      (tracker.get_name(),), level=log.NOISY)
         dl = defer.DeferredList(ds)
         dl.addCallback(lambda ign: self._loop())
+        def _transform((use_trackers, preexisting_shares)):
+            output = {}
+            for shareid,servers in preexisting_shares.items():
+                output[shareid] = set([s.get_serverid() for s in servers])
+            return (use_trackers, output)
+        dl.addCallback(_transform)
         return dl
 
 
@@ -345,7 +351,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         I handle responses to the queries sent by
         Tahoe2ServerSelector._existing_shares.
         """
-        serverid = tracker.get_server().get_serverid()
+        server = tracker.get_server()
         if isinstance(res, failure.Failure):
             self.log("%s got error during existing shares check: %s"
                     % (tracker.get_name(), res), level=log.UNUSUAL)
@@ -354,12 +360,12 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         else:
             buckets = res
             if buckets:
-                self.serverids_with_shares.add(serverid)
+                self.servers_with_shares.add(server)
             self.log("response to get_buckets() from server %s: alreadygot=%s"
                     % (tracker.get_name(), tuple(sorted(buckets))),
                     level=log.NOISY)
             for bucket in buckets:
-                self.preexisting_shares.setdefault(bucket, set()).add(serverid)
+                self.preexisting_shares.setdefault(bucket, set()).add(server)
                 self.homeless_shares.discard(bucket)
             self.full_count += 1
             self.bad_query_count += 1
@@ -437,7 +443,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                     return self._loop()
                 else:
                     # Redistribution won't help us; fail.
-                    server_count = len(self.serverids_with_shares)
+                    server_count = len(self.servers_with_shares)
                     failmsg = failure_message(server_count,
                                               self.needed_shares,
                                               self.servers_of_happiness,
@@ -502,7 +508,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             merged = merge_servers(self.preexisting_shares, self.use_trackers)
             effective_happiness = servers_of_happiness(merged)
             if effective_happiness < self.servers_of_happiness:
-                msg = failure_message(len(self.serverids_with_shares),
+                msg = failure_message(len(self.servers_with_shares),
                                       self.needed_shares,
                                       self.servers_of_happiness,
                                       effective_happiness)
@@ -550,9 +556,9 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                        tuple(sorted(alreadygot)), tuple(sorted(allocated))),
                     level=log.NOISY)
             progress = False
-            serverid = tracker.get_server().get_serverid()
+            server = tracker.get_server()
             for s in alreadygot:
-                self.preexisting_shares.setdefault(s, set()).add(serverid)
+                self.preexisting_shares.setdefault(s, set()).add(server)
                 if s in self.homeless_shares:
                     self.homeless_shares.remove(s)
                     progress = True
@@ -566,7 +572,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 progress = True
 
             if allocated or alreadygot:
-                self.serverids_with_shares.add(serverid)
+                self.servers_with_shares.add(tracker)
 
             not_yet_present = set(shares_to_ask) - set(alreadygot)
             still_homeless = not_yet_present - set(allocated)
