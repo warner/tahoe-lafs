@@ -29,7 +29,7 @@
   <tr n:pattern="header">
     <th class="nickname-and-peerid">
       <div class="service-nickname">Nickname</div>
-      <div class="nodeid data-chars">ServerID</div></th>
+      <div class="nodeid data-chars">PeerID</div></th>
     <th>Advertised IPs</th>
     <th>Announced</th>
     <th>Version</th>
@@ -38,7 +38,7 @@
   <tr n:pattern="item" n:render="service_row">
     <td class="nickname-and-peerid">
       <div class="nickname"><n:slot name="nickname"/></div>
-      <div class="nodeid data-chars"><n:slot name="serverid"/></div></td>
+      <div class="nodeid data-chars"><n:slot name="peerid"/></div></td>
     <td><n:slot name="advertised"/></td>
     <td class="service-announced"><n:slot name="announced"/></td>
     <td class="service-version"><n:slot name="version"/></td>
@@ -55,7 +55,7 @@
   <tr n:pattern="header">
     <th class="nickname-and-peerid">
       <div class="service-nickname">Nickname</div>
-      <div class="nodeid data-chars">Tub ID</div></th>
+      <div class="nodeid data-chars">PeerID</div></th>
     <th>Advertised IPs</th>
     <th>Connected From</th>
     <th>Since</th>
@@ -65,14 +65,14 @@
   <tr n:pattern="item" n:render="subscriber_row">
     <td class="nickname-and-peerid">
       <div class="nickname"><n:slot name="nickname"/></div>
-      <div class="nodeid data-chars"><n:slot name="tubid"/></div></td>
+      <div class="nodeid data-chars"><n:slot name="peerid"/></div></td>
     <td><n:slot name="advertised"/></td>
     <td><n:slot name="connected"/></td>
     <td class="service-since"><n:slot name="since"/></td>
     <td class="service-version"><n:slot name="version"/></td>
     <td class="service-service-name"><n:slot name="service_name"/></td>
   </tr>
-  <tr n:pattern="empty"><td>no subscribers!</td></tr>
+  <tr n:pattern="empty"><td>no peers!</td></tr>
 </table>
 </div>
 

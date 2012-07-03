@@ -678,5 +678,3 @@ class Encoder(object):
 
     def get_uri_extension_data(self):
         return self.uri_extension_data
-    def get_uri_extension_hash(self):
-        return self.uri_extension_hash

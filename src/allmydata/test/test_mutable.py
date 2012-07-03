@@ -234,9 +234,7 @@ def make_storagebroker(s=None, num_peers=10):
     storage_broker = StorageFarmBroker(None, True)
     for peerid in peerids:
         fss = FakeStorageServer(peerid, s)
-        ann = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(peerid),
-               "permutation-seed-base32": base32.b2a(peerid) }
-        storage_broker.test_add_rref(peerid, fss, ann)
+        storage_broker.test_add_rref(peerid, fss)
     return storage_broker
 
 def make_nodemaker(s=None, num_peers=10, keysize=TEST_RSA_KEY_SIZE):
@@ -1660,14 +1658,14 @@ class CheckerMixin:
         return r
 
     def check_expected_failure(self, r, expected_exception, substring, where):
-        for (peerid, storage_index, shnum, f) in r.get_share_problems():
+        for (peerid, storage_index, shnum, f) in r.problems:
             if f.check(expected_exception):
                 self.failUnless(substring in str(f),
                                 "%s: substring '%s' not in '%s'" %
                                 (where, substring, str(f)))
                 return
         self.fail("%s: didn't see expected exception %s in problems %s" %
-                  (where, expected_exception, r.get_share_problems()))
+                  (where, expected_exception, r.problems))
 
 
 class Checker(unittest.TestCase, CheckerMixin, PublishMixin):

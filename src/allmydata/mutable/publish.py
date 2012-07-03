@@ -253,9 +253,7 @@ class Publish:
         # updating, we ignore damaged and missing shares -- callers must
         # do a repair to repair and recreate these.
         self.goal = set(self._servermap.get_known_shares())
-
-        # shnum -> set of IMutableSlotWriter
-        self.writers = DictOfSets()
+        self.writers = {}
 
         # SDMF files are updated differently.
         self._version = MDMF_VERSION
@@ -280,7 +278,7 @@ class Publish:
                                   self.segment_size,
                                   self.datalength)
 
-            self.writers.add(shnum, writer)
+            self.writers.setdefault(shnum, []).append(writer)
             writer.server = server
             known_shares = self._servermap.get_known_shares()
             assert (server, shnum) in known_shares
@@ -296,7 +294,7 @@ class Publish:
         # after we are done writing share data and have started to write
         # blocks. In the meantime, we need to know what to look for when
         # writing, so that we can detect UncoordinatedWriteErrors.
-        self._checkstring = self._get_some_writer().get_checkstring()
+        self._checkstring = self.writers.values()[0][0].get_checkstring()
 
         # Now, we start pushing shares.
         self._status.timings["setup"] = time.time() - self._started
@@ -454,10 +452,7 @@ class Publish:
 
         # TODO: Make this part do server selection.
         self.update_goal()
-
-        # shnum -> set of IMutableSlotWriter
-        self.writers = DictOfSets()
-
+        self.writers = {}
         if self._version == MDMF_VERSION:
             writer_class = MDMFSlotWriteProxy
         else:
@@ -481,7 +476,7 @@ class Publish:
                                    self.total_shares,
                                    self.segment_size,
                                    self.datalength)
-            self.writers.add(shnum, writer)
+            self.writers.setdefault(shnum, []).append(writer)
             writer.server = server
             known_shares = self._servermap.get_known_shares()
             if (server, shnum) in known_shares:
@@ -500,7 +495,7 @@ class Publish:
         # after we are done writing share data and have started to write
         # blocks. In the meantime, we need to know what to look for when
         # writing, so that we can detect UncoordinatedWriteErrors.
-        self._checkstring = self._get_some_writer().get_checkstring()
+        self._checkstring = self.writers.values()[0][0].get_checkstring()
 
         # Now, we start pushing shares.
         self._status.timings["setup"] = time.time() - self._started
@@ -526,8 +521,6 @@ class Publish:
 
         return self.done_deferred
 
-    def _get_some_writer(self):
-        return list(self.writers.values()[0])[0]
 
     def _update_status(self):
         self._status.set_status("Sending Shares: %d placed out of %d, "
@@ -629,8 +622,9 @@ class Publish:
         # Can we still successfully publish this file?
         # TODO: Keep track of outstanding queries before aborting the
         #       process.
-        num_shnums = len(self.writers)
-        if num_shnums < self.required_shares or self.surprised:
+        all_shnums = filter(lambda sh: len(self.writers[sh]) > 0,
+                            self.writers.iterkeys())
+        if len(all_shnums) < self.required_shares or self.surprised:
             return self._failure()
 
         # Figure out what we need to do next. Each of these needs to
@@ -841,7 +835,7 @@ class Publish:
         uncoordinated writes. SDMF files will have the same checkstring,
         so we need not do anything.
         """
-        self._checkstring = self._get_some_writer().get_checkstring()
+        self._checkstring = self.writers.values()[0][0].get_checkstring()
 
 
     def _make_and_place_signature(self):
@@ -850,7 +844,7 @@ class Publish:
         """
         started = time.time()
         self._status.set_status("Signing prefix")
-        signable = self._get_some_writer().get_signable()
+        signable = self.writers.values()[0][0].get_signable()
         self.signature = self._privkey.sign(signable)
 
         for (shnum, writers) in self.writers.iteritems():
@@ -887,7 +881,7 @@ class Publish:
 
 
     def _record_verinfo(self):
-        self.versioninfo = self._get_some_writer().get_verinfo()
+        self.versioninfo = self.writers.values()[0][0].get_verinfo()
 
 
     def _connection_problem(self, f, writer):
@@ -897,7 +891,7 @@ class Publish:
         """
         self.log("found problem: %s" % str(f))
         self._last_failure = f
-        self.writers.discard(writer.shnum, writer)
+        self.writers[writer.shnum].remove(writer)
 
 
     def log_goal(self, goal, message=""):
@@ -1230,7 +1224,7 @@ class MutableFileHandle:
             old_position = self._filehandle.tell()
             # Seek to the end of the file by seeking 0 bytes from the
             # file's end
-            self._filehandle.seek(0, os.SEEK_END)
+            self._filehandle.seek(0, 2) # 2 == os.SEEK_END in 2.5+
             self._size = self._filehandle.tell()
             # Restore the previous position, in case this was called
             # after a read.

@@ -9,10 +9,12 @@ from allmydata.util.assertutil import precondition
 from allmydata.scripts import backupdb
 
 class BackupDB(unittest.TestCase):
-    def create(self, dbfile):
+    def create_or_skip(self, dbfile):
         stderr = StringIO()
         bdb = backupdb.get_backupdb(dbfile, stderr=stderr)
-        self.failUnless(bdb, "unable to create backupdb from %r" % (dbfile,))
+        if not bdb:
+            if "I was unable to import a python sqlite library" in stderr.getvalue():
+                raise unittest.SkipTest("sqlite unavailable, skipping test")
         return bdb
 
     def skip_if_cannot_represent_filename(self, u):
@@ -29,7 +31,8 @@ class BackupDB(unittest.TestCase):
         self.basedir = basedir = os.path.join("backupdb", "create")
         fileutil.make_dirs(basedir)
         dbfile = os.path.join(basedir, "dbfile")
-        bdb = self.create(dbfile)
+        bdb = self.create_or_skip(dbfile)
+        self.failUnless(bdb)
         self.failUnlessEqual(bdb.VERSION, 2)
 
     def test_upgrade_v1_v2(self):
@@ -40,9 +43,13 @@ class BackupDB(unittest.TestCase):
         created = backupdb.get_backupdb(dbfile, stderr=stderr,
                                         create_version=(backupdb.SCHEMA_v1, 1),
                                         just_create=True)
-        self.failUnless(created, "unable to create v1 backupdb")
+        if not created:
+            if "I was unable to import a python sqlite library" in stderr.getvalue():
+                raise unittest.SkipTest("sqlite unavailable, skipping test")
+            self.fail("unable to create v1 backupdb")
         # now we should have a v1 database on disk
-        bdb = self.create(dbfile)
+        bdb = self.create_or_skip(dbfile)
+        self.failUnless(bdb)
         self.failUnlessEqual(bdb.VERSION, 2)
 
     def test_fail(self):
@@ -58,8 +65,12 @@ class BackupDB(unittest.TestCase):
                                     stderr_f)
         self.failUnlessEqual(bdb, None)
         stderr = stderr_f.getvalue()
-        self.failUnlessIn("backupdb file is unusable", stderr)
-        self.failUnlessIn("file is encrypted or is not a database", stderr)
+        if "I was unable to import a python sqlite library" in stderr:
+            pass
+        else:
+            self.failUnless("backupdb file is unusable" in stderr, stderr)
+            self.failUnless("file is encrypted or is not a database" in stderr,
+                            stderr)
 
         # put a directory in the way, to exercise a different error path
         where = os.path.join(basedir, "roadblock-dir")
@@ -68,8 +79,12 @@ class BackupDB(unittest.TestCase):
         bdb = backupdb.get_backupdb(where, stderr_f)
         self.failUnlessEqual(bdb, None)
         stderr = stderr_f.getvalue()
-        self.failUnlessIn("Unable to create/open backupdb file %s" % (where,), stderr)
-        self.failUnlessIn("unable to open database file", stderr)
+        if "I was unable to import a python sqlite library" in stderr:
+            pass
+        else:
+            self.failUnless(("Unable to create/open backupdb file %s" % where)
+                            in stderr, stderr)
+            self.failUnless("unable to open database file" in stderr, stderr)
 
 
     def writeto(self, filename, data):
@@ -83,7 +98,8 @@ class BackupDB(unittest.TestCase):
         self.basedir = basedir = os.path.join("backupdb", "check")
         fileutil.make_dirs(basedir)
         dbfile = os.path.join(basedir, "dbfile")
-        bdb = self.create(dbfile)
+        bdb = self.create_or_skip(dbfile)
+        self.failUnless(bdb)
 
         foo_fn = self.writeto("foo.txt", "foo.txt")
         blah_fn = self.writeto("bar/blah.txt", "blah.txt")
@@ -148,7 +164,7 @@ class BackupDB(unittest.TestCase):
         fileutil.make_dirs(basedir)
 
         where = os.path.join(basedir, "tooold.db")
-        bdb = self.create(where)
+        bdb = self.create_or_skip(where)
         # reach into the DB and make it old
         bdb.cursor.execute("UPDATE version SET version=0")
         bdb.connection.commit()
@@ -166,7 +182,8 @@ class BackupDB(unittest.TestCase):
         self.basedir = basedir = os.path.join("backupdb", "directory")
         fileutil.make_dirs(basedir)
         dbfile = os.path.join(basedir, "dbfile")
-        bdb = self.create(dbfile)
+        bdb = self.create_or_skip(dbfile)
+        self.failUnless(bdb)
 
         contents = {u"file1": "URI:CHK:blah1",
                     u"file2": "URI:CHK:blah2",
@@ -228,7 +245,8 @@ class BackupDB(unittest.TestCase):
         self.basedir = basedir = os.path.join("backupdb", "unicode")
         fileutil.make_dirs(basedir)
         dbfile = os.path.join(basedir, "dbfile")
-        bdb = self.create(dbfile)
+        bdb = self.create_or_skip(dbfile)
+        self.failUnless(bdb)
 
         self.writeto(u"f\u00f6\u00f6.txt", "foo.txt")
         files = [fn for fn in listdir_unicode(unicode(basedir)) if fn.endswith(".txt")]

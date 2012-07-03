@@ -738,68 +738,68 @@ class Checker(log.PrefixingLogMixin):
 
     def _format_results(self, results):
         SI = self._verifycap.get_storage_index()
+        cr = CheckResults(self._verifycap, SI)
+        d = {}
+        d['count-shares-needed'] = self._verifycap.needed_shares
+        d['count-shares-expected'] = self._verifycap.total_shares
 
-        verifiedshares = dictutil.DictOfSets() # {sharenum: set(server)}
-        servers = {} # {server: set(sharenums)}
-        corruptshare_locators = [] # (server, storageindex, sharenum)
-        incompatibleshare_locators = [] # (server, storageindex, sharenum)
-        servers_responding = set() # server
+        verifiedshares = dictutil.DictOfSets() # {sharenum: set(serverid)}
+        servers = {} # {serverid: set(sharenums)}
+        corruptshare_locators = [] # (serverid, storageindex, sharenum)
+        incompatibleshare_locators = [] # (serverid, storageindex, sharenum)
+        servers_responding = set() # serverid
 
         for verified, server, corrupt, incompatible, responded in results:
-            servers.setdefault(server, set()).update(verified)
+            server_id = server.get_serverid()
+            servers.setdefault(server_id, set()).update(verified)
             for sharenum in verified:
-                verifiedshares.setdefault(sharenum, set()).add(server)
+                verifiedshares.setdefault(sharenum, set()).add(server_id)
             for sharenum in corrupt:
-                corruptshare_locators.append((server, SI, sharenum))
+                corruptshare_locators.append((server_id, SI, sharenum))
             for sharenum in incompatible:
-                incompatibleshare_locators.append((server, SI, sharenum))
+                incompatibleshare_locators.append((server_id, SI, sharenum))
             if responded:
-                servers_responding.add(server)
+                servers_responding.add(server_id)
 
-        good_share_hosts = len([s for s in servers.keys() if servers[s]])
+        d['count-shares-good'] = len(verifiedshares)
+        d['count-good-share-hosts'] = len([s for s in servers.keys() if servers[s]])
 
         assert len(verifiedshares) <= self._verifycap.total_shares, (verifiedshares.keys(), self._verifycap.total_shares)
         if len(verifiedshares) == self._verifycap.total_shares:
-            healthy = True
-            summary = "Healthy"
+            cr.set_healthy(True)
+            cr.set_summary("Healthy")
         else:
-            healthy = False
-            summary = ("Not Healthy: %d shares (enc %d-of-%d)" %
-                       (len(verifiedshares),
-                        self._verifycap.needed_shares,
-                        self._verifycap.total_shares))
+            cr.set_healthy(False)
+            cr.set_summary("Not Healthy: %d shares (enc %d-of-%d)" %
+                           (len(verifiedshares),
+                            self._verifycap.needed_shares,
+                            self._verifycap.total_shares))
         if len(verifiedshares) >= self._verifycap.needed_shares:
-            recoverable = 1
-            unrecoverable = 0
+            cr.set_recoverable(True)
+            d['count-recoverable-versions'] = 1
+            d['count-unrecoverable-versions'] = 0
         else:
-            recoverable = 0
-            unrecoverable = 1
+            cr.set_recoverable(False)
+            d['count-recoverable-versions'] = 0
+            d['count-unrecoverable-versions'] = 1
+
+        d['servers-responding'] = list(servers_responding)
+        d['sharemap'] = verifiedshares
+        # no such thing as wrong shares of an immutable file
+        d['count-wrong-shares'] = 0
+        d['list-corrupt-shares'] = corruptshare_locators
+        d['count-corrupt-shares'] = len(corruptshare_locators)
+        d['list-incompatible-shares'] = incompatibleshare_locators
+        d['count-incompatible-shares'] = len(incompatibleshare_locators)
+
 
         # The file needs rebalancing if the set of servers that have at least
         # one share is less than the number of uniquely-numbered shares
         # available.
-        needs_rebalancing = bool(good_share_hosts < len(verifiedshares))
+        # TODO: this may be wrong, see ticket #1115 comment:27 and ticket #1784.
+        cr.set_needs_rebalancing(d['count-good-share-hosts'] < d['count-shares-good'])
 
-        cr = CheckResults(self._verifycap, SI,
-                          healthy=healthy, recoverable=bool(recoverable),
-                          needs_rebalancing=needs_rebalancing,
-                          count_shares_needed=self._verifycap.needed_shares,
-                          count_shares_expected=self._verifycap.total_shares,
-                          count_shares_good=len(verifiedshares),
-                          count_good_share_hosts=good_share_hosts,
-                          count_recoverable_versions=recoverable,
-                          count_unrecoverable_versions=unrecoverable,
-                          servers_responding=list(servers_responding),
-                          sharemap=verifiedshares,
-                          count_wrong_shares=0, # no such thing, for immutable
-                          list_corrupt_shares=corruptshare_locators,
-                          count_corrupt_shares=len(corruptshare_locators),
-                          list_incompatible_shares=incompatibleshare_locators,
-                          count_incompatible_shares=len(incompatibleshare_locators),
-                          summary=summary,
-                          report=[],
-                          share_problems=[],
-                          servermap=None)
+        cr.set_data(d)
 
         return cr
 

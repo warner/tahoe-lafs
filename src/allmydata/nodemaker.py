@@ -139,7 +139,6 @@ class NodeMaker:
         packed = pack_children(children, None, deep_immutable=True)
         uploadable = Data(packed, convergence)
         d = self.uploader.upload(uploadable)
-        d.addCallback(lambda results:
-                      self.create_from_cap(None, results.get_uri()))
+        d.addCallback(lambda results: self.create_from_cap(None, results.uri))
         d.addCallback(self._create_dirnode)
         return d

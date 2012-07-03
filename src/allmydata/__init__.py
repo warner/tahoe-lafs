@@ -190,11 +190,15 @@ def get_package_versions_and_locations():
                 trace_info = (etype, str(emsg), ([None] + traceback.extract_tb(etrace))[-1])
                 packages.append( (pkgname, (None, None, trace_info)) )
             else:
-                comment = None
-                if pkgname == 'setuptools' and hasattr(module, '_distribute'):
-                    # distribute does not report its version in any module variables
-                    comment = 'distribute'
-                packages.append( (pkgname, (get_version(module, '__version__'), package_dir(module.__file__), comment)) )
+                if 'sqlite' in pkgname:
+                    packages.append( (pkgname, (get_version(module, 'version'), package_dir(module.__file__),
+                                               'sqlite %s' % (get_version(module, 'sqlite_version'),))) )
+                else:
+                    comment = None
+                    if pkgname == 'setuptools' and hasattr(module, '_distribute'):
+                        # distribute does not report its version in any module variables
+                        comment = 'distribute'
+                    packages.append( (pkgname, (get_version(module, '__version__'), package_dir(module.__file__), comment)) )
         elif pkgname == 'python':
             packages.append( (pkgname, (platform.python_version(), sys.executable, None)) )
         elif pkgname == 'platform':
@@ -269,7 +273,7 @@ def cross_check(pkg_resources_vers_and_locs, imported_vers_and_locs_list):
     """This function returns a list of errors due to any failed cross-checks."""
 
     errors = []
-    not_pkg_resourceable = set(['python', 'platform', __appname__.lower()])
+    not_pkg_resourceable = set(['sqlite3', 'python', 'platform', __appname__.lower()])
     not_import_versionable = set(['zope.interface', 'mock', 'pyasn1'])
     ignorable = set(['argparse', 'pyutil', 'zbase32', 'distribute', 'twisted-web', 'twisted-core', 'twisted-conch'])
 
@@ -351,15 +355,24 @@ def check_all_requirements():
 
     errors = []
 
-    # We require at least 2.5 on all platforms.
-    # (On Python 3, we'll have failed long before this point.)
-    if sys.version_info < (2, 5):
-        try:
-            version_string = ".".join(map(str, sys.version_info))
-        except Exception:
-            version_string = repr(sys.version_info)
-        errors.append("Tahoe-LAFS current requires Python v2.5 or greater (but less than v3), not %s"
-                      % (version_string,))
+    # we require 2.4.4 on non-UCS-2, non-Redhat builds to avoid <http://www.python.org/news/security/PSF-2006-001/>
+    # we require 2.4.3 on non-UCS-2 Redhat, because 2.4.3 is common on Redhat-based distros and will have patched the above bug
+    # we require at least 2.4.2 in any case to avoid a bug in the base64 module: <http://bugs.python.org/issue1171487>
+    if sys.maxunicode == 65535:
+        if sys.version_info < (2, 4, 2) or sys.version_info[0] > 2:
+            errors.append("Tahoe-LAFS current requires Python v2.4.2 or greater "
+                          "for a UCS-2 build (but less than v3), not %r" %
+                          (sys.version_info,))
+    elif platform.platform().lower().find('redhat') >= 0:
+        if sys.version_info < (2, 4, 3) or sys.version_info[0] > 2:
+            errors.append("Tahoe-LAFS current requires Python v2.4.3 or greater "
+                          "on Redhat-based distributions (but less than v3), not %r" %
+                          (sys.version_info,))
+    else:
+        if sys.version_info < (2, 4, 4) or sys.version_info[0] > 2:
+            errors.append("Tahoe-LAFS current requires Python v2.4.4 or greater "
+                          "for a non-UCS-2 build (but less than v3), not %r" %
+                          (sys.version_info,))
 
     vers_and_locs = dict(_vers_and_locs_list)
     for requirement in install_requires:
@@ -390,7 +403,7 @@ def get_package_versions_string(show_paths=False, debug=False):
             info = info + " (%s)" % str(loc)
         res.append(info)
 
-    output = "\n".join(res) + "\n"
+    output = ",\n".join(res) + "\n"
 
     if not hasattr(sys, 'frozen'):
         errors = cross_check_pkg_resources_versus_import()

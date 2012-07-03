@@ -125,7 +125,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             return d1
         d.addCallback(_do_upload)
         def _upload_done(results):
-            theuri = results.get_uri()
+            theuri = results.uri
             log.msg("upload finished: uri is %s" % (theuri,))
             self.uri = theuri
             assert isinstance(self.uri, str), self.uri
@@ -227,7 +227,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             u = upload.Data(HELPER_DATA, convergence=convergence)
             d = self.extra_node.upload(u)
             def _uploaded(results):
-                n = self.clients[1].create_node_from_uri(results.get_uri())
+                n = self.clients[1].create_node_from_uri(results.uri)
                 return download_to_data(n)
             d.addCallback(_uploaded)
             def _check(newdata):
@@ -241,7 +241,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             u.debug_stash_RemoteEncryptedUploadable = True
             d = self.extra_node.upload(u)
             def _uploaded(results):
-                n = self.clients[1].create_node_from_uri(results.get_uri())
+                n = self.clients[1].create_node_from_uri(results.uri)
                 return download_to_data(n)
             d.addCallback(_uploaded)
             def _check(newdata):
@@ -326,13 +326,13 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             d.addCallback(lambda res: self.extra_node.upload(u2))
 
             def _uploaded(results):
-                cap = results.get_uri()
+                cap = results.uri
                 log.msg("Second upload complete", level=log.NOISY,
                         facility="tahoe.test.test_system")
 
                 # this is really bytes received rather than sent, but it's
                 # convenient and basically measures the same thing
-                bytes_sent = results.get_ciphertext_fetched()
+                bytes_sent = results.ciphertext_fetched
                 self.failUnless(isinstance(bytes_sent, (int, long)), bytes_sent)
 
                 # We currently don't support resumption of upload if the data is
@@ -789,7 +789,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                 newappverstr = "%s: %s" % (allmydata.__appname__, altverstr)
 
                 self.failUnless((appverstr in res) or (newappverstr in res), (appverstr, newappverstr, res))
-                self.failUnless("Announcement Summary: storage: 5" in res)
+                self.failUnless("Announcement Summary: storage: 5, stub_client: 5" in res)
                 self.failUnless("Subscription Summary: storage: 5" in res)
                 self.failUnless("tahoe.css" in res)
             except unittest.FailTest:
@@ -810,9 +810,9 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                 self.failUnlessEqual(data["subscription_summary"],
                                      {"storage": 5})
                 self.failUnlessEqual(data["announcement_summary"],
-                                     {"storage": 5})
+                                     {"storage": 5, "stub_client": 5})
                 self.failUnlessEqual(data["announcement_distinct_hosts"],
-                                     {"storage": 1})
+                                     {"storage": 1, "stub_client": 1})
             except unittest.FailTest:
                 print
                 print "GET %s?t=json output was:" % self.introweb_url

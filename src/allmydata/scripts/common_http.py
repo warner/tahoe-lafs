@@ -1,5 +1,4 @@
 
-import os
 from cStringIO import StringIO
 import urlparse, httplib
 import allmydata # for __full_version__
@@ -54,7 +53,7 @@ def do_http(method, url, body=""):
     c.putheader("Connection", "close")
 
     old = body.tell()
-    body.seek(0, os.SEEK_END)
+    body.seek(0, 2)
     length = body.tell()
     body.seek(old)
     c.putheader("Content-Length", str(length))

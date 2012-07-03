@@ -30,6 +30,14 @@ WriteEnablerSecret = Hash # used to protect mutable bucket modifications
 LeaseRenewSecret = Hash # used to protect bucket lease renewal requests
 LeaseCancelSecret = Hash # used to protect bucket lease cancellation requests
 
+class RIStubClient(RemoteInterface):
+    """Each client publishes a service announcement for a dummy object called
+    the StubClient. This object doesn't actually offer any services, but the
+    announcement helps the Introducer keep track of which clients are
+    subscribed (so the grid admin can keep track of things like the size of
+    the grid and the client versions in use. This is the (empty)
+    RemoteInterface for the StubClient."""
+
 class RIBucketWriter(RemoteInterface):
     """ Objects of this kind live on the server side. """
     def write(offset=Offset, data=ShareData):
@@ -431,17 +439,11 @@ class IStorageBroker(Interface):
         repeatable way, to distribute load over many peers.
         """
 
-class IDisplayableServer(Interface):
-    def get_nickname():
-        pass
-    def get_name():
-        pass
-    def get_longname():
-        pass
-
-class IServer(IDisplayableServer):
+class IServer(Interface):
     """I live in the client, and represent a single server."""
     def start_connecting(tub, trigger_cb):
+        pass
+    def get_nickname():
         pass
     def get_rref():
         """Once a server is connected, I return a RemoteReference.
@@ -1949,52 +1951,37 @@ class IMutableUploadable(Interface):
         """
 
 class IUploadResults(Interface):
-    """I am returned by immutable upload() methods and contain the results of
-    the upload.
+    """I am returned by upload() methods. I contain a number of public
+    attributes which can be read to determine the results of the upload. Some
+    of these are functional, some are timing information. All of these may be
+    None.
 
-    Note that some of my methods return empty values (0 or an empty dict)
-    when called for non-distributed LIT files."""
+     .file_size : the size of the file, in bytes
+     .uri : the CHK read-cap for the file
+     .ciphertext_fetched : how many bytes were fetched by the helper
+     .sharemap: dict mapping share identifier to set of serverids
+                   (binary strings). This indicates which servers were given
+                   which shares. For immutable files, the shareid is an
+                   integer (the share number, from 0 to N-1). For mutable
+                   files, it is a string of the form 'seq%d-%s-sh%d',
+                   containing the sequence number, the roothash, and the
+                   share number.
+     .servermap : dict mapping server peerid to a set of share numbers
+     .timings : dict of timing information, mapping name to seconds (float)
+       total : total upload time, start to finish
+       storage_index : time to compute the storage index
+       peer_selection : time to decide which peers will be used
+       contacting_helper : initial helper query to upload/no-upload decision
+       existence_check : helper pre-upload existence check
+       helper_total : initial helper query to helper finished pushing
+       cumulative_fetch : helper waiting for ciphertext requests
+       total_fetch : helper start to last ciphertext response
+       cumulative_encoding : just time spent in zfec
+       cumulative_sending : just time spent waiting for storage servers
+       hashes_and_close : last segment push to shareholder close
+       total_encode_and_push : first encode to shareholder close
 
-    def get_file_size():
-        """Return the file size, in bytes."""
-    def get_uri():
-        """Return the (string) URI of the object uploaded, a CHK readcap."""
-    def get_ciphertext_fetched():
-        """Return the number of bytes fetched by the helpe for this upload,
-        or 0 if the helper did not need to fetch any bytes (or if there was
-        no helper)."""
-    def get_preexisting_shares():
-        """Return the number of shares that were already present in the grid."""
-    def get_pushed_shares():
-        """Return the number of shares that were uploaded."""
-    def get_sharemap():
-        """Return a dict mapping share identifier to set of IServer
-        instances. This indicates which servers were given which shares. For
-        immutable files, the shareid is an integer (the share number, from 0
-        to N-1). For mutable files, it is a string of the form
-        'seq%d-%s-sh%d', containing the sequence number, the roothash, and
-        the share number."""
-    def get_servermap():
-        """Return dict mapping IServer instance to a set of share numbers."""
-    def get_timings():
-        """Return dict of timing information, mapping name to seconds. All
-        times are floats:
-          total : total upload time, start to finish
-          storage_index : time to compute the storage index
-          peer_selection : time to decide which peers will be used
-          contacting_helper : initial helper query to upload/no-upload decision
-          helper_total : initial helper query to helper finished pushing
-          cumulative_fetch : helper waiting for ciphertext requests
-          total_fetch : helper start to last ciphertext response
-          cumulative_encoding : just time spent in zfec
-          cumulative_sending : just time spent waiting for storage servers
-          hashes_and_close : last segment push to shareholder close
-          total_encode_and_push : first encode to shareholder close
-        """
-    def get_uri_extension_data():
-        """Return the dict of UEB data created for this file."""
-    def get_verifycapstr():
-        """Return the (string) verify-cap URI for the uploaded object."""
+    """
 
 class IDownloadResults(Interface):
     """I am created internally by download() methods. I contain a number of
@@ -2147,71 +2134,79 @@ class ICheckResults(Interface):
         files always return True."""
 
     def needs_rebalancing():
-        """Return a boolean, True if the file/dirs reliability could be
+        """Return a boolean, True if the file/dir's reliability could be
         improved by moving shares to new servers. Non-distributed LIT files
         always return False."""
 
-    # the following methods all return None for non-distributed LIT files
 
-    def get_encoding_needed():
-        """Return 'k', the number of shares required for recovery"""
-    def get_encoding_expected():
-        """Return 'N', the number of total shares generated"""
+    def get_data():
+        """Return a dictionary that describes the state of the file/dir. LIT
+        files always return an empty dictionary. Normal files and directories
+        return a dictionary with the following keys (note that these use
+        binary strings rather than base32-encoded ones) (also note that for
+        mutable files, these counts are for the 'best' version):
 
-    def get_share_counter_good():
-        """Return the number of distinct good shares that were found. For
-        mutable files, this counts shares for the 'best' version."""
-    def get_share_counter_wrong():
-        """For mutable files, return the number of shares for versions other
-        than the 'best' one (which is defined as being the recoverable
-        version with the highest sequence number, then the highest roothash).
-        These are either leftover shares from an older version (perhaps on a
-        server that was offline when an update occurred), shares from an
-        unrecoverable newer version, or shares from an alternate current
-        version that results from an uncoordinated write collision. For a
-        healthy file, this will equal 0. For immutable files, this will
-        always equal 0."""
+         count-shares-good: the number of distinct good shares that were found
+         count-shares-needed: 'k', the number of shares required for recovery
+         count-shares-expected: 'N', the number of total shares generated
+         count-good-share-hosts: the number of distinct storage servers with
+                                 good shares. If this number is less than
+                                 count-shares-good, then some shares are
+                                 doubled up, increasing the correlation of
+                                 failures. This indicates that one or more
+                                 shares should be moved to an otherwise unused
+                                 server, if one is available.
+         count-corrupt-shares: the number of shares with integrity failures
+         list-corrupt-shares: a list of 'share locators', one for each share
+                              that was found to be corrupt. Each share
+                              locator is a list of (serverid, storage_index,
+                              sharenum).
+         count-incompatible-shares: the number of shares which are of a share
+                                    format unknown to this checker
+         list-incompatible-shares: a list of 'share locators', one for each
+                                   share that was found to be of an unknown
+                                   format. Each share locator is a list of
+                                   (serverid, storage_index, sharenum).
+         servers-responding: list of (binary) storage server identifiers,
+                             one for each server which responded to the share
+                             query (even if they said they didn't have
+                             shares, and even if they said they did have
+                             shares but then didn't send them when asked, or
+                             dropped the connection, or returned a Failure,
+                             and even if they said they did have shares and
+                             sent incorrect ones when asked)
+         sharemap: dict mapping share identifier to list of serverids
+                   (binary strings). This indicates which servers are holding
+                   which shares. For immutable files, the shareid is an
+                   integer (the share number, from 0 to N-1). For mutable
+                   files, it is a string of the form 'seq%d-%s-sh%d',
+                   containing the sequence number, the roothash, and the
+                   share number.
 
-    def get_corrupt_shares():
-        """Return a list of 'share locators', one for each share that was
-        found to be corrupt (integrity failure). Each share locator is a list
-        of (IServer, storage_index, sharenum)."""
+        The following keys are most relevant for mutable files, but immutable
+        files will provide sensible values too::
 
-    def get_incompatible_shares():
-        """Return a list of 'share locators', one for each share that was
-        found to be of an unknown format. Each share locator is a list of
-        (IServer, storage_index, sharenum)."""
+         count-wrong-shares: the number of shares for versions other than the
+                             'best' one (which is defined as being the
+                             recoverable version with the highest sequence
+                             number, then the highest roothash). These are
+                             either leftover shares from an older version
+                             (perhaps on a server that was offline when an
+                             update occurred), shares from an unrecoverable
+                             newer version, or shares from an alternate
+                             current version that results from an
+                             uncoordinated write collision. For a healthy
+                             file, this will equal 0.
 
-    def get_servers_responding():
-        """Return a list of IServer objects, one for each server which
-        responded to the share query (even if they said they didn't have
-        shares, and even if they said they did have shares but then didn't
-        send them when asked, or dropped the connection, or returned a
-        Failure, and even if they said they did have shares and sent
-        incorrect ones when asked)"""
+         count-recoverable-versions: the number of recoverable versions of
+                                     the file. For a healthy file, this will
+                                     equal 1.
 
-    def get_host_counter_good_shares():
-        """Return the number of distinct storage servers with good shares. If
-        this number is less than get_share_counters()[good], then some shares
-        are doubled up, increasing the correlation of failures. This
-        indicates that one or more shares should be moved to an otherwise
-        unused server, if one is available.
+         count-unrecoverable-versions: the number of unrecoverable versions
+                                       of the file. For a healthy file, this
+                                       will be 0.
+
         """
-
-    def get_version_counter_recoverable():
-        """Return the number of recoverable versions of the file. For a
-        healthy file, this will equal 1."""
-
-    def get_version_counter_unrecoverable():
-         """Return the number of unrecoverable versions of the file. For a
-         healthy file, this will be 0."""
-
-    def get_sharemap():
-        """Return a dict mapping share identifier to list of IServer objects.
-        This indicates which servers are holding which shares. For immutable
-        files, the shareid is an integer (the share number, from 0 to N-1).
-        For mutable files, it is a string of the form 'seq%d-%s-sh%d',
-        containing the sequence number, the roothash, and the share number."""
 
     def get_summary():
         """Return a string with a brief (one-line) summary of the results."""
@@ -2271,8 +2266,10 @@ class IDeepCheckResults(Interface):
         """
 
     def get_corrupt_shares():
-        """Return a set of (IServer, storage_index, sharenum) for all shares
-        that were found to be corrupt. storage_index is binary."""
+        """Return a set of (serverid, storage_index, sharenum) for all shares
+        that were found to be corrupt. Both serverid and storage_index are
+        binary.
+        """
     def get_all_results():
         """Return a dictionary mapping pathname (a tuple of strings, ready to
         be slash-joined) to an ICheckResults instance, one for each object
@@ -2337,15 +2334,15 @@ class IDeepCheckAndRepairResults(Interface):
         IDirectoryNode.deep_stats()."""
 
     def get_corrupt_shares():
-        """Return a set of (IServer, storage_index, sharenum) for all shares
-        that were found to be corrupt before any repair was attempted.
-        storage_index is binary.
+        """Return a set of (serverid, storage_index, sharenum) for all shares
+        that were found to be corrupt before any repair was attempted. Both
+        serverid and storage_index are binary.
         """
     def get_remaining_corrupt_shares():
-        """Return a set of (IServer, storage_index, sharenum) for all shares
-        that were found to be corrupt after any repair was completed.
-        storage_index is binary. These are shares that need manual inspection
-        and probably deletion.
+        """Return a set of (serverid, storage_index, sharenum) for all shares
+        that were found to be corrupt after any repair was completed. Both
+        serverid and storage_index are binary. These are shares that need
+        manual inspection and probably deletion.
         """
     def get_all_results():
         """Return a dictionary mapping pathname (a tuple of strings, ready to

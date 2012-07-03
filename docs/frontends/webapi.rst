@@ -29,9 +29,8 @@ The Tahoe REST-ful Web API
     6.  `Attaching An Existing File Or Directory (by URI)`_
     7.  `Unlinking A Child`_
     8.  `Renaming A Child`_
-    9.  `Moving A Child`_
-    10. `Other Utilities`_
-    11. `Debugging and Testing Features`_
+    9.  `Other Utilities`_
+    10. `Debugging and Testing Features`_
 
 7.  `Other Useful Pages`_
 8.  `Static Files in /public_html`_
@@ -1275,34 +1274,8 @@ Renaming A Child
  same child-cap under the new name, except that it preserves metadata. This
  operation cannot move the child to a different directory.
 
- By default, this operation will replace any existing child of the new name,
- making it behave like the UNIX "``mv -f``" command. Adding a "replace=false"
- argument causes the command to throw an HTTP 409 Conflict error if there is
- already a child with the new name.
-
-Moving A Child
-----------------
-
-``POST /uri/$DIRCAP/[SUBDIRS../]?t=move&from_name=OLD&to_dir=TARGETNAME[&target_type=name][&to_name=NEWNAME]``
-``POST /uri/$DIRCAP/[SUBDIRS../]?t=move&from_name=OLD&to_dir=TARGETURI&target_type=uri[&to_name=NEWNAME]``
-
- This instructs the node to move a child of the given directory to a
- different directory, both of which must be mutable. If target_type=name
- or is omitted, the to_dir= parameter should contain the name of a
- subdirectory of the child's current parent directory (multiple levels of
- descent are supported). If target_uri=, then to_dir= will be treated as
- a dircap, allowing the child to be moved to an unrelated directory.
-
- The child can also be renamed in the process, by providing a new name in
- the to_name= parameter. If omitted, the child will retain its existing
- name.
-
- By default, this operation will replace any existing child of the new name,
- making it behave like the UNIX "``mv -f``" command. Adding a "replace=false"
- argument causes the command to throw an HTTP 409 Conflict error if there is
- already a child with the new name. For safety, the child is not unlinked
- from the old directory until its has been successfully added to the new
- directory.
+ This operation will replace any existing child of the new name, making it
+ behave like the UNIX "``mv -f``" command.
 
 Other Utilities
 ---------------
@@ -1325,8 +1298,6 @@ Other Utilities
   functionality described above, with the provided $CHILDNAME present in the
   'from_name' field of that form. I.e. this presents a form offering to
   rename $CHILDNAME, requesting the new name, and submitting POST rename.
-  This same URL format can also be used with "move-form" with the expected
-  results.
 
 ``GET /uri/$DIRCAP/[SUBDIRS../]CHILDNAME?t=uri``
 
@@ -1376,7 +1347,9 @@ mainly intended for developers.
     count-shares-needed: 'k', the number of shares required for recovery
     count-shares-expected: 'N', the number of total shares generated
     count-good-share-hosts: the number of distinct storage servers with good
-                            shares
+                            shares. Note that a high value does not necessarily
+                            imply good share distribution, because some of
+                            these servers may only hold duplicate shares.
     count-wrong-shares: for mutable files, the number of shares for
                         versions other than the 'best' one (highest
                         sequence number, highest roothash). These are
@@ -1391,10 +1364,12 @@ mainly intended for developers.
     list-corrupt-shares: a list of "share locators", one for each share
                          that was found to be corrupt. Each share locator
                          is a list of (serverid, storage_index, sharenum).
-    needs-rebalancing: (bool) True if there are multiple shares on a single
-                       storage server, indicating a reduction in reliability
-                       that could be resolved by moving shares to new
-                       servers.
+    needs-rebalancing: (bool) This field is intended to be True iff
+                       reliability could be improved for this file by
+                       rebalancing, i.e. by moving some shares to other
+                       servers. It is not guaranteed to be computed correctly
+                       in Tahoe-LAFS up to and including v1.9.2, and its
+                       precise definition may change in future versions.
     servers-responding: list of base32-encoded storage server identifiers,
                         one for each server which responded to the share
                         query.
@@ -1835,6 +1810,17 @@ This is the "Welcome Page", and contains a few distinct sections::
  value can be found by ignoring the progress-hash value (since the current
  implementation hashes synchronously, so clients will probably never see
  progress-hash!=1.0).
+
+``GET /provisioning/``
+
+ This page provides a basic tool to predict the likely storage and bandwidth
+ requirements of a large Tahoe grid. It provides forms to input things like
+ total number of users, number of files per user, average file size, number
+ of servers, expansion ratio, hard drive failure rate, etc. It then provides
+ numbers like how many disks per server will be needed, how many read
+ operations per second should be expected, and the likely MTBF for files in
+ the grid. This information is very preliminary, and the model upon which it
+ is based still needs a lot of work.
 
 ``GET /helper_status/``
 

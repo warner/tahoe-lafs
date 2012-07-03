@@ -1,5 +1,4 @@
 import os
-from twisted.internet import defer
 from twisted.trial import unittest
 from twisted.application import service
 
@@ -22,49 +21,25 @@ class CHKUploadHelper_fake(offloaded.CHKUploadHelper):
         def _got_size(size):
             d2 = eu.get_all_encoding_parameters()
             def _got_parms(parms):
-                # just pretend we did the upload
                 needed_shares, happy, total_shares, segsize = parms
                 ueb_data = {"needed_shares": needed_shares,
                             "total_shares": total_shares,
                             "segment_size": segsize,
                             "size": size,
                             }
-                ueb_hash = "fake"
-                v = uri.CHKFileVerifierURI(self._storage_index, "x"*32,
-                                           needed_shares, total_shares, size)
-                _UR = upload.UploadResults
-                ur = _UR(file_size=size,
-                         ciphertext_fetched=0,
-                         preexisting_shares=0,
-                         pushed_shares=total_shares,
-                         sharemap={},
-                         servermap={},
-                         timings={},
-                         uri_extension_data=ueb_data,
-                         uri_extension_hash=ueb_hash,
-                         verifycapstr=v.to_string())
-                self._upload_status.set_results(ur)
-                return ur
+                self._results.uri_extension_data = ueb_data
+                self._results.verifycapstr = uri.CHKFileVerifierURI(self._storage_index, "x"*32,
+                                                                 needed_shares, total_shares,
+                                                                 size).to_string()
+                return self._results
             d2.addCallback(_got_parms)
             return d2
         d.addCallback(_got_size)
         return d
 
-class Helper_fake_upload(offloaded.Helper):
-    def _make_chk_upload_helper(self, storage_index, lp):
-        si_s = si_b2a(storage_index)
-        incoming_file = os.path.join(self._chk_incoming, si_s)
-        encoding_file = os.path.join(self._chk_encoding, si_s)
-        uh = CHKUploadHelper_fake(storage_index, self,
-                                  self._storage_broker,
-                                  self._secret_holder,
-                                  incoming_file, encoding_file,
-                                  lp)
-        return uh
-
-class Helper_already_uploaded(Helper_fake_upload):
-    def _check_chk(self, storage_index, lp):
-        res = upload.HelperUploadResults()
+class CHKUploadHelper_already_uploaded(offloaded.CHKUploadHelper):
+    def start(self):
+        res = upload.UploadResults()
         res.uri_extension_hash = hashutil.uri_extension_hash("")
 
         # we're pretending that the file they're trying to upload was already
@@ -78,7 +53,7 @@ class Helper_already_uploaded(Helper_fake_upload):
                     "size": len(DATA),
                     }
         res.uri_extension_data = ueb_data
-        return defer.succeed(res)
+        return (res, None)
 
 class FakeClient(service.MultiService):
     DEFAULT_ENCODING_PARAMETERS = {"k":25,
@@ -89,8 +64,6 @@ class FakeClient(service.MultiService):
 
     def get_encoding_parameters(self):
         return self.DEFAULT_ENCODING_PARAMETERS
-    def get_storage_broker(self):
-        return self.storage_broker
 
 def flush_but_dont_ignore(res):
     d = flushEventualQueue()
@@ -116,8 +89,8 @@ class AssistedUpload(unittest.TestCase):
     timeout = 240 # It takes longer than 120 seconds on Francois's arm box.
     def setUp(self):
         self.s = FakeClient()
-        self.s.storage_broker = StorageFarmBroker(None, True)
-        self.s.secret_holder = client.SecretHolder("lease secret", "converge")
+        self.storage_broker = StorageFarmBroker(None, True)
+        self.secret_holder = client.SecretHolder("lease secret", "convergence")
         self.s.startService()
 
         self.tub = t = Tub()
@@ -128,12 +101,13 @@ class AssistedUpload(unittest.TestCase):
         # bogus host/port
         t.setLocation("bogus:1234")
 
-    def setUpHelper(self, basedir, helper_class=Helper_fake_upload):
+    def setUpHelper(self, basedir):
         fileutil.make_dirs(basedir)
-        self.helper = h = helper_class(basedir,
-                                       self.s.storage_broker,
-                                       self.s.secret_holder,
-                                       None, None)
+        self.helper = h = offloaded.Helper(basedir,
+                                           self.storage_broker,
+                                           self.secret_holder,
+                                           None, None)
+        h.chk_upload_helper_class = CHKUploadHelper_fake
         self.helper_furl = self.tub.registerReference(h)
 
     def tearDown(self):
@@ -157,7 +131,7 @@ class AssistedUpload(unittest.TestCase):
             return upload_data(u, DATA, convergence="some convergence string")
         d.addCallback(_ready)
         def _uploaded(results):
-            the_uri = results.get_uri()
+            the_uri = results.uri
             assert "CHK" in the_uri
         d.addCallback(_uploaded)
 
@@ -207,7 +181,7 @@ class AssistedUpload(unittest.TestCase):
             return upload_data(u, DATA, convergence="test convergence string")
         d.addCallback(_ready)
         def _uploaded(results):
-            the_uri = results.get_uri()
+            the_uri = results.uri
             assert "CHK" in the_uri
         d.addCallback(_uploaded)
 
@@ -222,7 +196,8 @@ class AssistedUpload(unittest.TestCase):
 
     def test_already_uploaded(self):
         self.basedir = "helper/AssistedUpload/test_already_uploaded"
-        self.setUpHelper(self.basedir, helper_class=Helper_already_uploaded)
+        self.setUpHelper(self.basedir)
+        self.helper.chk_upload_helper_class = CHKUploadHelper_already_uploaded
         u = upload.Uploader(self.helper_furl)
         u.setServiceParent(self.s)
 
@@ -234,7 +209,7 @@ class AssistedUpload(unittest.TestCase):
             return upload_data(u, DATA, convergence="some convergence string")
         d.addCallback(_ready)
         def _uploaded(results):
-            the_uri = results.get_uri()
+            the_uri = results.uri
             assert "CHK" in the_uri
         d.addCallback(_uploaded)
 

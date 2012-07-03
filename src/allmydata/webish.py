@@ -163,8 +163,7 @@ class WebishServer(service.MultiService):
         if nodeurl_path:
             def _write_nodeurl_file(ign):
                 # this file will be created with default permissions
-                line = self.getURL() + "\n"
-                fileutil.write_atomically(nodeurl_path, line, mode="")
+                fileutil.write(nodeurl_path, self.getURL() + "\n")
             self._started.addCallback(_write_nodeurl_file)
 
     def getURL(self):

@@ -11,7 +11,7 @@ import allmydata # for __full_version__
 from allmydata import uri, monitor, client
 from allmydata.immutable import upload, encode
 from allmydata.interfaces import FileTooLargeError, UploadUnhappinessError
-from allmydata.util import log, base32
+from allmydata.util import log
 from allmydata.util.assertutil import precondition
 from allmydata.util.deferredutil import DeferredListShouldSucceed
 from allmydata.test.no_network import GridTestMixin
@@ -20,12 +20,11 @@ from allmydata.util.happinessutil import servers_of_happiness, \
                                          shares_by_server, merge_servers
 from allmydata.storage_client import StorageFarmBroker
 from allmydata.storage.server import storage_index_to_dir
-from allmydata.client import Client
 
 MiB = 1024*1024
 
 def extract_uri(results):
-    return results.get_uri()
+    return results.uri
 
 # Some of these took longer than 480 seconds on Zandr's arm box, but this may
 # have been due to an earlier test ERROR'ing out due to timeout, which seems
@@ -198,9 +197,7 @@ class FakeClient:
                     for fakeid in range(self.num_servers) ]
         self.storage_broker = StorageFarmBroker(None, permute_peers=True)
         for (serverid, rref) in servers:
-            ann = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(serverid),
-                   "permutation-seed-base32": base32.b2a(serverid) }
-            self.storage_broker.test_add_rref(serverid, rref, ann)
+            self.storage_broker.test_add_rref(serverid, rref)
         self.last_servers = [s[1] for s in servers]
 
     def log(self, *args, **kwargs):
@@ -636,52 +633,42 @@ class ServerSelection(unittest.TestCase):
 class StorageIndex(unittest.TestCase):
     def test_params_must_matter(self):
         DATA = "I am some data"
-        PARAMS = Client.DEFAULT_ENCODING_PARAMETERS
-
         u = upload.Data(DATA, convergence="")
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d1 = eu.get_storage_index()
 
         # CHK means the same data should encrypt the same way
         u = upload.Data(DATA, convergence="")
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d1a = eu.get_storage_index()
 
         # but if we use a different convergence string it should be different
         u = upload.Data(DATA, convergence="wheee!")
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d1salt1 = eu.get_storage_index()
 
         # and if we add yet a different convergence it should be different again
         u = upload.Data(DATA, convergence="NOT wheee!")
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d1salt2 = eu.get_storage_index()
 
         # and if we use the first string again it should be the same as last time
         u = upload.Data(DATA, convergence="wheee!")
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d1salt1a = eu.get_storage_index()
 
         # and if we change the encoding parameters, it should be different (from the same convergence string with different encoding parameters)
         u = upload.Data(DATA, convergence="")
-        u.set_default_encoding_parameters(PARAMS)
         u.encoding_param_k = u.default_encoding_param_k + 1
         eu = upload.EncryptAnUploadable(u)
         d2 = eu.get_storage_index()
 
         # and if we use a random key, it should be different than the CHK
         u = upload.Data(DATA, convergence=None)
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d3 = eu.get_storage_index()
         # and different from another instance
         u = upload.Data(DATA, convergence=None)
-        u.set_default_encoding_parameters(PARAMS)
         eu = upload.EncryptAnUploadable(u)
         d4 = eu.get_storage_index()
 
@@ -778,7 +765,9 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         broker = self.g.clients[0].storage_broker
         sh     = self.g.clients[0]._secret_holder
         data = upload.Data("data" * 10000, convergence="")
-        data.set_default_encoding_parameters({'k': 3, 'happy': 4, 'n': 10})
+        data.encoding_param_k = 3
+        data.encoding_param_happy = 4
+        data.encoding_param_n = 10
         uploadable = upload.EncryptAnUploadable(data)
         encoder = encode.Encoder()
         encoder.set_encrypted_uploadable(uploadable)
@@ -872,7 +861,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         self.data = data
         d = client.upload(data)
         def _store_uri(ur):
-            self.uri = ur.get_uri()
+            self.uri = ur.uri
         d.addCallback(_store_uri)
         d.addCallback(lambda ign:
             self.find_uri_shares(self.uri))
@@ -890,12 +879,13 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         DATA = "data" * 100
         u = upload.Data(DATA, convergence="")
         d = c0.upload(u)
-        d.addCallback(lambda ur: c0.create_node_from_uri(ur.get_uri()))
+        d.addCallback(lambda ur: c0.create_node_from_uri(ur.uri))
         m = monitor.Monitor()
         d.addCallback(lambda fn: fn.check(m))
         def _check(cr):
-            self.failUnlessEqual(cr.get_encoding_needed(), 7)
-            self.failUnlessEqual(cr.get_encoding_expected(), 12)
+            data = cr.get_data()
+            self.failUnlessEqual(data["count-shares-needed"], 7)
+            self.failUnlessEqual(data["count-shares-expected"], 12)
         d.addCallback(_check)
         return d
 
@@ -1169,7 +1159,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         # Make sure that only as many shares as necessary to satisfy
         # servers of happiness were pushed.
         d.addCallback(lambda results:
-            self.failUnlessEqual(results.get_pushed_shares(), 3))
+            self.failUnlessEqual(results.pushed_shares, 3))
         d.addCallback(lambda ign:
             self.failUnless(self._has_happy_share_distribution()))
         return d

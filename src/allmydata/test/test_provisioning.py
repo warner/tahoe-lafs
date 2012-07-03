@@ -1,5 +1,5 @@
 
-import unittest
+from twisted.trial import unittest
 from allmydata import provisioning
 ReliabilityModel = None
 try:
@@ -111,5 +111,3 @@ class Reliability(unittest.TestCase):
         self.failUnlessAlmostEqual(P_dead_unmaintained, 0.033591004555395272)
         self.failUnlessAlmostEqual(P_dead_maintained, 3.2983995819177542e-08)
 
-if __name__=='__main__':
-    unittest.main()

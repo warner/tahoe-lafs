@@ -389,7 +389,7 @@ function onDataReceived(data) {
              .attr("stroke", function(d){return shnum_colors(d.shnum);})
              .attr("stroke-width", 1)
              .attr("title", function(d){
-                       return "sh"+d.shnum+"-on-"+servername(d)
+                       return "sh"+d.shnum+"-on-"+d.serverid.slice(0,4)
                            +" ["+d.start+":+"+d.length+"] -> "
                            +d.response_length;})
         ;

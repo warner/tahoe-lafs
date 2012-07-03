@@ -420,15 +420,6 @@ class FileUtil(unittest.TestCase):
         fileutil.rm_dir(basedir)
         fileutil.remove_if_possible(fn) # should survive errors
 
-    def test_write_atomically(self):
-        basedir = "util/FileUtil/test_write_atomically"
-        fileutil.make_dirs(basedir)
-        fn = os.path.join(basedir, "here")
-        fileutil.write_atomically(fn, "one")
-        self.failUnlessEqual(fileutil.read(fn), "one")
-        fileutil.write_atomically(fn, "two", mode="") # non-binary
-        self.failUnlessEqual(fileutil.read(fn), "two")
-
     def test_open_or_create(self):
         basedir = "util/FileUtil/test_open_or_create"
         fileutil.make_dirs(basedir)
@@ -437,7 +428,7 @@ class FileUtil(unittest.TestCase):
         f.write("stuff.")
         f.close()
         f = fileutil.open_or_create(fn)
-        f.seek(0, os.SEEK_END)
+        f.seek(0, 2)
         f.write("more.")
         f.close()
         f = open(fn, "r")
