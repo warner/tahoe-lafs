@@ -290,10 +290,10 @@ class Retrieve:
             #print 'retrieving version:', hash(self.verinfo)
             try:
                 reader = self.servermap.proxies[(self.verinfo,
-                                                 server.get_serverid(), 
+                                                 server.get_serverid(),
                                                  self._storage_index, shnum)]
             except KeyError:
-                reader = MDMFSlotReadProxy(server.get_rref(), 
+                reader = MDMFSlotReadProxy(server.get_rref(),
                                            self._storage_index, shnum, None)
             reader.server = server
             self.readers[shnum] = reader

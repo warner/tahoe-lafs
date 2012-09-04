@@ -639,25 +639,6 @@ class Filenode(unittest.TestCase, testutil.ShouldFailMixin):
         d.addCallback(_created)
         return d
 
-    def test_response_cache_memory_leak(self):
-        raise unittest.SkipTest("The ResponseCache has been excised")
-        d = self.nodemaker.create_mutable_file("contents")
-        def _created(n):
-            d = n.download_best_version()
-            d.addCallback(lambda res: self.failUnlessEqual(res, "contents"))
-            d.addCallback(lambda ign: self.failUnless(isinstance(n._cache, ResponseCache)))
-
-            def _check_cache(expected):
-                # The total size of cache entries should not increase on the second download;
-                # in fact the cache contents should be identical.
-                d2 = n.download_best_version()
-                d2.addCallback(lambda rep: self.failUnlessEqual(repr(n._cache.cache), expected))
-                return d2
-            d.addCallback(lambda ign: _check_cache(repr(n._cache.cache)))
-            return d
-        d.addCallback(_created)
-        return d
-
     def test_create_with_initial_contents_function(self):
         data = "initial contents"
         def _make_contents(n):
@@ -2319,8 +2300,6 @@ class MultipleEncodings(unittest.TestCase):
             # the current specified behavior is "first version recoverable"
             self.failUnlessEqual(new_contents, contents1)
         d.addCallback(_retrieved)
-        import twisted
-        twisted.internet.base.DelayedCall.debug = True 
         return d
 
 
@@ -2482,8 +2461,7 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
         self.basedir = "mutable/Problems/test_retrieve_surprise"
         self.set_up_grid()
         nm = self.g.clients[0].nodemaker
-        content = "content1"
-        d = nm.create_mutable_file(MutableData(content))
+        d = nm.create_mutable_file(MutableData("contents 1"))
         def _created(n):
             d = defer.succeed(None)
             d.addCallback(lambda res: n.get_servermap(MODE_READ))

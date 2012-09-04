@@ -1228,7 +1228,7 @@ class MDMFSlotReadProxy:
         self._data = data
 
         # If the provided data is known to be complete, then we know there's
-        # nothing to be gained by querying the server, so we should just 
+        # nothing to be gained by querying the server, so we should just
         # partially satisfy requests with what we have.
         self._data_is_everything = data_is_everything
 
@@ -1745,7 +1745,7 @@ class MDMFSlotReadProxy:
         # TODO: It's entirely possible to tweak this so that it just
         # fulfills the requests that it can, and not demand that all
         # requests are satisfiable before running it.
-        
+
         if not unsatisfiable or self._data_is_everything:
             results = [self._data[offset:offset+length]
                        for (offset, length) in readvs]

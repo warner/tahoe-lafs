@@ -738,7 +738,7 @@ class ServermapUpdater:
 
             dl = defer.DeferredList([d, d2, d3, d4, d5])
             def _append_proxy(passthrough):
-                # Store the proxy (with its cache) keyed by serverid and 
+                # Store the proxy (with its cache) keyed by serverid and
                 # version
                 _, (_,verinfo), _, _, _ = passthrough
                 verinfo = self._make_verinfo_hashable(verinfo)
