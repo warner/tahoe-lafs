@@ -8,31 +8,33 @@ shnum, and size). It can also instruct the storage backend to delete a share
 which has expired.
 """
 
-import simplejson
-import os, time, weakref, re
-from zope.interface import implements
-from twisted.application import service
-from foolscap.api import Referenceable
-from allmydata.interfaces import RIStorageServer
-from allmydata.util import log, keyutil, dbutil
+import os, time, re
+
+from twisted.python.filepath import FilePath
+
+from allmydata.util import dbutil
+from allmydata.util.fileutil import get_used_space
 from allmydata.storage.crawler import ShareCrawler
+
 
 class BadAccountName(Exception):
     pass
+
 class BadShareID(Exception):
     pass
+
 
 def int_or_none(s):
     if s is None:
         return s
     return int(s)
 
+
 STATE_COMING = 0
 STATE_STABLE = 1
 STATE_GOING = 2
 
-# try to get rid of all the AUTOINCREMENT keys, use things like "SI/shnum"
-# and pubkey as the index
+
 LEASE_SCHEMA_V1 = """
 CREATE TABLE version
 (
@@ -276,23 +278,6 @@ class LeaseDB:
             self._dirty = False
 
 
-def size_of_disk_file(filename):
-    # use new fileutil.? method
-    s = os.stat(filename)
-    sharebytes = s.st_size
-    try:
-        # note that stat(2) says that st_blocks is 512 bytes, and that
-        # st_blksize is "optimal file sys I/O ops blocksize", which is
-        # independent of the block-size that st_blocks uses.
-        diskbytes = s.st_blocks * 512
-    except AttributeError:
-        # the docs say that st_blocks is only on linux. I also see it on
-        # MacOS. But it isn't available on windows.
-        diskbytes = sharebytes
-    return diskbytes
-
-
-
 class AccountingCrawler(ShareCrawler):
     """I manage a SQLite table of which leases are owned by which ownerid, to
     support efficient calculation of total space used per ownerid. The
@@ -334,8 +319,8 @@ class AccountingCrawler(ShareCrawler):
         new_shares = (disk_shares - db_shares)
         for shareid in new_shares:
             storage_index, shnum = shareid
-            filename = os.path.join(prefixdir, storage_index, str(shnum))
-            size = size_of_disk_file(filename)
+            fp = FilePath(prefixdir).child(storage_index).child(str(shnum))
+            size = get_used_space(fp)
             sid = self._leasedb.add_new_share(prefix, storage_index,shnum, size)
             self._leasedb.add_starter_lease(sid)
 
