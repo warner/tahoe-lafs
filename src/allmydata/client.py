@@ -310,7 +310,7 @@ class Client(node.Node, pollmixin.PollMixin):
             ann["accountant-FURL"] = accountant_furl
 
             if True:
-                legacy_account = self.accountant.get_anonymous_account()
+                #legacy_account = self.accountant.get_anonymous_account()
                 anonymous_account_furlfile = os.path.join(self.basedir, "private", "storage.furl").encode(get_filesystem_encoding())
                 anonymous_account_furl = self.tub.registerReference(ss, furlFile=anonymous_account_furlfile)
                 ann["anonymous-storage-FURL"] = anonymous_account_furl

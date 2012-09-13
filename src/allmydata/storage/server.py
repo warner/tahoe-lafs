@@ -1,16 +1,15 @@
+
 import os, re, weakref, struct, time
 
-from foolscap.api import Referenceable
 from twisted.application import service
 
 from zope.interface import implements
-from allmydata.interfaces import RIStorageServer, IStatsProducer
+from allmydata.interfaces import IStatsProducer
 from allmydata.util import fileutil, idlib, log, time_format
 import allmydata # for __full_version__
 
 from allmydata.storage.common import si_b2a, si_a2b, storage_index_to_dir
 _pyflakes_hush = [si_b2a, si_a2b, storage_index_to_dir] # re-exported
-from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
      create_mutable_sharefile
 from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
@@ -254,8 +253,6 @@ class StorageServer(service.MultiService):
         # file, they'll want us to hold leases for this file.
         for (shnum, fn) in self._get_bucket_shares(storage_index):
             alreadygot.add(shnum)
-            sf = ShareFile(fn)
-            sf.add_or_renew_lease(lease_info)
 
         for shnum in sharenums:
             incominghome = os.path.join(self.incomingdir, si_dir, "%d" % shnum)
@@ -324,7 +321,7 @@ class StorageServer(service.MultiService):
             # Commonly caused by there being no buckets at all.
             pass
 
-    def client_get_buckets(self, storage_index, self):
+    def client_get_buckets(self, storage_index):
         start = time.time()
         self.count("get")
         si_s = si_b2a(storage_index)
@@ -413,9 +410,8 @@ class StorageServer(service.MultiService):
         self.add_latency("writev", time.time() - start)
         return (testv_is_good, read_data)
 
-    def _allocate_slot_share(self, bucketdir, secrets, sharenum,
+    def _allocate_slot_share(self, bucketdir, write_enabler, sharenum,
                              allocated_size, owner_num=0):
-        (write_enabler, renew_secret, cancel_secret) = secrets
         my_nodeid = self.my_nodeid
         fileutil.make_dirs(bucketdir)
         filename = os.path.join(bucketdir, "%d" % sharenum)
