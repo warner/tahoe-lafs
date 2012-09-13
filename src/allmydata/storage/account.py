@@ -8,6 +8,18 @@ FURLification dance is established, each client will get a different instance
 (with a dedicated ownerid).
 """
 
+import time
+
+from twisted.python.filepath import FilePath
+from foolscap.api import Referenceable
+
+from zope.interface import implements
+from allmydata.interfaces import RIStorageServer
+
+from allmydata.util.fileutil import get_used_space
+from allmydata.storage.leasedb import int_or_none
+
+
 class Account(Referenceable):
     implements(RIStorageServer)
 
@@ -40,8 +52,9 @@ class Account(Referenceable):
     def get_owner_num(self):
         return self.owner_num
 
-    def get_expiration_time(self):
-        return time.time() + 31*24*60*60
+    def get_renewal_and_expiration_times(self):
+        renewal_time = time.time()
+        return (renewal_time, renewal_time + 31*24*60*60)
 
     # immutable.BucketWriter.close() does add_share() and add_lease()
 
@@ -51,20 +64,20 @@ class Account(Referenceable):
     #  changed shares: update_share(), add_lease()
 
     def add_share(self, prefix, storage_index, shnum, filename, commit=True):
-        size = size_of_disk_file(filename)
+        size = get_used_space(FilePath(filename))
         self._leasedb.add_new_share(prefix, storage_index, shnum, size)
         if commit:
             self._leasedb.commit()
 
     def add_lease(self, storage_index, shnum, commit=True):
-        expire_time = self.get_expiration_time()
+        renewal_time, expiration_time = self.get_renewal_and_expiration_times()
         self._leasedb.add_or_renew_leases(storage_index, shnum,
-                                          self.owner_num, expire_time)
+                                          self.owner_num, renewal_time, expiration_time)
         if commit:
             self._leasedb.commit()
 
     def update_share(self, storage_index, shnum, filename, commit=True):
-        size = size_of_disk_file(filename)
+        size = get_used_space(FilePath(filename))
         self._leasedb.change_share_size(storage_index, shnum, size)
         if commit:
             self._leasedb.commit()
@@ -74,9 +87,9 @@ class Account(Referenceable):
 
     # remote_add_lease() and remote_renew_lease() do this
     def add_lease_for_bucket(self, storage_index, commit=True):
-        expire_time = self.get_expiration_time()
+        renewal_time, expiration_time = self.get_renewal_and_expiration_times()
         self._leasedb.add_or_renew_leases(storage_index, None,
-                                          self.owner_num, expire_time)
+                                          self.owner_num, renewal_time, expiration_time)
         if commit:
             self._leasedb.commit()
 

@@ -12,6 +12,15 @@ The name 'accountant.py' could be better, preferably something that doesn't
 share a prefix with 'account.py' so my tab-autocomplete will work nicely.
 """
 
+import simplejson, weakref
+
+from twisted.application import service
+from foolscap.api import Referenceable
+
+from allmydata.util import keyutil, log
+from allmydata.storage.leasedb import LeaseDB, AccountingCrawler
+from allmydata.storage.account import Account
+
 
 class Accountant(service.MultiService):
     def __init__(self, storage_server, dbfile, statefile):
