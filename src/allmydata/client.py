@@ -340,9 +340,17 @@ class Client(node.Node, pollmixin.PollMixin):
         self.init_nodemaker()
 
     def init_client_storage_broker(self):
+        def _make_key():
+            sk_vs,vk_vs = keyutil.make_keypair()
+            return sk_vs+"\n" # priv-v0-BASE32
+        sk_vs = self.get_or_create_private_config("client.key", _make_key)
+        self.client_key = keyutil.parse_privkey(sk_vs) # (sk, vk_vs)
+        client_info = {"nickname": unicode(self.nickname)}
         # create a StorageFarmBroker object, for use by Uploader/Downloader
         # (and everybody else who wants to use storage servers)
-        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True)
+        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True,
+                                              client_key=self.client_key,
+                                              client_info=client_info)
         self.storage_broker = sb
 
         # load static server specifications from tahoe.cfg, if any.
