@@ -236,7 +236,7 @@ def make_storagebroker(s=None, num_peers=10):
         fss = FakeStorageServer(peerid, s)
         ann = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(peerid),
                "permutation-seed-base32": base32.b2a(peerid) }
-        storage_broker.test_add_rref(peerid, fss, ann)
+        storage_broker.test_add_rref(None, fss, ann)
     return storage_broker
 
 def make_nodemaker(s=None, num_peers=10, keysize=TEST_RSA_KEY_SIZE):
