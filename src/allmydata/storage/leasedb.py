@@ -135,9 +135,11 @@ class LeaseDB:
 
         #print "ADD_NEW_SHARE", storage_index, shnum
         self._dirty = True
+        # FIXME: add in STATE_COMING, change to STATE_STABLE when share is
+        # confirmed stored by backend.
         self._cursor.execute("INSERT INTO `shares`"
-                             " VALUES (?,?,?,?,?)",
-                             (None, prefix, storage_index, shnum, size))
+                             " VALUES (?,?,?,?,?,?)",
+                             (None, prefix, storage_index, shnum, size, STATE_STABLE))
         shareid = self._cursor.lastrowid
         return shareid
 
