@@ -62,10 +62,12 @@ class StorageFarmBroker:
     I'm also responsible for subscribing to the IntroducerClient to find out
     about new servers as they are announced by the Introducer.
     """
-    def __init__(self, tub, permute_peers):
+    def __init__(self, tub, permute_peers, client_key=None, client_info={}):
         self.tub = tub
         assert permute_peers # False not implemented yet
         self.permute_peers = permute_peers
+        self.client_key = client_key
+        self.client_info = client_info
         # self.servers maps serverid -> IServer, and keeps track of all the
         # storage servers that we've heard about. Each descriptor manages its
         # own Reconnector, and will give us a RemoteReference when we ask
@@ -92,7 +94,8 @@ class StorageFarmBroker:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann)
+        s = NativeStorageServer(key_s, ann, self.tub, self.client_key,
+                                client_info=self.client_info)
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
         if old:
@@ -186,10 +189,14 @@ class NativeStorageServer:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann, min_shares=1):
+    def __init__(self, key_s, ann, tub, client_key=None, min_shares=1,
+                 client_info={}):
         self.key_s = key_s
         self.announcement = ann
+        self.tub = tub
+        self.client_key = client_key
         self.min_shares = min_shares
+        self.client_info = client_info
 
         assert "anonymous-storage-FURL" in ann, ann
         furl = str(ann["anonymous-storage-FURL"])
