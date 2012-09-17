@@ -132,7 +132,8 @@ class LeaseDB:
         # have noticed it yet, so test for an existing entry and use it if
         # present. (and check the code paths carefully to make sure that
         # doesn't get too weird).
-        print "ADD_NEW_SHARE", storage_index, shnum
+
+        #print "ADD_NEW_SHARE", storage_index, shnum
         self._dirty = True
         self._cursor.execute("INSERT INTO `shares`"
                              " VALUES (?,?,?,?,?)",
@@ -150,7 +151,7 @@ class LeaseDB:
         return leaseid
 
     def remove_deleted_shares(self, shareids):
-        print "REMOVE_DELETED_SHARES", shareids
+        #print "REMOVE_DELETED_SHARES", shareids
         # TODO: replace this with a sensible DELETE, join, and sub-SELECT
         shareids2 = []
         for deleted_shareid in shareids:
