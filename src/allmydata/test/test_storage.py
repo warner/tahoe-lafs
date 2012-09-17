@@ -15,7 +15,6 @@ from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.immutable import BucketWriter, BucketReader
 from allmydata.storage.common import DataTooLargeError, storage_index_to_dir, \
      UnknownMutableContainerVersionError, UnknownImmutableContainerVersionError
-from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
 from allmydata.immutable.layout import WriteBucketProxy, WriteBucketProxy_v2, \
@@ -78,8 +77,8 @@ class Bucket(unittest.TestCase):
         renew_secret = os.urandom(32)
         cancel_secret = os.urandom(32)
         expiration_time = time.time() + 5000
-        return LeaseInfo(owner_num, renew_secret, cancel_secret,
-                         expiration_time, "\x00" * 20)
+        return (owner_num, renew_secret, cancel_secret,
+                expiration_time, "\x00" * 20)
 
     def test_create(self):
         incoming, final = self.make_workdir("test_create")
@@ -191,8 +190,8 @@ class BucketProxy(unittest.TestCase):
         renew_secret = os.urandom(32)
         cancel_secret = os.urandom(32)
         expiration_time = time.time() + 5000
-        return LeaseInfo(owner_num, renew_secret, cancel_secret,
-                         expiration_time, "\x00" * 20)
+        return (owner_num, renew_secret, cancel_secret,
+                expiration_time, "\x00" * 20)
 
     def bucket_writer_closed(self, bw, consumed):
         pass
