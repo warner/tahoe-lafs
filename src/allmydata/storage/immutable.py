@@ -107,19 +107,21 @@ class ShareFile:
 class BucketWriter(Referenceable):
     implements(RIBucketWriter)
 
-    def __init__(self, ss, incominghome, finalhome, max_size, lease_info, canary):
+    def __init__(self, ss, account, prefix, storage_index, shnum,
+                 incominghome, finalhome, max_size, canary):
         self.ss = ss
         self.incominghome = incominghome
         self.finalhome = finalhome
         self._max_size = max_size # don't allow the client to write more than this
+        self._account = account
+        self._prefix = prefix
+        self._storage_index = storage_index
+        self._shnum = shnum
         self._canary = canary
         self._disconnect_marker = canary.notifyOnDisconnect(self._disconnected)
         self.closed = False
         self.throw_out_all_data = False
         self._sharefile = ShareFile(incominghome, create=True, max_size=max_size)
-        # also, add our lease to the file now, so that other ones can be
-        # added by simultaneous uploaders
-        self._sharefile.add_lease(lease_info)
 
     def allocated_size(self):
         return self._max_size

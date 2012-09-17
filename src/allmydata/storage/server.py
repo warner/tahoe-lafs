@@ -16,6 +16,8 @@ from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
+from allmydata.storage.accountant import Accountant
+
 
 # storage/
 # storage/shares/incoming
@@ -80,6 +82,16 @@ class StorageServer(service.MultiService):
                           "cancel": [],
                           }
         self.add_bucket_counter()
+        self.init_accountant()
+
+    def init_accountant(self):
+        dbfile = os.path.join(self.storedir, "leasedb.sqlite")
+        statefile = os.path.join(self.storedir, "leasedb_crawler.state")
+        self.accountant = Accountant(self, dbfile, statefile)
+        self.accountant.setServiceParent(self)
+
+    def get_accountant(self):
+        return self.accountant
 
     def __repr__(self):
         return "<StorageServer %s>" % (idlib.shortnodeid_b2a(self.my_nodeid),)
@@ -202,7 +214,9 @@ class StorageServer(service.MultiService):
             space += bw.allocated_size()
         return space
 
-    def client_get_version(self):
+    # these methods can be invoked by our callers
+
+    def client_get_version(self, account):
         remaining_space = self.get_available_space()
         if remaining_space is None:
             # We're on a platform that has no API to get disk stats.

@@ -29,9 +29,9 @@ the foolscap-based server implemented in src/allmydata/storage/*.py .
 # 6: implement other sorts of IStorageClient classes: S3, etc
 
 
-import re, time
+import re, time, simplejson
 from zope.interface import implements
-from foolscap.api import eventually
+from foolscap.api import eventually, Referenceable
 from allmydata.interfaces import IStorageBroker, IDisplayableServer, IServer
 from allmydata.util import log, base32
 from allmydata.util.assertutil import precondition
@@ -161,7 +161,7 @@ class StubServer:
     def get_nickname(self):
         return "?"
 
-class NativeStorageServer:
+class NativeStorageServer(Referenceable):
     """I hold information about a storage server that we want to connect to.
     If we are connected, I hold the RemoteReference, their host address, and
     the their version information. I remember information about when we were
@@ -228,6 +228,12 @@ class NativeStorageServer:
         self._reconnector = None
         self._trigger_cb = None
 
+        self.account_status = {"write": True, "read": True, "save": True}
+        # use "retain", not "save"
+        self.account_message = {}
+        self._latest_claimed_usage = None
+        self._latest_claimed_usage_time = None
+
     # Special methods used by copy.copy() and copy.deepcopy(). When those are
     # used in allmydata.immutable.filenode to copy CheckResults during
     # repair, we want it to treat the IServer instances as singletons, and
@@ -274,9 +280,41 @@ class NativeStorageServer:
         return self.announcement_time
 
     def start_connecting(self, tub, trigger_cb):
-        furl = str(self.announcement["anonymous-storage-FURL"])
         self._trigger_cb = trigger_cb
-        self._reconnector = tub.connectTo(furl, self._got_connection)
+        furl = self.announcement.get("accountant-FURL")
+        if furl and self.client_key:
+            self.accounting_enabled = True
+            self._reconnector = tub.connectTo(str(furl), self._got_accountant)
+            # _got_accountant() pings the other end, which fires our
+            # remote_account() method, which does
+            # add_version_to_remote_reference() and then vectors to
+            # _got_versioned_service()
+        else:
+            self.accounting_enabled = False
+            furl = self.announcement["anonymous-storage-FURL"]
+            self._reconnector = tub.connectTo(str(furl), self._got_connection)
+            # _got_connection() does add_version_to_remote_reference() and
+            # then vector to _got_versioned_service()
+
+    def _got_accountant(self, rref):
+        log.msg(format="got AccountingWindow on %(name)s, doing upgrade",
+                name=self.get_name(),
+                facility="tahoe.storage_broker", umid="bWHpsA")
+        print "doing upgrade"
+        # the AccountantWindow we're talking to can upgrade us to a real
+        # Account. We are the receiver.
+        me = self.tub.registerReference(self)
+        nickname = self.client_info.get("nickname", u"<none>")
+        msg_d = { "please-give-Account-to-rxFURL": me,
+                  "nickname": nickname }
+        msg = simplejson.dumps(msg_d).encode("utf-8")
+        print msg
+        sk,vk_vs = self.client_key
+        sig = sk.sign(msg)
+        d = rref.callRemote("get_account", msg, sig, vk_vs)
+        d.addErrback(log.err, format="storageclient._got_accountant",
+                     name=self.get_name(), umid="DNi3tw")
+        return d
 
     def _got_connection(self, rref):
         lp = log.msg(format="got connection to %(name)s, getting versions",
@@ -324,6 +362,45 @@ class NativeStorageServer:
     def try_to_connect(self):
         # used when the broker wants us to hurry up
         self._reconnector.reset()
+
+    def get_claimed_usage(self):
+        # return (bytes, when). If we've never been told our usage, both will
+        # be None. Asking returns the previous value, and sends off a request
+        # for an update. To get an up-to-date value, call this twice, not too
+        # fast.
+        if self.rref and self.accounting_enabled:
+            d = self.rref.callRemote("get_current_usage")
+            def _got(usage):
+                self._latest_claimed_usage = usage
+                self._latest_claimed_usage_time = time.time()
+            d.addCallback(_got)
+            d.addErrback(log.err, umid="ivcMgA")
+            return self._latest_claimed_usage, self._latest_claimed_usage_time
+        return None, None
+
+    def get_account_status(self):
+        if self.rref and self.accounting_enabled:
+            return self.account_status
+        # pre-accounting servers always allow everything, mostly
+        return {"write": True, "read": True, "save": True}
+
+    def get_account_message(self):
+        if self.rref and self.accounting_enabled:
+            # Servers use this to advertise new features to the client's
+            # user. If we recognize a feature, we should suppress the
+            # message, because we'll have other feature-specific code which
+            # knows how to call additional methods to get the correct
+            # information. If we don't recognize a feature, we should display
+            # the message, to let our user know that they could e.g. use this
+            # server if only they installed a plugin for some new payment
+            # type.
+
+            # for example, if we had code to handle a Bitcoin-based payment
+            # schme, we'd do this:
+            #if "bitcoin_v1" in message:
+            #    del message["bitcoin_v1"]
+            return self.account_message
+        return {}
 
 class UnknownServerTypeError(Exception):
     pass
