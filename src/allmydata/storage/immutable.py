@@ -7,7 +7,7 @@ from allmydata.interfaces import RIBucketWriter, RIBucketReader
 from allmydata.util import base32, fileutil, log
 from allmydata.util.assertutil import precondition
 from allmydata.storage.common import UnknownImmutableContainerVersionError, \
-     DataTooLargeError
+     DataTooLargeError, si_b2a
 
 # each share file (in storage/shares/$SI/$SHNUM) contains lease information
 # and share data. The share data is accessed by RIBucketWriter.write and
@@ -173,6 +173,11 @@ class BucketWriter(Referenceable):
         self.ss.bucket_writer_closed(self, filelen)
         self.ss.add_latency("close", time.time() - start)
         self.ss.count("close")
+        self._account.add_share(self._prefix,
+                                si_b2a(self._storage_index), self._shnum,
+                                self.finalhome, commit=False)
+        self._account.add_lease(si_b2a(self._storage_index), self._shnum,
+                                commit=True)
 
     def _disconnected(self):
         if not self.closed:
