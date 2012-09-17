@@ -221,7 +221,6 @@ class StorageServer(service.MultiService):
         return version
 
     def client_allocate_buckets(self, storage_index,
-                                renew_secret, cancel_secret,
                                 sharenums, allocated_size,
                                 canary, account):
         start = time.time()
@@ -230,6 +229,7 @@ class StorageServer(service.MultiService):
         bucketwriters = {} # k: shnum, v: BucketWriter
         si_dir = storage_index_to_dir(storage_index)
         si_s = si_b2a(storage_index)
+        prefix = si_s[:2]
 
         log.msg("storage: allocate_buckets %s" % si_s)
 
@@ -340,8 +340,11 @@ class StorageServer(service.MultiService):
         start = time.time()
         self.count("writev")
         si_s = si_b2a(storage_index)
+        prefix = si_s[:2]
+
         log.msg("storage: slot_writev %s" % si_s)
         si_dir = storage_index_to_dir(storage_index)
+
         # shares exist if there is a file for them
         bucketdir = os.path.join(self.sharedir, si_dir)
         shares = {}
@@ -387,24 +390,33 @@ class StorageServer(service.MultiService):
                 if new_length == 0:
                     if sharenum in shares:
                         shares[sharenum].unlink()
+                        account.remove_share_and_leases(si_b2a(storage_index),
+                                                        sharenum)
                 else:
                     if sharenum not in shares:
                         # allocate a new share
-                        allocated_size = 2000 # arbitrary, really
-                        share = self._allocate_slot_share(bucketdir, secrets,
+                        allocated_size = 2000 # arbitrary, really # REMOVE
+                        share = self._allocate_slot_share(bucketdir,
+                                                          write_enabler,
                                                           sharenum,
-                                                          allocated_size,
-                                                          owner_num=0)
+                                                          allocated_size)
                         shares[sharenum] = share
-                    shares[sharenum].writev(datav, new_length)
-                    # and update the lease
-                    shares[sharenum].add_or_renew_lease(lease_info)
+                        shares[sharenum].writev(datav, new_length)
+                        account.add_share(prefix,
+                                          si_b2a(storage_index), sharenum,
+                                          shares[sharenum].home)
+                    else:
+                        # apply the write vector and update the lease
+                        shares[sharenum].writev(datav, new_length)
+                        account.update_share(si_b2a(storage_index), sharenum,
+                                             shares[sharenum].home)
+                    account.add_lease(si_b2a(storage_index), sharenum)
+            account.commit()
 
             if new_length == 0:
                 # delete empty bucket directories
                 if not os.listdir(bucketdir):
                     os.rmdir(bucketdir)
-
 
         # all done
         self.add_latency("writev", time.time() - start)
