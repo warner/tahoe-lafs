@@ -128,6 +128,7 @@ class LeaseDB:
          self._db) = dbutil.get_db(dbfile, create_version=(LEASE_SCHEMA_V1, 1))
         self._cursor = self._db.cursor()
         self._dirty = False
+        self.debug = False
 
     # share management
 
@@ -140,9 +141,9 @@ class LeaseDB:
         return db_shares
 
     def add_new_share(self, storage_index, shnum, used_space):
-        #print "ADD_NEW_SHARE", storage_index, shnum
         si_s = si_b2a(storage_index)
         prefix = si_s[:2]
+        if self.debug: print "ADD_NEW_SHARE", prefix, si_s, shnum, used_space
         self._dirty = True
         try:
             self._cursor.execute("INSERT INTO `shares`"
@@ -160,6 +161,7 @@ class LeaseDB:
 
     def add_starter_lease(self, storage_index, shnum):
         si_s = si_b2a(storage_index)
+        if self.debug: print "ADD_STARTER_LEASE", si_s, shnum
         self._dirty = True
         renewal_time = time.time()
         self._cursor.execute("INSERT INTO `leases`"
@@ -188,6 +190,7 @@ class LeaseDB:
 
     def change_share_space(self, storage_index, shnum, used_space):
         si_s = si_b2a(storage_index)
+        if self.debug: print "CHANGE_SHARE_SPACE", si_s, shnum, used_space
         self._dirty = True
         self._cursor.execute("UPDATE `shares` SET `used_space`=?"
                              " WHERE `storage_index`=? AND `shnum`=?",
@@ -201,6 +204,7 @@ class LeaseDB:
                             renewal_time, expiration_time):
         # shnum=None means renew leases on all shares
         si_s = si_b2a(storage_index)
+        if self.debug: print "ADD_OR_RENEW_LEASES", si_s, shnum, ownerid, renewal_time, expiration_time
         self._dirty = True
         if shnum is None:
             self._cursor.execute("SELECT `storage_index`, `shnum` FROM `shares`"
@@ -244,6 +248,7 @@ class LeaseDB:
     # history
 
     def add_history_entry(self, cycle, entry):
+        if self.debug: print "ADD_HISTORY_ENTRY", cycle, entry
         json = simplejson.dumps(entry)
         self._cursor.execute("SELECT `cycle` FROM `crawler_history`")
         rows = self._cursor.fetchall()
@@ -284,6 +289,7 @@ class LeaseDB:
         return None
 
     def set_account_attribute(self, accountid, name, value):
+        if self.debug: print "SET_ACCOUNT_ATTRIBUTE", accountid, name, value
         self._cursor.execute("SELECT `id` FROM `account_attributes`"
                              " WHERE `account_id`=? AND `name`=?",
                              (accountid, name))

@@ -43,6 +43,7 @@ class Account(Referenceable):
             "message": "free storage! %d" % random.randint(0,10),
             "fancy": "free pony if you knew how to ask",
             }
+        self.debug = True
 
     def is_static(self):
         return self.owner_num in (0,1)
@@ -64,11 +65,13 @@ class Account(Referenceable):
     #  changed shares: update_share(), add_lease()
 
     def add_share(self, storage_index, shnum, used_space, commit=True):
+        if self.debug: print "ADD_SHARE", si_b2a(storage_index), shnum, used_space, commit
         self._leasedb.add_new_share(prefix, storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
 
     def add_lease(self, storage_index, shnum, commit=True):
+        if self.debug: print "ADD_LEASE", si_b2a(storage_index), shnum, commit
         renewal_time, expiration_time = self.get_renewal_and_expiration_times()
         self._leasedb.add_or_renew_leases(storage_index, shnum,
                                           self.owner_num, renewal_time, expiration_time)
@@ -76,6 +79,7 @@ class Account(Referenceable):
             self._leasedb.commit()
 
     def change_share_space(self, storage_index, shnum, used_space, commit=True):
+        if self.debug: print "CHANGE_SHARE_SPACE", si_b2a(storage_index), shnum, used_space, commit
         self._leasedb.change_share_space(storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
@@ -85,6 +89,7 @@ class Account(Referenceable):
 
     # remote_add_lease() and remote_renew_lease() do this
     def add_lease_for_bucket(self, storage_index, commit=True):
+        if self.debug: print "ADD_LEASE_FOR_BUCKET", si_b2a(storage_index), commit
         renewal_time, expiration_time = self.get_renewal_and_expiration_times()
         self._leasedb.add_or_renew_leases(storage_index, None,
                                           self.owner_num, renewal_time, expiration_time)
@@ -98,19 +103,22 @@ class Account(Referenceable):
 
     def remote_get_version(self):
         return self.server.client_get_version(self)
+
     # all other RIStorageServer methods should pass through to self.server
     # but add owner_num=
 
-    def remote_allocate_buckets(self, storage_index,
-                                renew_secret, cancel_secret,
-                                sharenums, allocated_size,
-                                canary):
+    def remote_allocate_buckets(self, storage_index, renew_secret, cancel_secret,
+                                sharenums, allocated_size, canary):
+        if self.debug: print "REMOTE_ALLOCATE_BUCKETS", si_b2a(storage_index)
         return self.server.client_allocate_buckets(storage_index,
                                                    sharenums, allocated_size,
                                                    canary, self)
+
     def remote_add_lease(self, storage_index, renew_secret, cancel_secret):
+        if self.debug: print "REMOTE_ADD_LEASE", si_b2a(storage_index)
         self.add_lease_for_bucket(storage_index)
         return None
+
     def remote_renew_lease(self, storage_index, renew_secret):
         self.add_lease_for_bucket(storage_index)
         return None
