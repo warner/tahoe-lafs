@@ -24,6 +24,15 @@ class BadAccountName(Exception):
 class NonExistentShareError(Exception):
     pass
 
+class NonExistentLeaseError(Exception):
+    pass
+
+class LeaseInfo(object):
+    def __init__(self, owner_num, renewal_time, expiration_time):
+        self.owner_num = owner_num
+        self.renewal_time = renewal_time
+        self.expiration_time = expiration_time
+
 
 def int_or_none(s):
     if s is None:
@@ -96,6 +105,12 @@ CREATE UNIQUE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`
 INSERT INTO `accounts` VALUES (0, "anonymous", 0);
 INSERT INTO `accounts` VALUES (1, "starter", 0);
 
+CREATE TABLE crawler_history
+(
+ `cycle` INTEGER,
+ `json` TEXT
+);
+CREATE UNIQUE INDEX `cycle` ON `crawler_history` (`cycle`);
 """
 
 DAY = 24*60*60
@@ -335,6 +350,7 @@ class AccountingCrawler(ShareCrawler):
     def __init__(self, server, statefile, leasedb):
         ShareCrawler.__init__(self, server, statefile)
         self._leasedb = leasedb
+        self._do_expire = False
         self._expire_time = None
 
     def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
@@ -385,3 +401,190 @@ class AccountingCrawler(ShareCrawler):
         # don't bother looking at the sqlite database: it's certainly not
         # complete.
         return self.state["last-cycle-finished"] is None
+
+    def is_expiration_enabled(self):
+        return self._do_expire
+
+    def convert_lease_age_histogram(self, lah):
+        # convert { (minage,maxage) : count } into [ (minage,maxage,count) ]
+        # since the former is not JSON-safe (JSON dictionaries must have
+        # string keys).
+        json_safe_lah = []
+        for k in sorted(lah):
+            (minage,maxage) = k
+            json_safe_lah.append( (minage, maxage, lah[k]) )
+        return json_safe_lah
+
+    def add_initial_state(self):
+        # we fill ["cycle-to-date"] here (even though they will be reset in
+        # self.started_cycle) just in case someone grabs our state before we
+        # get started: unit tests do this
+        so_far = self.create_empty_cycle_dict()
+        self.state.setdefault("cycle-to-date", so_far)
+        # in case we upgrade the code while a cycle is in progress, update
+        # the keys individually
+        for k in so_far:
+            self.state["cycle-to-date"].setdefault(k, so_far[k])
+
+    def create_empty_cycle_dict(self):
+        recovered = self.create_empty_recovered_dict()
+        so_far = {"corrupt-shares": [],
+                  "space-recovered": recovered,
+                  "lease-age-histogram": {}, # (minage,maxage)->count
+                  "leases-per-share-histogram": {}, # leasecount->numshares
+                  }
+        return so_far
+
+    def create_empty_recovered_dict(self):
+        recovered = {}
+        for a in ("actual", "original", "configured", "examined"):
+            for b in ("buckets", "shares", "sharebytes", "diskbytes"):
+                recovered[a+"-"+b] = 0
+                recovered[a+"-"+b+"-mutable"] = 0
+                recovered[a+"-"+b+"-immutable"] = 0
+        return recovered
+
+    def started_cycle(self, cycle):
+        self.state["cycle-to-date"] = self.create_empty_cycle_dict()
+
+    def finished_cycle(self, cycle):
+        # add to our history state, prune old history
+        h = {}
+
+        start = self.state["current-cycle-start-time"]
+        now = time.time()
+        h["cycle-start-finish-times"] = (start, now)
+        h["expiration-enabled"] = self._do_expire
+        h["configured-expiration-mode"] = (self._mode,
+                                           self._override_lease_duration,
+                                           self._cutoff_date,
+                                           self._sharetypes_to_expire)
+
+        s = self.state["cycle-to-date"]
+
+        # state["lease-age-histogram"] is a dictionary (mapping
+        # (minage,maxage) tuple to a sharecount), but we report
+        # self.get_state()["lease-age-histogram"] as a list of
+        # (min,max,sharecount) tuples, because JSON can handle that better.
+        # We record the list-of-tuples form into the history for the same
+        # reason.
+        lah = self.convert_lease_age_histogram(s["lease-age-histogram"])
+        h["lease-age-histogram"] = lah
+        h["leases-per-share-histogram"] = s["leases-per-share-histogram"].copy()
+        h["corrupt-shares"] = s["corrupt-shares"][:]
+        # note: if ["shares-recovered"] ever acquires an internal dict, this
+        # copy() needs to become a deepcopy
+        h["space-recovered"] = s["space-recovered"].copy()
+
+        self._leasedb.add_history_entry(cycle, h)
+
+    def get_state(self):
+        """In addition to the crawler state described in
+        ShareCrawler.get_state(), I return the following keys which are
+        specific to the lease-checker/expirer. Note that the non-history keys
+        (with 'cycle' in their names) are only present if a cycle is currently
+        running. If the crawler is between cycles, it is appropriate to show
+        the latest item in the 'history' key instead. Also note that each
+        history item has all the data in the 'cycle-to-date' value, plus
+        cycle-start-finish-times.
+
+         cycle-to-date:
+          expiration-enabled
+          configured-expiration-mode
+          lease-age-histogram (list of (minage,maxage,sharecount) tuples)
+          leases-per-share-histogram
+          corrupt-shares (list of (si_b32,shnum) tuples, minimal verification)
+          space-recovered
+
+         estimated-remaining-cycle:
+          # Values may be None if not enough data has been gathered to
+          # produce an estimate.
+          space-recovered
+
+         estimated-current-cycle:
+          # cycle-to-date plus estimated-remaining. Values may be None if
+          # not enough data has been gathered to produce an estimate.
+          space-recovered
+
+         history: maps cyclenum to a dict with the following keys:
+          cycle-start-finish-times
+          expiration-enabled
+          configured-expiration-mode
+          lease-age-histogram
+          leases-per-share-histogram
+          corrupt-shares
+          space-recovered
+
+         The 'space-recovered' structure is a dictionary with the following
+         keys:
+          # 'examined' is what was looked at
+          examined-buckets, examined-buckets-mutable, examined-buckets-immutable
+          examined-shares, -mutable, -immutable
+          examined-sharebytes, -mutable, -immutable
+          examined-diskbytes, -mutable, -immutable
+
+          # 'actual' is what was actually deleted
+          actual-buckets, -mutable, -immutable
+          actual-shares, -mutable, -immutable
+          actual-sharebytes, -mutable, -immutable
+          actual-diskbytes, -mutable, -immutable
+
+          # would have been deleted, if the original lease timer was used
+          original-buckets, -mutable, -immutable
+          original-shares, -mutable, -immutable
+          original-sharebytes, -mutable, -immutable
+          original-diskbytes, -mutable, -immutable
+
+          # would have been deleted, if our configured max_age was used
+          configured-buckets, -mutable, -immutable
+          configured-shares, -mutable, -immutable
+          configured-sharebytes, -mutable, -immutable
+          configured-diskbytes, -mutable, -immutable
+
+        """
+        progress = self.get_progress()
+
+        state = ShareCrawler.get_state(self) # does a shallow copy
+        state["history"] = self._leasedb.get_history()
+
+        if not progress["cycle-in-progress"]:
+            del state["cycle-to-date"]
+            return state
+
+        so_far = state["cycle-to-date"].copy()
+        state["cycle-to-date"] = so_far
+
+        lah = so_far["lease-age-histogram"]
+        so_far["lease-age-histogram"] = self.convert_lease_age_histogram(lah)
+        so_far["expiration-enabled"] = self.expiration_enabled
+        so_far["configured-expiration-mode"] = (self.mode,
+                                                self.override_lease_duration,
+                                                self.cutoff_date,
+                                                self.sharetypes_to_expire)
+
+        so_far_sr = so_far["space-recovered"]
+        remaining_sr = {}
+        remaining = {"space-recovered": remaining_sr}
+        cycle_sr = {}
+        cycle = {"space-recovered": cycle_sr}
+
+        if progress["cycle-complete-percentage"] > 0.0:
+            pc = progress["cycle-complete-percentage"] / 100.0
+            m = (1-pc)/pc
+            for a in ("actual", "original", "configured", "examined"):
+                for b in ("buckets", "shares", "sharebytes", "diskbytes"):
+                    for c in ("", "-mutable", "-immutable"):
+                        k = a+"-"+b+c
+                        remaining_sr[k] = m * so_far_sr[k]
+                        cycle_sr[k] = so_far_sr[k] + remaining_sr[k]
+        else:
+            for a in ("actual", "original", "configured", "examined"):
+                for b in ("buckets", "shares", "sharebytes", "diskbytes"):
+                    for c in ("", "-mutable", "-immutable"):
+                        k = a+"-"+b+c
+                        remaining_sr[k] = None
+                        cycle_sr[k] = None
+
+        state["estimated-remaining-cycle"] = remaining
+        state["estimated-current-cycle"] = cycle
+        return state
