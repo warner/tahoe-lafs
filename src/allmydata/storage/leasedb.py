@@ -8,10 +8,11 @@ shnum, and used space). It can also instruct the storage backend to delete
 a share that has expired.
 """
 
-import os, time, re
+import os, time, re, simplejson
 
 from twisted.python.filepath import FilePath
 
+from allmydata.util.assertutil import _assert
 from allmydata.util import dbutil
 from allmydata.util.fileutil import get_used_space
 from allmydata.storage.crawler import ShareCrawler

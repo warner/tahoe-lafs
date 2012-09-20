@@ -10,14 +10,13 @@ FURLification dance is established, each client will get a different instance
 
 import time
 
-from twisted.python.filepath import FilePath
 from foolscap.api import Referenceable
 
 from zope.interface import implements
 from allmydata.interfaces import RIStorageServer
 
-from allmydata.util.fileutil import get_used_space
 from allmydata.storage.leasedb import int_or_none
+from allmydata.storage.common import si_b2a
 
 
 class Account(Referenceable):

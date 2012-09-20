@@ -17,6 +17,7 @@ from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
 from allmydata.storage.accountant import Accountant
+from allmydata.storage.expiration import ExpirationPolicy
 
 
 # storage/
