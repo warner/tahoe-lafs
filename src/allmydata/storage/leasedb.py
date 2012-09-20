@@ -390,6 +390,12 @@ class AccountingCrawler(ShareCrawler):
 
     # these methods are for outside callers to use
 
+    def set_expiration_policy(self, policy):
+        self._expiration_policy = policy
+
+    def get_expiration_policy(self):
+        return self._expiration_policy
+
     def set_lease_expiration(self, enable, expire_time=None):
         """Arrange to remove all leases that are currently expired, and to
         delete all shares without remaining leases. The actual removals will

@@ -129,31 +129,13 @@ class StorageStatus(rend.Page):
                     cycletime_s]
 
     def render_lease_expiration_enabled(self, ctx, data):
-        lc = self.storage.lease_checker
-        if lc.expiration_enabled:
-            return ctx.tag["Enabled: expired leases will be removed"]
-        else:
-            return ctx.tag["Disabled: scan-only mode, no leases will be removed"]
+        ep = self.storage.get_expiration_policy()
+        return ctx.tag[ep.describe_enabled()]
 
     def render_lease_expiration_mode(self, ctx, data):
-        lc = self.storage.lease_checker
-        if lc.mode == "age":
-            if lc.override_lease_duration is None:
-                ctx.tag["Leases will expire naturally, probably 31 days after "
-                        "creation or renewal."]
-            else:
-                ctx.tag["Leases created or last renewed more than %s ago "
-                        "will be considered expired."
-                        % abbreviate_time(lc.override_lease_duration)]
-        else:
-            assert lc.mode == "cutoff-date"
-            localizedutcdate = time.strftime("%d-%b-%Y", time.gmtime(lc.cutoff_date))
-            isoutcdate = time_format.iso_utc_date(lc.cutoff_date)
-            ctx.tag["Leases created or last renewed before %s (%s) UTC "
-                    "will be considered expired." % (isoutcdate, localizedutcdate, )]
-        if len(lc.mode) > 2:
-            ctx.tag[" The following sharetypes will be expired: ",
-                    " ".join(sorted(lc.sharetypes_to_expire)), "."]
+        ep = self.storage.get_expiration_policy()
+        ctx.tag[ep.describe_expiration()]
+        ctx.tag[ep.describe_sharetypes()]
         return ctx.tag
 
     def format_recovered(self, sr, a):
