@@ -4,8 +4,8 @@ This file manages the lease database, and runs the crawler which recovers
 from lost-db conditions (both initial boot, DB failures, and shares being
 added/removed out-of-band) by adding temporary 'starter leases'. It queries
 the storage backend to enumerate existing shares (for each one it needs SI,
-shnum, and size). It can also instruct the storage backend to delete a share
-which has expired.
+shnum, and used space). It can also instruct the storage backend to delete
+a share that has expired.
 """
 
 import os, time, re
@@ -15,12 +15,13 @@ from twisted.python.filepath import FilePath
 from allmydata.util import dbutil
 from allmydata.util.fileutil import get_used_space
 from allmydata.storage.crawler import ShareCrawler
+from allmydata.storage.common import si_a2b, si_b2a
 
 
 class BadAccountName(Exception):
     pass
 
-class BadShareID(Exception):
+class NonExistentShareError(Exception):
     pass
 
 
@@ -43,26 +44,27 @@ CREATE TABLE version
 
 CREATE TABLE shares
 (
- `id` INTEGER PRIMARY KEY AUTOINCREMENT,
- `prefix` VARCHAR(2),
- `storage_index` VARCHAR(26),
- `shnum` INTEGER,
- `size` INTEGER,
- `state` INTEGER -- 0=coming, 1=stable, 2=going
+ `storage_index` VARCHAR(26) not null,
+ `shnum` INTEGER not null,
+ `prefix` VARCHAR(2) not null,
+ `used_space` INTEGER not null,
+ `state` INTEGER not null, -- 0=coming, 1=stable, 2=going
+ PRIMARY KEY (`storage_index`, `shnum`)
 );
 
-CREATE INDEX `prefix` ON shares (`prefix`);
-CREATE UNIQUE INDEX `share_id` ON shares (`storage_index`,`shnum`);
+CREATE INDEX `prefix` ON `shares` (`prefix`);
+-- CREATE UNIQUE INDEX `share_id` ON `shares` (`storage_index`,`shnum`);
 
 CREATE TABLE leases
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
- -- FOREIGN KEY (`share_id`) REFERENCES shares(id), -- not enabled?
- -- FOREIGN KEY (`account_id`) REFERENCES accounts(id),
- `share_id` INTEGER,
- `account_id` INTEGER,
- `renewal_time` INTEGER, -- duration is implicit: expiration-renewal
- `expiration_time` INTEGER -- seconds since epoch
+ `storage_index` VARCHAR(26) not null,
+ `shnum` INTEGER not null,
+ `account_id` INTEGER not null,
+ `renewal_time` INTEGER not null, -- duration is implicit: expiration-renewal
+ `expiration_time` INTEGER not null, -- seconds since epoch
+ FOREIGN KEY (`storage_index`, `shnum`) REFERENCES `shares` (`storage_index`, `shnum`),
+ FOREIGN KEY (`account_id`) REFERENCES `accounts` (`id`)
 );
 
 CREATE INDEX `account_id` ON `leases` (`account_id`);
@@ -122,37 +124,33 @@ class LeaseDB:
         db_shares = set([(si,shnum) for (si,shnum) in self._cursor.fetchall()])
         return db_shares
 
-    def add_new_share(self, prefix, storage_index, shnum, size):
-        # XXX: when test_repairer.Repairer.test_repair_from_deletion_of_1
-        # runs, it deletes the share from disk, then the repairer replaces it
-        # (in the same place). That results in a duplicate entry in the
-        # 'shares' table, which causes a sqlite.IntegrityError . The
-        # add_new_share() code needs to tolerate surprises like this: the
-        # share might have been manually deleted, and the crawler may not
-        # have noticed it yet, so test for an existing entry and use it if
-        # present. (and check the code paths carefully to make sure that
-        # doesn't get too weird).
-
+    def add_new_share(self, storage_index, shnum, used_space):
         #print "ADD_NEW_SHARE", storage_index, shnum
+        si_s = si_b2a(storage_index)
+        prefix = si_s[:2]
         self._dirty = True
-        # FIXME: add in STATE_COMING, change to STATE_STABLE when share is
-        # confirmed stored by backend.
-        self._cursor.execute("INSERT INTO `shares`"
-                             " VALUES (?,?,?,?,?,?)",
-                             (None, prefix, storage_index, shnum, size, STATE_STABLE))
-        shareid = self._cursor.lastrowid
-        return shareid
+        try:
+            self._cursor.execute("INSERT INTO `shares`"
+                                 " VALUES (?,?,?,?,?)",
+                                 (si_s, shnum, prefix, used_space, STATE_COMING))
+        except dbutil.IntegrityError:
+            # XXX: when test_repairer.Repairer.test_repair_from_deletion_of_1
+            # runs, it deletes the share from disk, then the repairer replaces it
+            # (in the same place). The add_new_share() code needs to tolerate
+            # surprises like this: the share might have been manually deleted,
+            # and the crawler may not have noticed it yet, so test for an existing
+            # entry and use it if present (and check the code paths carefully to
+            # make sure that doesn't get too weird).
+            raise
 
-    def add_starter_lease(self, shareid):
+    def add_starter_lease(self, storage_index, shnum):
+        si_s = si_b2a(storage_index)
         self._dirty = True
         renewal_time = time.time()
         self._cursor.execute("INSERT INTO `leases`"
-                             " VALUES (?,?,?,?,?)",
-                             (None, shareid, self.STARTER_LEASE_ACCOUNTID,
+                             " VALUES (?,?,?,?,?,?)",
+                             (None, si_s, shnum, self.STARTER_LEASE_ACCOUNTID,
                               int(renewal_time), int(renewal_time + self.STARTER_LEASE_DURATION)))
-        leaseid = self._cursor.lastrowid
-        return leaseid
-
     def remove_deleted_shares(self, shareids):
         #print "REMOVE_DELETED_SHARES", shareids
         # TODO: replace this with a sensible DELETE, join, and sub-SELECT
@@ -171,50 +169,89 @@ class LeaseDB:
                                  " WHERE `share_id`=?",
                                  (shareid2,))
 
-    def change_share_size(self, storage_index, shnum, size):
+
+
+    def change_share_space(self, storage_index, shnum, used_space):
+        si_s = si_b2a(storage_index)
         self._dirty = True
-        self._cursor.execute("UPDATE `shares` SET `size`=?"
-                             " WHERE storage_index=? AND shnum=?",
-                             (size, storage_index, shnum))
+        self._cursor.execute("UPDATE `shares` SET `used_space`=?"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (used_space, si_s, shnum))
+        if self._cursor.rowcount < 1:
+            raise NonExistentShareError()
 
     # lease management
 
     def add_or_renew_leases(self, storage_index, shnum, ownerid,
                             renewal_time, expiration_time):
         # shnum=None means renew leases on all shares
+        si_s = si_b2a(storage_index)
         self._dirty = True
         if shnum is None:
-            self._cursor.execute("SELECT `id` FROM `shares`"
+            self._cursor.execute("SELECT `storage_index`, `shnum` FROM `shares`"
                                  " WHERE `storage_index`=?",
-                                 (storage_index,))
+                                 (si_s,))
         else:
-            self._cursor.execute("SELECT `id` FROM `shares`"
+            self._cursor.execute("SELECT `storage_index`, `shnum` FROM `shares`"
                                  " WHERE `storage_index`=? AND `shnum`=?",
-                                 (storage_index, shnum))
+                                 (si_s, shnum))
         rows = self._cursor.fetchall()
         if not rows:
-            raise BadShareID("can't find SI=%s shnum=%s in `shares` table"
-                             % (storage_index, shnum))
-        for (shareid,) in rows:
+            raise NonExistentShareError("can't find SI=%r shnum=%r in `shares` table"
+                                        % (si_s, shnum))
+        for (found_si_s, found_shnum) in rows:
+            _assert(si_s == found_si_s, si_s=si_s, found_si_s=found_si_s)
             self._cursor.execute("SELECT `id` FROM `leases`"
-                                 " WHERE `share_id`=? AND `account_id`=?",
-                                 (shareid, ownerid))
+                                 " WHERE `storage_index`=? AND `shnum`=? AND `account_id`=?",
+                                 (si_s, found_shnum, ownerid))
             row = self._cursor.fetchone()
             if row:
                 leaseid = row[0]
-                self._cursor.execute("UPDATE `leases` SET renewal_time=?,expiration_time=?"
+                self._cursor.execute("UPDATE `leases` SET `renewal_time`=?, `expiration_time`=?"
                                      " WHERE `id`=?",
                                      (renewal_time, expiration_time, leaseid))
             else:
-                self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?)",
-                                     (None, shareid, ownerid, renewal_time, expiration_time))
+                self._cursor.execute("INSERT INTO `leases` VALUES (?,?,?,?,?,?)",
+                                     (None, si_s, shnum, ownerid, renewal_time, expiration_time))
+
+    def get_leases(self, storage_index, ownerid):
+        si_s = si_b2a(storage_index)
+        self._cursor.execute("SELECT `id` FROM `leases`"
+                             " WHERE `storage_index`=? AND `account_id`=?",
+                             (si_s, ownerid))
+        rows = self._cursor.fetchall()
+        def _to_LeaseInfo(row):
+            print "row:", row
+            (_id, _storage_index, _shnum, account_id, renewal_time, expiration_time) = tuple(row)
+            return LeaseInfo(account_id, renewal_time, expiration_time)
+        return map(_to_LeaseInfo, rows)
+
+    # history
+
+    def add_history_entry(self, cycle, entry):
+        json = simplejson.dumps(entry)
+        self._cursor.execute("SELECT `cycle` FROM `crawler_history`")
+        rows = self._cursor.fetchall()
+        if len(rows) > 9:
+            first_cycle_to_retain = list(sorted(rows))[-9]
+            self._cursor.execute("DELETE FROM `crawler_history` WHERE cycle < ?",
+                                 (first_cycle_to_retain,))
+
+        self._cursor.execute("INSERT OR REPLACE INTO `crawler_history` VALUES (?,?)",
+                             (cycle, json))
+        self.commit(always=True)
+
+    def get_history(self):
+        self._cursor.execute("SELECT `cycle`,`json` FROM `crawler_history`")
+        rows = self._cursor.fetchall()
+        return dict(rows)
 
     # account management
 
     def get_account_usage(self, accountid):
-        self._cursor.execute("SELECT SUM(`size`) FROM shares"
-                             " WHERE `id` IN"
-                             "  (SELECT DISTINCT `share_id` FROM `leases`"
+        self._cursor.execute("SELECT SUM(`used_space`) FROM shares"
+                             " WHERE `storage_index`, `shnum` IN"
+                             "  (SELECT DISTINCT `storage_index`, `shnum` FROM `leases`"
                              "   WHERE `account_id`=?)",
                              (accountid,))
         row = self._cursor.fetchone()
@@ -224,7 +261,7 @@ class LeaseDB:
 
     def get_account_attribute(self, accountid, name):
         self._cursor.execute("SELECT `value` FROM `account_attributes`"
-                             " WHERE account_id=? AND name=?",
+                             " WHERE `account_id`=? AND `name`=?",
                              (accountid, name))
         row = self._cursor.fetchone()
         if row:
@@ -304,16 +341,16 @@ class AccountingCrawler(ShareCrawler):
         # assume that we can list every bucketdir in this prefix quickly.
         # Otherwise we have to retain more state between timeslices.
 
-        # we define "shareid" as (SI,shnum)
+        # we define "shareid" as (SI string, shnum)
         disk_shares = set() # shareid
-        for storage_index in buckets:
-            bucketdir = os.path.join(prefixdir, storage_index)
+        for si_s in buckets:
+            bucketdir = os.path.join(prefixdir, si_s)
             for sharefile in os.listdir(bucketdir):
                 try:
                     shnum = int(sharefile)
                 except ValueError:
                     continue # non-numeric means not a sharefile
-                shareid = (storage_index, shnum)
+                shareid = (si_s, shnum)
                 disk_shares.add(shareid)
 
         # now check the database for everything in this prefix
@@ -321,16 +358,16 @@ class AccountingCrawler(ShareCrawler):
 
         # add new shares to the DB
         new_shares = (disk_shares - db_shares)
-        for shareid in new_shares:
-            storage_index, shnum = shareid
-            fp = FilePath(prefixdir).child(storage_index).child(str(shnum))
-            size = get_used_space(fp)
-            sid = self._leasedb.add_new_share(prefix, storage_index,shnum, size)
+        for (si_s, shnum) in new_shares:
+            fp = FilePath(prefixdir).child(si_s).child(str(shnum))
+            used_space = get_used_space(fp)
+            sid = self._leasedb.add_new_share(prefix, si_a2b(si_s), shnum, used_space)
             self._leasedb.add_starter_lease(sid)
 
         # remove deleted shares
         deleted_shares = (db_shares - disk_shares)
-        self._leasedb.remove_deleted_shares(deleted_shares)
+        for (si_s, shnum) in deleted_shares:
+            self._leasedb.remove_deleted_share(si_a2b(si_s), shnum)
 
         self._leasedb.commit()
 

@@ -63,9 +63,8 @@ class Account(Referenceable):
     #  new shares: add_share(), add_lease()
     #  changed shares: update_share(), add_lease()
 
-    def add_share(self, prefix, storage_index, shnum, filename, commit=True):
-        size = get_used_space(FilePath(filename))
-        self._leasedb.add_new_share(prefix, storage_index, shnum, size)
+    def add_share(self, storage_index, shnum, used_space, commit=True):
+        self._leasedb.add_new_share(prefix, storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
 
@@ -76,9 +75,8 @@ class Account(Referenceable):
         if commit:
             self._leasedb.commit()
 
-    def update_share(self, storage_index, shnum, filename, commit=True):
-        size = get_used_space(FilePath(filename))
-        self._leasedb.change_share_size(storage_index, shnum, size)
+    def change_share_space(self, storage_index, shnum, used_space, commit=True):
+        self._leasedb.change_share_space(storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
 
