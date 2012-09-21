@@ -32,12 +32,10 @@ class Account(Referenceable):
         self.connected = False
         self.connected_since = None
         self.connection = None
+        self.can_write = True
+        self.can_read = True
+        self.can_save = True
         import random
-        def maybe(): return bool(random.randint(0,1))
-        self.status = {"write": maybe(),
-                       "read": maybe(),
-                       "save": maybe(),
-                       }
         self.account_message = {
             "message": "free storage! %d" % random.randint(0,10),
             "fancy": "free pony if you knew how to ask",
@@ -151,7 +149,14 @@ class Account(Referenceable):
         return self._leasedb.get_account_creation_time(self.owner_num)
 
     def remote_get_status(self):
-        return self.status
+        return self.get_status()
+
+    def get_status(self):
+        return { "write": self.can_write,
+                 "read":  self.can_read,
+                 "save":  self.can_save,
+               }
+
     def remote_get_account_message(self):
         return self.account_message
 
@@ -198,16 +203,17 @@ class Account(Referenceable):
         self.disconnected_since = None
 
     def _send_status(self):
-        self.connection.callRemoteOnly("status", self.status)
+        self.connection.callRemoteOnly("status", self.get_status())
+
     def _send_account_message(self):
         self.connection.callRemoteOnly("account_message", self.account_message)
 
     def set_status(self, write, read, save):
-        self.status = { "write": write,
-                        "read": read,
-                        "save": save,
-                        }
+        self.can_write = write
+        self.can_read = read
+        self.can_save = save
         self._send_status()
+
     def set_account_message(self, message):
         self.account_message = message
         self._send_account_message()
