@@ -119,18 +119,16 @@ class Account(Referenceable):
     def remote_renew_lease(self, storage_index, renew_secret):
         self.add_lease_for_bucket(storage_index)
         return None
-    #def remote_cancel_lease(self, storage_index, cancel_secret):
-    #    raise NotImplementedError
+
     def remote_get_buckets(self, storage_index):
-        return self.server.client_get_buckets(storage_index, self)
-    def remote_slot_testv_and_readv_and_writev(self, storage_index,
-                                               secrets,
-                                               test_and_write_vectors,
-                                               read_vector):
-        (write_enabler, renew_secret, cancel_secret) = secrets
-        meth = self.server.client_slot_testv_and_readv_and_writev
-        return meth(storage_index, write_enabler,
-                    test_and_write_vectors, read_vector, self)
+        return self.server.client_get_buckets(storage_index)
+
+    def remote_slot_testv_and_readv_and_writev(self, storage_index, secrets,
+                                               test_and_write_vectors, read_vector):
+        write_enabler = secrets[0]
+        return self.server.client_slot_testv_and_readv_and_writev(
+            storage_index, write_enabler, test_and_write_vectors, read_vector, self)
+
     def remote_slot_readv(self, storage_index, shares, readv):
         return self.server.client_slot_readv(storage_index, shares, readv, self)
     def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
