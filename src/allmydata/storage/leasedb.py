@@ -319,7 +319,7 @@ class LeaseDB:
             self._cursor.execute("INSERT INTO `account_attributes`"
                                  " VALUES (?,?,?,?)",
                                  (None, accountid, name, value))
-        self._db.commit()
+        self.commit(always=True)
 
     def get_or_allocate_ownernum(self, pubkey_vs):
         if not re.search(r'^[a-zA-Z0-9+-_]+$', pubkey_vs):
@@ -332,7 +332,7 @@ class LeaseDB:
         self._cursor.execute("INSERT INTO `accounts` VALUES (?,?,?)",
                              (None, pubkey_vs, int(time.time())))
         accountid = self._cursor.lastrowid
-        self._db.commit()
+        self.commit(always=True)
         return accountid
 
     def get_account_creation_time(self, owner_num):
@@ -349,8 +349,8 @@ class LeaseDB:
                              " FROM `accounts` ORDER BY `id` ASC")
         return self._cursor.fetchall()
 
-    def commit(self):
-        if self._dirty:
+    def commit(self, always=False):
+        if self._dirty or always:
             self._db.commit()
             self._dirty = False
 
