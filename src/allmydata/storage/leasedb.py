@@ -132,7 +132,7 @@ class LeaseDB:
                              " FROM `shares`"
                              " WHERE `prefix` == ?",
                              (prefix,))
-        db_shares = set([(si,shnum) for (si,shnum) in self._cursor.fetchall()])
+        db_shares = set([(si_a2b(str(si_s)), shnum) for (si_s, shnum) in self._cursor.fetchall()])
         return db_shares
 
     def add_new_share(self, storage_index, shnum, used_space):
