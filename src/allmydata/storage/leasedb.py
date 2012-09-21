@@ -187,6 +187,32 @@ class LeaseDB:
                                  " WHERE `share_id`=?",
                                  (shareid2,))
 
+    def mark_share_as_stable(self, storage_index, shnum, used_space):
+        """
+        Call this method after adding a share to backend storage.
+        """
+        si_s = si_b2a(storage_index)
+        if self.debug: print "MARK_SHARE_AS_STABLE", si_s, shnum, used_space
+        self._dirty = True
+        self._cursor.execute("UPDATE `shares` SET `state`=?, `used_space`=?"
+                             " WHERE `storage_index`=? AND `shnum`=? AND `state`=?",
+                             (STATE_STABLE, used_space, si_s, shnum, STATE_GOING))
+        if self._cursor.rowcount < 1:
+            raise NonExistentShareError()
+
+    def mark_share_as_going(self, storage_index, shnum):
+        """
+        Call this method and commit before deleting a share from backend storage,
+        then call remove_deleted_share.
+        """
+        si_s = si_b2a(storage_index)
+        if self.debug: print "MARK_SHARE_AS_GOING", si_s, shnum
+        self._dirty = True
+        self._cursor.execute("UPDATE `shares` SET `state`=?"
+                             " WHERE `storage_index`=? AND `shnum`=? AND `state`=?",
+                             (STATE_GOING, si_s, shnum, STATE_STABLE))
+        if self._cursor.rowcount < 1:
+            raise NonExistentShareError()
 
 
     def change_share_space(self, storage_index, shnum, used_space):

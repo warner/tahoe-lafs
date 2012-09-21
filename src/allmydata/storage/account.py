@@ -81,6 +81,19 @@ class Account(Referenceable):
         if commit:
             self._leasedb.commit()
 
+    def mark_share_as_stable(self, storage_index, shnum, used_space, commit=True):
+        if self.debug: print "MARK_SHARE_AS_STABLE", si_b2a(storage_index), shnum, used_space, commit
+        self._leasedb.change_share_space(storage_index, shnum, used_space)
+        self._leasedb.mark_share_as_stable(storage_index, shnum)
+        if commit:
+            self._leasedb.commit()
+
+    def mark_share_as_going(self, storage_index, shnum, commit=True):
+        if self.debug: print "MARK_SHARE_AS_GOING", si_b2a(storage_index), shnum, commit
+        self._leasedb.mark_share_as_going(storage_index, shnum)
+        if commit:
+            self._leasedb.commit()
+
     def remove_share_and_leases(self, storage_index, shnum):
         self._leasedb.remove_deleted_shares([storage_index, shnum])
 
