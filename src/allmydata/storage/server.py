@@ -367,7 +367,6 @@ class StorageServer(service.MultiService):
         start = time.time()
         self.count("writev")
         si_s = si_b2a(storage_index)
-        prefix = si_s[:2]
 
         log.msg("storage: slot_writev %s" % si_s)
         si_dir = storage_index_to_dir(storage_index)

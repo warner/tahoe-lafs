@@ -63,7 +63,7 @@ class Account(Referenceable):
 
     def add_share(self, storage_index, shnum, used_space, commit=True):
         if self.debug: print "ADD_SHARE", si_b2a(storage_index), shnum, used_space, commit
-        self._leasedb.add_new_share(prefix, storage_index, shnum, used_space)
+        self._leasedb.add_new_share(storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
 
