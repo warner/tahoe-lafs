@@ -163,23 +163,6 @@ class LeaseDB:
                              " VALUES (?,?,?,?,?,?)",
                              (None, si_s, shnum, self.STARTER_LEASE_ACCOUNTID,
                               int(renewal_time), int(renewal_time + self.STARTER_LEASE_DURATION)))
-    def remove_deleted_shares(self, shareids):
-        #print "REMOVE_DELETED_SHARES", shareids
-        # TODO: replace this with a sensible DELETE, join, and sub-SELECT
-        shareids2 = []
-        for deleted_shareid in shareids:
-            storage_index, shnum = deleted_shareid
-            self._cursor.execute("SELECT `id` FROM `shares`"
-                                 " WHERE `storage_index`=? AND `shnum`=?",
-                                 (storage_index, shnum))
-            row = self._cursor.fetchone()
-            if row:
-                shareids2.append(row[0])
-        for shareid2 in shareids2:
-            self._dirty = True
-            self._cursor.execute("DELETE FROM `leases`"
-                                 " WHERE `share_id`=?",
-                                 (shareid2,))
 
     def mark_share_as_stable(self, storage_index, shnum, used_space):
         """
@@ -208,6 +191,17 @@ class LeaseDB:
         if self._cursor.rowcount < 1:
             raise NonExistentShareError()
 
+    def remove_deleted_share(self, storage_index, shnum):
+        si_s = si_b2a(storage_index)
+        if self.debug: print "REMOVE_DELETED_SHARE", si_s, shnum
+        self._dirty = True
+        # delete leases first to maintain integrity constraint
+        self._cursor.execute("DELETE FROM `leases`"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (si_s, shnum))
+        self._cursor.execute("DELETE FROM `shares`"
+                             " WHERE `storage_index`=? AND `shnum`=?",
+                             (si_s, shnum))
 
     def change_share_space(self, storage_index, shnum, used_space):
         si_s = si_b2a(storage_index)

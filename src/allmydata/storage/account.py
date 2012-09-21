@@ -94,8 +94,11 @@ class Account(Referenceable):
         if commit:
             self._leasedb.commit()
 
-    def remove_share_and_leases(self, storage_index, shnum):
-        self._leasedb.remove_deleted_shares([storage_index, shnum])
+    def remove_share_and_leases(self, storage_index, shnum, commit=True):
+        if self.debug: print "REMOVE_SHARE_AND_LEASES", si_b2a(storage_index), shnum, commit
+        self._leasedb.remove_deleted_share(storage_index, shnum)
+        if commit:
+            self._leasedb.commit()
 
     # remote_add_lease() and remote_renew_lease() do this
     def add_lease_for_bucket(self, storage_index, commit=True):
