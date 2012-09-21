@@ -144,8 +144,8 @@ class Account(Referenceable):
 
     def remote_slot_readv(self, storage_index, shares, readv):
         return self.server.client_slot_readv(storage_index, shares, readv, self)
-    def remote_advise_corrupt_share(self, share_type, storage_index, shnum,
-                                    reason):
+
+    def remote_advise_corrupt_share(self, share_type, storage_index, shnum, reason):
         return self.server.client_advise_corrupt_share(
             share_type, storage_index, shnum, reason, self)
 
@@ -154,8 +154,10 @@ class Account(Referenceable):
 
     def get_account_attribute(self, name):
         return self._leasedb.get_account_attribute(self.owner_num, name)
+
     def set_account_attribute(self, name, value):
         self._leasedb.set_account_attribute(self.owner_num, name, value)
+
     def get_account_creation_time(self):
         return self._leasedb.get_account_creation_time(self.owner_num)
 

@@ -345,6 +345,8 @@ class ShareCrawler(service.MultiService):
     def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
         """This gets a list of bucket names (i.e. storage index strings,
         base32-encoded) in sorted order.
+        FIXME: it would probably make more sense for the storage indices
+        to be binary.
 
         You can override this if your crawler doesn't care about the actual
         shares, for example a crawler which merely keeps track of how many

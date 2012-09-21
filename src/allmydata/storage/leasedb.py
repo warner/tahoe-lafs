@@ -47,12 +47,12 @@ STATE_GOING = 2
 
 
 LEASE_SCHEMA_V1 = """
-CREATE TABLE version
+CREATE TABLE `version`
 (
  version INTEGER -- contains one row, set to 1
 );
 
-CREATE TABLE shares
+CREATE TABLE `shares`
 (
  `storage_index` VARCHAR(26) not null,
  `shnum` INTEGER not null,
@@ -65,7 +65,7 @@ CREATE TABLE shares
 CREATE INDEX `prefix` ON `shares` (`prefix`);
 -- CREATE UNIQUE INDEX `share_id` ON `shares` (`storage_index`,`shnum`);
 
-CREATE TABLE leases
+CREATE TABLE `leases`
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
  `storage_index` VARCHAR(26) not null,
@@ -83,12 +83,6 @@ CREATE INDEX `expiration_time` ON `leases` (`expiration_time`);
 CREATE TABLE accounts
 (
  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
- -- do some performance testing. Z+DS propose using pubkey_vs as the primary
- -- key. That would increase the size of the DB and the index (repeated
- -- pubkeys instead of repeated small integers), right? Also, I think we
- -- actually want to retain the account.id as an abstraction barrier: you
- -- might have sub-accounts which are controlled by signed messages, for
- -- which there is no single pubkey associated with the account.
  `pubkey_vs` VARCHAR(52),
  `creation_time` INTEGER
 );
@@ -100,7 +94,7 @@ CREATE TABLE account_attributes
  `account_id` INTEGER,
  `name` VARCHAR(20),
  `value` VARCHAR(20) -- actually anything: usually string, unicode, integer
- );
+);
 CREATE UNIQUE INDEX `account_attr` ON `account_attributes` (`account_id`, `name`);
 
 INSERT INTO `accounts` VALUES (0, "anonymous", 0);
