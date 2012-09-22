@@ -36,6 +36,10 @@ from allmydata.web.storage import StorageStatus, remove_prefix
 
 class Marker:
     pass
+
+class FakeAccount:
+    pass
+
 class FakeCanary:
     def __init__(self, ignore_disconnectors=False):
         self.ignore = ignore_disconnectors
@@ -57,15 +61,8 @@ class FakeStatsProvider:
     def register_producer(self, producer):
         pass
 
-class Bucket(unittest.TestCase):
-    def make_workdir(self, name):
-        basedir = os.path.join("storage", "Bucket", name)
-        incoming = os.path.join(basedir, "tmp", "bucket")
-        final = os.path.join(basedir, "bucket")
-        fileutil.make_dirs(basedir)
-        fileutil.make_dirs(os.path.join(basedir, "tmp"))
-        return incoming, final
 
+class BucketTestMixin:
     def bucket_writer_closed(self, bw, consumed):
         pass
     def add_latency(self, category, latency):
@@ -81,11 +78,20 @@ class Bucket(unittest.TestCase):
         return (owner_num, renew_secret, cancel_secret,
                 expiration_time, "\x00" * 20)
 
+
+class Bucket(BucketTestMixin, unittest.TestCase):
+    def make_workdir(self, name):
+        basedir = os.path.join("storage", "Bucket", name)
+        incoming = os.path.join(basedir, "tmp", "bucket")
+        final = os.path.join(basedir, "bucket")
+        fileutil.make_dirs(basedir)
+        fileutil.make_dirs(os.path.join(basedir, "tmp"))
+        return incoming, final
+
     def test_create(self):
         incoming, final = self.make_workdir("test_create")
-        bw = BucketWriter(self, incoming, final, 200, self.make_lease(),
-                          FakeCanary())
-        bw.remote_write(0, "a"*25)
+        bw = BucketWriter(self, FakeAccount(), "si1", 0, incoming, final, 200, FakeCanary())
+        bw.remote_write(0,  "a"*25)
         bw.remote_write(25, "b"*25)
         bw.remote_write(50, "c"*25)
         bw.remote_write(75, "d"*7)
@@ -93,18 +99,17 @@ class Bucket(unittest.TestCase):
 
     def test_readwrite(self):
         incoming, final = self.make_workdir("test_readwrite")
-        bw = BucketWriter(self, incoming, final, 200, self.make_lease(),
-                          FakeCanary())
-        bw.remote_write(0, "a"*25)
+        bw = BucketWriter(self, FakeAccount(), "si1", 0, incoming, final, 200, FakeCanary())
+        bw.remote_write(0,  "a"*25)
         bw.remote_write(25, "b"*25)
         bw.remote_write(50, "c"*7) # last block may be short
         bw.remote_close()
 
         # now read from it
         br = BucketReader(self, bw.finalhome)
-        self.failUnlessEqual(br.remote_read(0, 25), "a"*25)
+        self.failUnlessEqual(br.remote_read(0,  25), "a"*25)
         self.failUnlessEqual(br.remote_read(25, 25), "b"*25)
-        self.failUnlessEqual(br.remote_read(50, 7), "c"*7)
+        self.failUnlessEqual(br.remote_read(50, 7 ), "c"*7 )
 
     def test_read_past_end_of_share_data(self):
         # test vector for immutable files (hard-coded contents of an immutable share
@@ -173,33 +178,18 @@ class RemoteBucket:
         return defer.maybeDeferred(_call)
 
 
-class BucketProxy(unittest.TestCase):
+class BucketProxy(BucketTestMixin, unittest.TestCase):
     def make_bucket(self, name, size):
         basedir = os.path.join("storage", "BucketProxy", name)
         incoming = os.path.join(basedir, "tmp", "bucket")
         final = os.path.join(basedir, "bucket")
         fileutil.make_dirs(basedir)
         fileutil.make_dirs(os.path.join(basedir, "tmp"))
-        bw = BucketWriter(self, incoming, final, size, self.make_lease(),
-                          FakeCanary())
+        si = "si1"
+        bw = BucketWriter(self, FakeAccount(), si, 0, incoming, final, size, FakeCanary())
         rb = RemoteBucket()
         rb.target = bw
         return bw, rb, final
-
-    def make_lease(self):
-        owner_num = 0
-        renew_secret = os.urandom(32)
-        cancel_secret = os.urandom(32)
-        expiration_time = time.time() + 5000
-        return (owner_num, renew_secret, cancel_secret,
-                expiration_time, "\x00" * 20)
-
-    def bucket_writer_closed(self, bw, consumed):
-        pass
-    def add_latency(self, category, latency):
-        pass
-    def count(self, name, delta=1):
-        pass
 
     def test_create(self):
         bw, rb, sharefname = self.make_bucket("test_create", 500)
