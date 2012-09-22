@@ -15,7 +15,6 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
 from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.expirer import LeaseCheckingCrawler
 from allmydata.storage.accountant import Accountant
 from allmydata.storage.expiration import ExpirationPolicy
 
@@ -38,7 +37,7 @@ NUM_RE=re.compile("^[0-9]+$")
 class StorageServer(service.MultiService):
     implements(IStatsProducer)
     name = 'storage'
-    LeaseCheckerClass = LeaseCheckingCrawler
+    BucketCounterClass = BucketCountingCrawler
     DEFAULT_EXPIRATION_POLICY = ExpirationPolicy(enabled=False)
 
     def __init__(self, storedir, nodeid, reserved_space=0,

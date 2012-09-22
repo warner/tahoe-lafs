@@ -60,9 +60,9 @@ class Crawler(unittest.TestCase):
         dbfilename = os.path.join(basedir, "leasedb.sqlite")
         self.sharedir = os.path.join(basedir, "shares")
         fileutil.make_dirs(self.sharedir)
-        self.leasedb = l = LeaseDB(dbfilename)
-        self.crawler = c = None #LeaseCrawler(l, self.sharedir)
-        return l,c
+        self.leasedb = LeaseDB(dbfilename)
+        self.crawler = AccountingCrawler(self.leasedb, self.sharedir)
+        return (self.leasedb, self.crawler)
 
     def add_external_share(self, shareid):
         si_s, shnum_s = shareid.split("-")

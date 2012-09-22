@@ -154,7 +154,7 @@ class StorageStatus(rend.Page):
                 )
 
     def render_lease_current_cycle_progress(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         p = lc.get_progress()
         return ctx.tag[self.format_crawler_progress(p)]
 
