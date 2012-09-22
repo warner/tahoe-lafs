@@ -2,7 +2,9 @@
 import os, time
 from twisted.trial import unittest
 from allmydata.util import fileutil
-from allmydata.storage.accountant import LeaseDB
+from allmydata.storage.leasedb import LeaseDB
+from allmydata.storage.accounting import AccountingCrawler
+
 
 BASE_ACCOUNTS = set([(0,u"anonymous"), (1,u"starter")])
 
@@ -48,10 +50,10 @@ class DB(unittest.TestCase):
 
         self.failUnlessEqual(l.get_account_attribute(two, "name"), None)
 
-AB="abtnioga6deziyqd64gm65qbnu-0"
-DE="dekrcoczhdj5xh6zd4v62xhdnu-1"
-FG="fgxnicsxj4eaatcb5dayqiifsi-19"
-ZZ="zzs6tetijo4zamjlkfzwaihkse-8"
+AB=("abtnioga6deziyqd64gm65qbnu", 0)
+DE=("dekrcoczhdj5xh6zd4v62xhdnu", 1)
+FG=("fgxnicsxj4eaatcb5dayqiifsi", 19)
+ZZ=("zzs6tetijo4zamjlkfzwaihkse", 8)
 
 class Crawler(unittest.TestCase):
     def make(self, testname):
@@ -64,12 +66,11 @@ class Crawler(unittest.TestCase):
         self.crawler = AccountingCrawler(self.leasedb, self.sharedir)
         return (self.leasedb, self.crawler)
 
-    def add_external_share(self, shareid):
-        si_s, shnum_s = shareid.split("-")
+    def add_external_share(self, si_s, shnum):
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
-        sharefile = os.path.join(bucketdir, shnum_s)
+        sharefile = os.path.join(bucketdir, str(shnum))
         if not os.path.isdir(prefixdir):
             os.mkdir(prefixdir)
         if not os.path.isdir(bucketdir):
@@ -79,9 +80,7 @@ class Crawler(unittest.TestCase):
         f.close()
         return sharefile
 
-    def add_share(self, leasedb, shareid):
-        si_s, shnum_s = shareid.split("-")
-        shnum = int(shnum_s)
+    def add_share(self, leasedb, si_s, shnum):
         self.add_external_share()
         prefix = si_s[:2]
         leasedb.add_new_share(prefix, si_s, shnum, 20)
@@ -89,12 +88,11 @@ class Crawler(unittest.TestCase):
         leasedb.add_or_renew_leases(si_s, shnum, OWNER, EXPIRETIME)
         leasedb.commit()
 
-    def delete_external_share(self, shareid):
-        si_s, shnum_s = shareid.split("-")
+    def delete_external_share(self, si_s, shnum):
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
-        sharefile = os.path.join(bucketdir, shnum_s)
+        sharefile = os.path.join(bucketdir, str(shnum))
         os.unlink(sharefile)
         try:
             os.rmdir(bucketdir)
@@ -102,26 +100,19 @@ class Crawler(unittest.TestCase):
         except EnvironmentError:
             pass
 
-    def have_sharefile(self, shareid):
-        si_s, shnum_s = shareid.split("-")
+    def have_sharefile(self, si_s, shnum):
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
-        sharefile = os.path.join(bucketdir, shnum_s)
+        sharefile = os.path.join(bucketdir, str(shnum))
         return os.path.exists(sharefile)
 
-    def expire_share(self, shareid):
+    def expire_share(self, si_s, shnum):
         # accelerated expiration of all leases for this share
-        si, shnum = shareid.split("-")
-        shnum = int(shnum)
         c = self.leasedb._cursor
-        c.execute("SELECT `id` FROM `shares`"
-                  " WHERE `storage_index` = ? AND `shnum` = ?",
-                  (si, shnum))
-        share_id = c.fetchone()[0]
         c.execute("UPDATE `leases` SET `expiration_time`=0"
-                  " WHERE `share_id`=?",
-                  (share_id,))
+                  " WHERE `storage_index`=? AND `shnum`=?",
+                  (si_s, shnum))
         self.leasedb._db.commit()
 
     def remove_garbage(self):
