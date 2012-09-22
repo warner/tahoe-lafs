@@ -517,18 +517,18 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(writers), 3)
         # now the StorageServer should have 3000 bytes provisionally
         # allocated, allowing only 2000 more to be claimed
-        self.failUnlessEqual(len(ss._active_writers), 3)
+        self.failUnlessEqual(len(ss.server._active_writers), 3)
 
         # allocating 1001-byte shares only leaves room for one
         already2,writers2 = self.allocate(ss, "vid2", [0,1,2], 1001, canary)
         self.failUnlessEqual(len(writers2), 1)
-        self.failUnlessEqual(len(ss._active_writers), 4)
+        self.failUnlessEqual(len(ss.server._active_writers), 4)
 
         # we abandon the first set, so their provisional allocation should be
         # returned
         del already
         del writers
-        self.failUnlessEqual(len(ss._active_writers), 1)
+        self.failUnlessEqual(len(ss.server._active_writers), 1)
         # now we have a provisional allocation of 1001 bytes
 
         # and we close the second set, so their provisional allocation should
@@ -540,7 +540,7 @@ class Server(unittest.TestCase):
         del already2
         del writers2
         del bw
-        self.failUnlessEqual(len(ss._active_writers), 0)
+        self.failUnlessEqual(len(ss.server._active_writers), 0)
 
         allocated = 1001 + OVERHEAD + LEASE_SIZE
 
@@ -555,12 +555,13 @@ class Server(unittest.TestCase):
         # 5000-1085=3915 free, therefore we can fit 39 100byte shares
         already3,writers3 = self.allocate(ss,"vid3", range(100), 100, canary)
         self.failUnlessEqual(len(writers3), 39)
-        self.failUnlessEqual(len(ss._active_writers), 39)
+        self.failUnlessEqual(len(ss.server._active_writers), 39)
 
         del already3
         del writers3
-        self.failUnlessEqual(len(ss._active_writers), 0)
+        self.failUnlessEqual(len(ss.server._active_writers), 0)
         ss.disownServiceParent()
+        ss.server.disownServiceParent()
         del ss
 
     def test_seek(self):
