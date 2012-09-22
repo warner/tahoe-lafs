@@ -468,7 +468,7 @@ class Server(unittest.TestCase):
         w[0].remote_write(0, "\xff"*10)
         w[0].remote_close()
 
-        fn = os.path.join(ss.sharedir, storage_index_to_dir("si1"), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir("si1"), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write(struct.pack(">L", 0)) # this is invalid: minimum used is v1
@@ -811,7 +811,7 @@ class MutableServer(unittest.TestCase):
     def test_bad_magic(self):
         ss = self.create("test_bad_magic")
         self.allocate(ss, "si1", "we1", self._lease_secret.next(), set([0]), 10)
-        fn = os.path.join(ss.sharedir, storage_index_to_dir("si1"), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir("si1"), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write("BAD MAGIC")
@@ -3120,7 +3120,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
 
         # add a non-sharefile to exercise another code path
-        fn = os.path.join(ss.sharedir,
+        fn = os.path.join(ss._get_sharedir(),
                           storage_index_to_dir(immutable_si_0),
                           "not-a-share")
         f = open(fn, "wb")
@@ -3863,7 +3863,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         first = min(self.sis)
         first_b32 = base32.b2a(first)
-        fn = os.path.join(ss.sharedir, storage_index_to_dir(first), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir(first), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write("BAD MAGIC")
@@ -3876,7 +3876,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
 
         # also create an empty bucket
         empty_si = base32.b2a("\x04"*16)
-        empty_bucket_dir = os.path.join(ss.sharedir,
+        empty_bucket_dir = os.path.join(ss._get_sharedir(),
                                         storage_index_to_dir(empty_si))
         fileutil.make_dirs(empty_bucket_dir)
 
