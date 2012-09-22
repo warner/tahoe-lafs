@@ -26,6 +26,11 @@ def get_db(dbfile, stderr=sys.stderr,
 
     schema, target_version = create_version
     c = db.cursor()
+
+    # Enabling foreign keys allows stricter integrity checking.
+    # The default is unspecified according to <http://www.sqlite.org/foreignkeys.html#fk_enable>.
+    c.execute("PRAGMA foreign_keys = ON;")
+
     if must_create:
         c.executescript(schema)
         c.execute("INSERT INTO version (version) VALUES (?)", (target_version,))
