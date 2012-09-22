@@ -3256,10 +3256,8 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
             self.failUnlessEqual(rec["original-sharebytes"], 0)
             self.failUnlessEqual(rec["configured-sharebytes"], 0)
 
-            def _get_sharefile(si):
-                return list(ss._iter_share_files(si))[0]
             def count_leases(si):
-                return len(list(_get_sharefile(si).get_leases()))
+                return len(list(ss.get_leases(si)))
             self.failUnlessEqual(count_leases(immutable_si_0), 1)
             self.failUnlessEqual(count_leases(immutable_si_1), 2)
             self.failUnlessEqual(count_leases(mutable_si_2), 1)
@@ -3319,7 +3317,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(list(ss.get_leases(si)))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3459,7 +3457,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(list(ss.get_leases(si)))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3604,7 +3602,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(list(ss.get_leases(si)))
 
         sf0 = _get_sharefile(immutable_si_0)
         self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
@@ -3659,7 +3657,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(list(ss.get_leases(si)))
 
         sf0 = _get_sharefile(immutable_si_0)
         self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)

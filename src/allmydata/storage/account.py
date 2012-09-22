@@ -196,6 +196,9 @@ class Account(Referenceable):
     def get_current_usage(self):
         return self._leasedb.get_account_usage(self.owner_num)
 
+    def get_leases(self, storage_index):
+        return self._leasedb.get_leases(storage_index, self.owner_num)
+
     def connection_from(self, rx):
         self.connected = True
         self.connected_since = time.time()
