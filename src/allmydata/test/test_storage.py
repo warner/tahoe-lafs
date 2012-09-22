@@ -72,11 +72,9 @@ class BucketTestMixin:
 
     def make_lease(self):
         owner_num = 0
-        renew_secret = os.urandom(32)
-        cancel_secret = os.urandom(32)
-        expiration_time = time.time() + 5000
-        return (owner_num, renew_secret, cancel_secret,
-                expiration_time, "\x00" * 20)
+        renewal_time = time.time()
+        expiration_time = renewal_time + 5000
+        return LeaseInfo(owner_num, renewal_time, expiration_time)
 
 
 class Bucket(BucketTestMixin, unittest.TestCase):
@@ -115,11 +113,6 @@ class Bucket(BucketTestMixin, unittest.TestCase):
         # test vector for immutable files (hard-coded contents of an immutable share
         # file):
 
-        # The following immutable share file content is identical to that
-        # generated with storage.immutable.ShareFile from Tahoe-LAFS v1.8.2
-        # with share data == 'a'. The total size of this content is 85
-        # bytes.
-
         containerdata = struct.pack('>LLL', 1, 1, 1)
 
         # A Tahoe-LAFS storage client would send as the share_data a
@@ -127,17 +120,8 @@ class Bucket(BucketTestMixin, unittest.TestCase):
         # -- see allmydata/immutable/layout.py . This test, which is
         # simulating a client, just sends 'a'.
         share_data = 'a'
-
-        ownernumber = struct.pack('>L', 0)
-        renewsecret  = 'THIS LETS ME RENEW YOUR FILE....'
-        assert len(renewsecret) == 32
-        cancelsecret = 'THIS LETS ME KILL YOUR FILE HAHA'
-        assert len(cancelsecret) == 32
-        expirationtime = struct.pack('>L', 60*60*24*31) # 31 days in seconds
-
-        lease_data = ownernumber + renewsecret + cancelsecret + expirationtime
-
-        share_file_data = containerdata + share_data + lease_data
+        extra_data = 'b'
+        share_file_data = containerdata + share_data + extra_data
 
         incoming, final = self.make_workdir("test_read_past_end_of_share_data")
 
@@ -150,14 +134,10 @@ class Bucket(BucketTestMixin, unittest.TestCase):
 
         self.failUnlessEqual(br.remote_read(0, len(share_data)), share_data)
 
-        # Read past the end of share data to get the cancel secret.
-        read_length = len(share_data) + len(ownernumber) + len(renewsecret) + len(cancelsecret)
-
-        result_of_read = br.remote_read(0, read_length)
-        self.failUnlessEqual(result_of_read, share_data)
-
+        # Read past the end of share data by 1 byte.
         result_of_read = br.remote_read(0, len(share_data)+1)
         self.failUnlessEqual(result_of_read, share_data)
+
 
 class RemoteBucket:
 
@@ -1192,26 +1172,15 @@ class MutableServer(unittest.TestCase):
                                       1: ["1"*10],
                                       2: ["2"*10]})
 
-    def compare_leases_without_timestamps(self, leases_a, leases_b):
+    def compare_leases(self, leases_a, leases_b, with_timestamps=True):
         self.failUnlessEqual(len(leases_a), len(leases_b))
         for i in range(len(leases_a)):
             a = leases_a[i]
             b = leases_b[i]
-            self.failUnlessEqual(a.owner_num,       b.owner_num)
-            self.failUnlessEqual(a.renew_secret,    b.renew_secret)
-            self.failUnlessEqual(a.cancel_secret,   b.cancel_secret)
-            self.failUnlessEqual(a.nodeid,          b.nodeid)
-
-    def compare_leases(self, leases_a, leases_b):
-        self.failUnlessEqual(len(leases_a), len(leases_b))
-        for i in range(len(leases_a)):
-            a = leases_a[i]
-            b = leases_b[i]
-            self.failUnlessEqual(a.owner_num,       b.owner_num)
-            self.failUnlessEqual(a.renew_secret,    b.renew_secret)
-            self.failUnlessEqual(a.cancel_secret,   b.cancel_secret)
-            self.failUnlessEqual(a.nodeid,          b.nodeid)
-            self.failUnlessEqual(a.expiration_time, b.expiration_time)
+            self.failUnlessEqual(a.owner_num, b.owner_num)
+            if with_timestamps:
+                self.failUnlessEqual(a.renewal_time, b.renewal_time)
+                self.failUnlessEqual(a.expiration_time, b.expiration_time)
 
     def test_leases(self):
         ss = self.create("test_leases")
@@ -1269,14 +1238,14 @@ class MutableServer(unittest.TestCase):
               [])
 
         # read back the leases, make sure they're still intact.
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
 
         ss.remote_renew_lease("si1", secrets(0)[1])
         ss.remote_renew_lease("si1", secrets(1)[1])
         ss.remote_renew_lease("si1", secrets(2)[1])
         ss.remote_renew_lease("si1", secrets(3)[1])
         ss.remote_renew_lease("si1", secrets(4)[1])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
         # get a new copy of the leases, with the current timestamps. Reading
         # data and failing to renew/cancel leases should leave the timestamps
         # alone.
@@ -1301,11 +1270,11 @@ class MutableServer(unittest.TestCase):
 
         write("si1", secrets(0),
               {0: ([], [(200, "make me bigger")], None)}, [])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
 
         write("si1", secrets(0),
               {0: ([], [(500, "make me really bigger")], None)}, [])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
 
     def test_remove(self):
         ss = self.create("test_remove")
