@@ -255,3 +255,17 @@ class Account(Referenceable):
                 "last_seen": last_seen,
                 "created": created,
                 }
+
+    # used by tests
+
+    def _get_sharedir(self):
+        return self.server.sharedir
+
+    def _iter_share_files(self, storage_index):
+        return self.server._iter_share_files(storage_index)
+
+    def _get_bucket_shares(self, storage_index):
+        return self.server._get_bucket_shares(storage_index)
+
+    def disownServiceParent(self):
+        return self.server.disownServiceParent()

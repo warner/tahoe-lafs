@@ -77,7 +77,7 @@ class StorageFarmBroker:
 
     # these two are used in unit tests
     def test_add_rref(self, serverid, rref, ann):
-        s = NativeStorageServer(serverid, ann.copy())
+        s = NativeStorageServer(serverid, ann.copy(), self.tub)
         s.rref = rref
         s._is_connected = True
         self.servers[serverid] = s
