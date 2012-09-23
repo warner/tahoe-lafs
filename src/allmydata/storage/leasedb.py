@@ -396,7 +396,7 @@ class AccountingCrawler(ShareCrawler):
         for (si_s, shnum) in new_shares:
             fp = FilePath(prefixdir).child(si_s).child(str(shnum))
             used_space = get_used_space(fp)
-            sid = self._leasedb.add_new_share(prefix, si_a2b(si_s), shnum, used_space)
+            sid = self._leasedb.add_new_share(si_a2b(si_s), shnum, used_space)
             self._leasedb.add_starter_lease(sid)
 
         # remove deleted shares
