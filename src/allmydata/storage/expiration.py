@@ -41,8 +41,21 @@ class ExpirationPolicy(object):
 
         return current_time >= expiry_time
 
+    def get_parameters(self):
+        """
+        Return the parameters as represented in the "configured-expiration-mode" field
+        of a history entry.
+        """
+        return (self._mode,
+                self._override_lease_duration,
+                self._cutoff_date,
+                self._sharetypes_to_expire)
+
+    def is_enabled(self):
+        return bool(self._sharetypes_to_expire)
+
     def describe_enabled(self):
-        if self._sharetypes_to_expire:
+        if self.is_enabled():
             return "Enabled: expired leases will be removed"
         else:
             return "Disabled: scan-only mode, no leases will be removed"

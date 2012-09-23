@@ -371,8 +371,6 @@ class AccountingCrawler(ShareCrawler):
     def __init__(self, server, statefile, leasedb):
         ShareCrawler.__init__(self, server, statefile)
         self._leasedb = leasedb
-        self._do_expire = False
-        self._expire_time = None
 
     def process_prefixdir(self, cycle, prefix, prefixdir, buckets, start_slice):
         # assume that we can list every bucketdir in this prefix quickly.
@@ -417,20 +415,13 @@ class AccountingCrawler(ShareCrawler):
     def get_expiration_policy(self):
         return self._expiration_policy
 
-    def set_lease_expiration(self, enable, expire_time=None):
-        """Arrange to remove all leases that are currently expired, and to
-        delete all shares without remaining leases. The actual removals will
-        be done later, as the crawler finishes each prefix."""
-        self._do_expire = enable
-        self._expire_time = expire_time
+    def is_expiration_enabled(self):
+        return self._expiration_policy.is_enabled()
 
     def db_is_incomplete(self):
         # don't bother looking at the sqlite database: it's certainly not
         # complete.
         return self.state["last-cycle-finished"] is None
-
-    def is_expiration_enabled(self):
-        return self._do_expire
 
     def convert_lease_age_histogram(self, lah):
         # convert { (minage,maxage) : count } into [ (minage,maxage,count) ]
@@ -482,10 +473,7 @@ class AccountingCrawler(ShareCrawler):
         now = time.time()
         h["cycle-start-finish-times"] = (start, now)
         h["expiration-enabled"] = self._do_expire
-        h["configured-expiration-mode"] = (self._mode,
-                                           self._override_lease_duration,
-                                           self._cutoff_date,
-                                           self._sharetypes_to_expire)
+        h["configured-expiration-mode"] = self._expiration_policy.get_parameters()
 
         s = self.state["cycle-to-date"]
 
