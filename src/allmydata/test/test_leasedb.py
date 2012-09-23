@@ -2,8 +2,7 @@
 import os, time
 from twisted.trial import unittest
 from allmydata.util import fileutil
-from allmydata.storage.leasedb import LeaseDB
-from allmydata.storage.accounting import AccountingCrawler
+from allmydata.storage.leasedb import LeaseDB, AccountingCrawler
 
 
 BASE_ACCOUNTS = set([(0,u"anonymous"), (1,u"starter")])
