@@ -251,6 +251,16 @@ class ShareCrawler(service.MultiService):
         self.save_state()
         return service.MultiService.stopService(self)
 
+    def crawl(self):
+        """For use by tests."""
+        start_slice_time = time.time()
+        while True:
+            try:
+                self.start_current_prefix(start_slice_time)
+                return
+            except TimeSliceExceeded:
+                pass
+
     def start_slice(self):
         start_slice = time.time()
         self.timer = None

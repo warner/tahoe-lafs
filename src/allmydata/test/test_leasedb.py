@@ -1,6 +1,7 @@
 
 import os, time
 from twisted.trial import unittest
+from twisted.internet import defer
 from allmydata.util import fileutil
 from allmydata.storage.leasedb import LeaseDB, AccountingCrawler
 
@@ -161,7 +162,7 @@ class Crawler(unittest.TestCase):
         # externally, and that it deletes expired shares safely.
         l,c = self.make("shares")
 
-        d = c.crawl()
+        d = defer.maybeDeferred(c.crawl)
         def _then1(ign):
             self.check_shares()
             self.add_external_share(AB)
