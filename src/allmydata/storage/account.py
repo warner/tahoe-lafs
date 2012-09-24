@@ -76,6 +76,7 @@ class Account(Referenceable):
             self._leasedb.commit()
 
     def change_share_space(self, storage_index, shnum, used_space, commit=True):
+        # XXX do we actually need this?
         if self.debug: print "CHANGE_SHARE_SPACE", si_b2a(storage_index), shnum, used_space, commit
         self._leasedb.change_share_space(storage_index, shnum, used_space)
         if commit:
@@ -83,8 +84,7 @@ class Account(Referenceable):
 
     def mark_share_as_stable(self, storage_index, shnum, used_space, commit=True):
         if self.debug: print "MARK_SHARE_AS_STABLE", si_b2a(storage_index), shnum, used_space, commit
-        self._leasedb.change_share_space(storage_index, shnum, used_space)
-        self._leasedb.mark_share_as_stable(storage_index, shnum)
+        self._leasedb.mark_share_as_stable(storage_index, shnum, used_space)
         if commit:
             self._leasedb.commit()
 
