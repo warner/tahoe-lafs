@@ -253,7 +253,6 @@ class StorageServer(service.MultiService):
         bucketwriters = {} # k: shnum, v: BucketWriter
         si_dir = storage_index_to_dir(storage_index)
         si_s = si_b2a(storage_index)
-        prefix = si_s[:2]
 
         log.msg("storage: allocate_buckets %s" % si_s)
 
@@ -292,8 +291,7 @@ class StorageServer(service.MultiService):
                 pass
             elif (not limited) or (remaining_space >= max_space_per_bucket):
                 # ok! we need to create the new share file.
-                bw = BucketWriter(self, account,
-                                  prefix, storage_index, shnum,
+                bw = BucketWriter(self, account, storage_index, shnum,
                                   incominghome, finalhome,
                                   max_space_per_bucket, canary)
                 if self.no_storage:
