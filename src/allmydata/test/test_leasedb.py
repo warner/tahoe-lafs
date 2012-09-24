@@ -54,15 +54,22 @@ DE=("dekrcoczhdj5xh6zd4v62xhdnu", 1)
 FG=("fgxnicsxj4eaatcb5dayqiifsi", 19)
 ZZ=("zzs6tetijo4zamjlkfzwaihkse", 8)
 
+
+class FakeStorageServer(object):
+    def __init__(self, sharedir):
+        self.sharedir = sharedir
+
+
 class Crawler(unittest.TestCase):
     def make(self, testname):
-        basedir = os.path.join("leasedb", "Crawler", testname)
-        fileutil.make_dirs(basedir)
-        dbfilename = os.path.join(basedir, "leasedb.sqlite")
-        self.sharedir = os.path.join(basedir, "shares")
+        storedir = os.path.join("leasedb", "Crawler", testname)
+        fileutil.make_dirs(storedir)
+        dbfilename = os.path.join(storedir, "leasedb.sqlite")
+        self.sharedir = os.path.join(storedir, "shares")
         fileutil.make_dirs(self.sharedir)
+        self.statefile = os.path.join(storedir, "leasedb_crawler.state")
         self.leasedb = LeaseDB(dbfilename)
-        self.crawler = AccountingCrawler(self.leasedb, self.sharedir)
+        self.crawler = AccountingCrawler(FakeStorageServer(self.sharedir), self.statefile, self.leasedb)
         return (self.leasedb, self.crawler)
 
     def add_external_share(self, si_s, shnum):
