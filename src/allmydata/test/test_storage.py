@@ -1203,6 +1203,12 @@ class MutableServer(unittest.TestCase):
         f.close()
 
         #s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
+
+        ss.add_share("si1", 0, 0)
+        # adding a share does not immediately add a lease
+        self.failUnlessEqual(len(ss.get_leases("si1")), 0)
+
+        ss.add_lease("si1", 0)
         self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # add-lease on a missing storage index is silently ignored
