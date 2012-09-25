@@ -579,7 +579,7 @@ class Server(unittest.TestCase):
         for wb in writers.values():
             wb.remote_close()
 
-        leases = list(ss.get_leases("si0"))
+        leases = ss.get_leases("si0")
         self.failUnlessEqual(len(leases), 1)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs0]))
 
@@ -598,7 +598,7 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(already), 5)
         self.failUnlessEqual(len(writers), 0)
 
-        leases = list(ss.get_leases("si1"))
+        leases = ss.get_leases("si1")
         self.failUnlessEqual(len(leases), 2)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs1, rs2]))
 
@@ -606,7 +606,7 @@ class Server(unittest.TestCase):
         rs2a,cs2a = (hashutil.tagged_hash("blah", "%d" % self._lease_secret.next()),
                      hashutil.tagged_hash("blah", "%d" % self._lease_secret.next()))
         ss.remote_add_lease("si1", rs2a, cs2a)
-        leases = list(ss.get_leases("si1"))
+        leases = ss.get_leases("si1")
         self.failUnlessEqual(len(leases), 3)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs1, rs2, rs2a]))
 
@@ -647,7 +647,7 @@ class Server(unittest.TestCase):
         for wb in writers.values():
             wb.remote_close()
 
-        leases = list(ss.get_leases("si3"))
+        leases = ss.get_leases("si3")
         self.failUnlessEqual(len(leases), 1)
 
         already3,writers3 = ss.remote_allocate_buckets("si3", rs4, cs4,
@@ -655,7 +655,7 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(already3), 5)
         self.failUnlessEqual(len(writers3), 0)
 
-        leases = list(ss.get_leases("si3"))
+        leases = ss.get_leases("si3")
         self.failUnlessEqual(len(leases), 2)
 
     def test_readonly(self):
@@ -1202,35 +1202,36 @@ class MutableServer(unittest.TestCase):
         f.write("you ought to be ignoring me\n")
         f.close()
 
-        s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        #s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
+        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # add-lease on a missing storage index is silently ignored
         self.failUnlessEqual(ss.remote_add_lease("si18", "", ""), None)
+        self.failUnlessEqual(len(ss.get_leases("si18")), 0)
 
         # re-allocate the slots and use the same secrets, that should update
         # the lease
         write("si1", secrets(0), {0: ([], [(0,data)], None)}, [])
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # renew it directly
         ss.remote_renew_lease("si1", secrets(0)[1])
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # now allocate them with a bunch of different secrets, to trigger the
         # extended lease code. Use add_lease for one of them.
         write("si1", secrets(1), {0: ([], [(0,data)], None)}, [])
-        self.failUnlessEqual(len(list(s0.get_leases())), 2)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 2)
         secrets2 = secrets(2)
         ss.remote_add_lease("si1", secrets2[1], secrets2[2])
-        self.failUnlessEqual(len(list(s0.get_leases())), 3)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 3)
         write("si1", secrets(3), {0: ([], [(0,data)], None)}, [])
         write("si1", secrets(4), {0: ([], [(0,data)], None)}, [])
         write("si1", secrets(5), {0: ([], [(0,data)], None)}, [])
 
-        self.failUnlessEqual(len(list(s0.get_leases())), 6)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 6)
 
-        all_leases = list(s0.get_leases())
+        all_leases = ss.get_leases("si1")
         # and write enough data to expand the container, forcing the server
         # to move the leases
         write("si1", secrets(0),
@@ -1238,18 +1239,18 @@ class MutableServer(unittest.TestCase):
               [])
 
         # read back the leases, make sure they're still intact.
-        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
         ss.remote_renew_lease("si1", secrets(0)[1])
         ss.remote_renew_lease("si1", secrets(1)[1])
         ss.remote_renew_lease("si1", secrets(2)[1])
         ss.remote_renew_lease("si1", secrets(3)[1])
         ss.remote_renew_lease("si1", secrets(4)[1])
-        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
         # get a new copy of the leases, with the current timestamps. Reading
         # data and failing to renew/cancel leases should leave the timestamps
         # alone.
-        all_leases = list(s0.get_leases())
+        all_leases = ss.get_leases("si1")
         # renewing with a bogus token should prompt an error message
 
         # examine the exception thus raised, make sure the old nodeid is
@@ -1262,19 +1263,19 @@ class MutableServer(unittest.TestCase):
         self.failUnlessIn("I have leases accepted by nodeids:", e_s)
         self.failUnlessIn("nodeids: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' .", e_s)
 
-        self.compare_leases(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"))
 
         # reading shares should not modify the timestamp
         read("si1", [], [(0,200)])
-        self.compare_leases(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"))
 
         write("si1", secrets(0),
               {0: ([], [(200, "make me bigger")], None)}, [])
-        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
         write("si1", secrets(0),
               {0: ([], [(500, "make me really bigger")], None)}, [])
-        self.compare_leases(all_leases, list(s0.get_leases()), with_timestamps=False)
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
     def test_remove(self):
         ss = self.create("test_remove")
@@ -3217,7 +3218,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
             self.failUnlessEqual(rec["configured-sharebytes"], 0)
 
             def count_leases(si):
-                return len(list(ss.get_leases(si)))
+                return len(ss.get_leases(si))
             self.failUnlessEqual(count_leases(immutable_si_0), 1)
             self.failUnlessEqual(count_leases(immutable_si_1), 2)
             self.failUnlessEqual(count_leases(mutable_si_2), 1)
@@ -3277,7 +3278,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(ss.get_leases(si)))
+            return len(ss.get_leases(si))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3417,7 +3418,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(ss.get_leases(si)))
+            return len(ss.get_leases(si))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3562,7 +3563,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(ss.get_leases(si)))
+            return len(ss.get_leases(si))
 
         sf0 = _get_sharefile(immutable_si_0)
         self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
@@ -3617,7 +3618,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(ss.get_leases(si)))
+            return len(ss.get_leases(si))
 
         sf0 = _get_sharefile(immutable_si_0)
         self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
