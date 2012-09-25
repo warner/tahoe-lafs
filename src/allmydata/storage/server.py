@@ -425,12 +425,12 @@ class StorageServer(service.MultiService):
                         shares[sharenum] = share
                         shares[sharenum].writev(datav, new_length)
                         account.add_share(storage_index, sharenum,
-                                          shares[sharenum].home)
+                                          shares[sharenum].get_used_space())
                     else:
                         # apply the write vector and update the lease
                         shares[sharenum].writev(datav, new_length)
-                        account.update_share(storage_index, sharenum,
-                                             shares[sharenum].home)
+                        account.mark_share_as_stable(storage_index, sharenum,
+                                                     shares[sharenum].get_used_space())
                     account.add_lease(storage_index, sharenum)
             account.commit()
 

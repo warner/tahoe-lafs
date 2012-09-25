@@ -78,6 +78,9 @@ class ShareFile:
                 raise UnknownImmutableContainerVersionError(msg)
         self._data_offset = 0xc
 
+    def get_used_space(self):
+        return get_used_space(FilePath(self.home))
+
     def unlink(self):
         os.unlink(self.home)
 
