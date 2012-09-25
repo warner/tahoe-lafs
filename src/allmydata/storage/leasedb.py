@@ -472,8 +472,9 @@ class AccountingCrawler(ShareCrawler):
         start = self.state["current-cycle-start-time"]
         now = time.time()
         h["cycle-start-finish-times"] = (start, now)
-        h["expiration-enabled"] = self._do_expire
-        h["configured-expiration-mode"] = self._expiration_policy.get_parameters()
+        ep = self.get_expiration_policy()
+        h["expiration-enabled"] = ep.is_enabled()
+        h["configured-expiration-mode"] = ep.get_parameters()
 
         s = self.state["cycle-to-date"]
 
