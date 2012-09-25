@@ -28,10 +28,11 @@ class StorageStatus(rend.Page):
 
     def render_JSON(self, req):
         req.setHeader("content-type", "text/plain")
+        accounting_crawler = self.storage.get_accounting_crawler()
         d = {"stats": self.storage.get_stats(),
              "bucket-counter": self.storage.bucket_counter.get_state(),
-             "lease-checker": self.storage.lease_checker.get_state(),
-             "lease-checker-progress": self.storage.lease_checker.get_progress(),
+             "lease-checker": accounting_crawler.get_state(),
+             "lease-checker-progress": accounting_crawler.get_progress(),
              }
         return simplejson.dumps(d, indent=1) + "\n"
 
@@ -159,7 +160,7 @@ class StorageStatus(rend.Page):
         return ctx.tag[self.format_crawler_progress(p)]
 
     def render_lease_current_cycle_results(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         p = lc.get_progress()
         if not p["cycle-in-progress"]:
             return ""
@@ -216,7 +217,7 @@ class StorageStatus(rend.Page):
         return ctx.tag["Current cycle:", p]
 
     def render_lease_last_cycle_results(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         h = lc.get_state()["history"]
         if not h:
             return ""
