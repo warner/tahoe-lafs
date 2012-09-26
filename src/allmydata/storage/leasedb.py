@@ -572,11 +572,8 @@ class AccountingCrawler(ShareCrawler):
 
         lah = so_far["lease-age-histogram"]
         so_far["lease-age-histogram"] = self.convert_lease_age_histogram(lah)
-        so_far["expiration-enabled"] = self.expiration_enabled
-        so_far["configured-expiration-mode"] = (self.mode,
-                                                self.override_lease_duration,
-                                                self.cutoff_date,
-                                                self.sharetypes_to_expire)
+        so_far["expiration-enabled"] = self._expiration_policy.is_enabled()
+        so_far["configured-expiration-mode"] = self._expiration_policy.get_parameters()
 
         so_far_sr = so_far["space-recovered"]
         remaining_sr = {}
