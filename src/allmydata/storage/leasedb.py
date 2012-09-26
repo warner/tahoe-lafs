@@ -173,7 +173,7 @@ class LeaseDB:
         self._dirty = True
         self._cursor.execute("UPDATE `shares` SET `state`=?, `used_space`=?"
                              " WHERE `storage_index`=? AND `shnum`=? AND `state`=?",
-                             (STATE_STABLE, used_space, si_s, shnum, STATE_GOING))
+                             (STATE_STABLE, used_space, si_s, shnum, STATE_COMING))
         if self._cursor.rowcount < 1:
             raise NonExistentShareError()
 
