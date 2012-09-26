@@ -54,12 +54,13 @@ class Account(Referenceable):
         renewal_time = time.time()
         return (renewal_time, renewal_time + 31*24*60*60)
 
-    # immutable.BucketWriter.close() does add_share() and add_lease()
+    # immutable.BucketWriter.close() does:
+    #  add_share(), add_lease(), mark_share_as_stable()
 
     # mutable_writev() does:
-    #  deleted shares: remove_share_and_leases()
-    #  new shares: add_share(), add_lease()
-    #  changed shares: update_share(), add_lease()
+    #  deleted shares: mark_share_as_going(), remove_share_and_leases()
+    #  new shares: add_share(), add_lease(), mark_share_as_stable()
+    #  changed shares: change_share_space(), add_lease()
 
     def add_share(self, storage_index, shnum, used_space, commit=True):
         if self.debug: print "ADD_SHARE", si_b2a(storage_index), shnum, used_space, commit
