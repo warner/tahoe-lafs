@@ -114,6 +114,8 @@ DAY = 24*60*60
 MONTH = 30*DAY
 
 class LeaseDB:
+    RETAINED_HISTORY_ENTRIES = 10
+
     STARTER_LEASE_ACCOUNTID = 1
     STARTER_LEASE_DURATION = 2*MONTH
 
@@ -290,8 +292,8 @@ class LeaseDB:
         json = simplejson.dumps(entry)
         self._cursor.execute("SELECT `cycle` FROM `crawler_history`")
         rows = self._cursor.fetchall()
-        if len(rows) > 9:
-            first_cycle_to_retain = list(sorted(rows))[-9]
+        if len(rows) >= self.RETAINED_HISTORY_ENTRIES:
+            first_cycle_to_retain = list(sorted(rows))[-(self.RETAINED_HISTORY_ENTRIES - 1)]
             self._cursor.execute("DELETE FROM `crawler_history` WHERE cycle < ?",
                                  (first_cycle_to_retain,))
 
