@@ -73,7 +73,8 @@ class Crawler(unittest.TestCase):
         self.crawler = AccountingCrawler(FakeStorageServer(self.sharedir), self.statefile, self.leasedb)
         return (self.leasedb, self.crawler)
 
-    def add_external_share(self, si_s, shnum):
+    def add_external_share(self, shareid):
+        (si_s, shnum) = shareid
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
@@ -87,7 +88,8 @@ class Crawler(unittest.TestCase):
         f.close()
         return sharefile
 
-    def add_share(self, leasedb, si_s, shnum):
+    def add_share(self, leasedb, shareid):
+        (si_s, shnum) = shareid
         self.add_external_share()
         prefix = si_s[:2]
         leasedb.add_new_share(prefix, si_s, shnum, 20)
@@ -95,7 +97,8 @@ class Crawler(unittest.TestCase):
         leasedb.add_or_renew_leases(si_s, shnum, OWNER, EXPIRETIME)
         leasedb.commit()
 
-    def delete_external_share(self, si_s, shnum):
+    def delete_external_share(self, shareid):
+        (si_s, shnum) = shareid
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
@@ -107,14 +110,16 @@ class Crawler(unittest.TestCase):
         except EnvironmentError:
             pass
 
-    def have_sharefile(self, si_s, shnum):
+    def have_sharefile(self, shareid):
+        (si_s, shnum) = shareid
         prefix = si_s[:2]
         prefixdir = os.path.join(self.sharedir, prefix)
         bucketdir = os.path.join(prefixdir, si_s)
         sharefile = os.path.join(bucketdir, str(shnum))
         return os.path.exists(sharefile)
 
-    def expire_share(self, si_s, shnum):
+    def expire_share(self, shareid):
+        (si_s, shnum) = shareid
         # accelerated expiration of all leases for this share
         c = self.leasedb._cursor
         c.execute("UPDATE `leases` SET `expiration_time`=0"
@@ -136,14 +141,14 @@ class Crawler(unittest.TestCase):
         # first, find all shares that have starter leases (including those
         # with additional non-starter leases)
         c = self.leasedb._cursor
-        c = c.execute("SELECT UNIQUE `share_id` FROM `leases`"
+        c = c.execute("SELECT `storage_index`, `shnum` FROM `leases`"
                       " WHERE `account_id` = 1")
-        have_starter = set([row[0] for row in c.fetchall()])
-        c = c.execute("SELECT UNIQUE `share_id` FROM `leases`")
-        #have_leases = set([row[0] for row in c.fetchall()])
-        c = c.execute("SELECT UNIQUE `share_id` FROM `leases`"
+        have_starter = set([list(row) for row in c.fetchall()])
+        c = c.execute("SELECT `storage_index`, `shnum` FROM `leases`")
+        #have_leases = set([list(row) for row in c.fetchall()])
+        c = c.execute("SELECT `storage_index`, `shnum` FROM `leases`"
                       " WHERE `account_id` != 1")
-        have_non_starter = set([row[0] for row in c.fetchall()])
+        have_non_starter = set([list(row) for row in c.fetchall()])
         have_only_starter = have_starter - have_non_starter
         live = have_non_starter
         c = c.execute("SELECT UNIQUE `id` FROM `shares`"
