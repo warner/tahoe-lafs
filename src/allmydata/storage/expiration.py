@@ -28,6 +28,7 @@ class ExpirationPolicy(object):
             self._sharetypes_to_expire = ()
 
     def should_expire(self, current_time, renewal_time, expiration_time, sharetype):
+        # XXX should reexpress this as an SQL DELETE that deletes all expired shares at once.
         if sharetype not in self._sharetypes_to_expire:
             return False
 
