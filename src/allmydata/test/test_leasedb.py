@@ -131,8 +131,8 @@ class Crawler(unittest.TestCase):
         self.leasedb._db.commit()
 
     def remove_garbage(self):
-        # this returns the first bunch of garbage-flagged shares
-        shareids = self.leasedb.get_expired_shareids(limit=100)
+        # this returns the first bunch of shares without leases
+        shareids = self.leasedb.get_unleased_shares(limit=100)
         #self.failUnlessEqual(shareids, [shareid])
         # this does a synchronous delete of the given expired shares, and
         # removes their entries from the 'shares' table
@@ -154,9 +154,7 @@ class Crawler(unittest.TestCase):
         have_non_starter = set([list(row) for row in c.fetchall()])
         have_only_starter = have_starter - have_non_starter
         live = have_non_starter
-        c = c.execute("SELECT UNIQUE `id` FROM `shares`"
-                      " WHERE `garbage` == 1")
-        garbage = set([row[0] for row in c.fetchall()])
+        garbage = set(self.leasedb.get_unleased_shares())
         return (have_only_starter, live, garbage)
 
     def check_shares(self, starter=set(), live=set(), garbage=set()):

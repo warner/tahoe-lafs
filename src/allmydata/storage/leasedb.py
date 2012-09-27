@@ -262,6 +262,27 @@ class LeaseDB:
             return LeaseInfo(storage_index, int(shnum), int(account_id), float(renewal_time), float(expiration_time))
         return map(_to_LeaseInfo, rows)
 
+    def get_unleased_shares(self, limit=None):
+        # This would be simpler, but it doesn't work because 'NOT IN' doesn't support multiple columns.
+        #query = ("SELECT `storage_index`, `shnum` FROM `shares`"
+        #         " WHERE (`storage_index`, `shnum`) NOT IN (SELECT DISTINCT `storage_index`, `shnum` FROM `leases`)")
+
+        # This "negative join" should be equivalent.
+        query = ("SELECT DISTINCT s.storage_index, s.shnum FROM `shares` s LEFT JOIN `leases` l"
+                 " ON (s.storage_index = l.storage_index AND s.shnum = l.shnum)"
+                 " WHERE l.storage_index IS NULL")
+
+        if limit is None:
+            self._cursor.execute(query)
+        else:
+            self._cursor.execute(query + " LIMIT ?", (limit,))
+
+        rows = self._cursor.fetchall()
+        return map(list, rows)
+
+    def remove_expired_leases(self, expiration_policy):
+        raise NotImplementedError
+
     # history
 
     def add_history_entry(self, cycle, entry):
