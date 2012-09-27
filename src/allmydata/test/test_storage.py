@@ -1185,13 +1185,13 @@ class MutableServer(unittest.TestCase):
         data = "".join([ ("%d" % i) * 10 for i in range(10) ])
         write = ss.remote_slot_testv_and_readv_and_writev
         read = ss.remote_slot_readv
-        rc = write("si1", secrets(0), {0: ([], [(0,data)], None)}, [])
+        rc = write("si0", secrets(0), {0: ([], [(0,data)], None)}, [])
         self.failUnlessEqual(rc, (True, {}))
 
         # create a random non-numeric file in the bucket directory, to
         # exercise the code that's supposed to ignore those.
         bucket_dir = os.path.join(self.workdir("test_leases"),
-                                  "shares", storage_index_to_dir("si1"))
+                                  "shares", storage_index_to_dir("si0"))
         f = open(os.path.join(bucket_dir, "ignore_me.txt"), "w")
         f.write("you ought to be ignoring me\n")
         f.close()
