@@ -134,9 +134,9 @@ class Crawler(unittest.TestCase):
         # this returns the first bunch of shares without leases
         shareids = self.leasedb.get_unleased_shares(limit=100)
         #self.failUnlessEqual(shareids, [shareid])
-        # this does a synchronous delete of the given expired shares, and
+        # this does an asynchronous delete of the given expired shares, and
         # removes their entries from the 'shares' table
-        self.crawler.remove_expired_shareids(shareids)
+        return self.crawler.remove_unleased_shares(shareids)
 
     def count_shares(self):
         # query DB
@@ -191,18 +191,20 @@ class Crawler(unittest.TestCase):
         def _then4(ign):
             self.check_shares(starter=set([AB]), live=set([FG]))
             self.expire_share(AB)
-            # this deletes all expired leases, sets the 'garbage' flag on all
-            # shares without leases. We assume DB operations are fast, but
-            # file-io is slow.
+            # This deletes all expired leases. We assume DB operations are
+            # synchronous, but removal of share files does not occur until
+            # remove_unleased_shares is called.
             self.leasedb.remove_expired_leases()
             self.failUnless(self.have_sharefile(AB))
             self.check_shares(live=set([FG]), garbage=set([AB]))
-            self.remove_garbage()
+            return self.remove_garbage()
+        d.addCallback(_then4)
+        def _then5(ign):
             self.failIf(self.have_sharefile(AB))
             self.check_shares(live=set([FG]))
             return c.crawl()
         d.addCallback(_then4)
-        def _then5(ign):
+        def _then6(ign):
             self.check_shares(live=set([FG]))
         d.addCallback(_then5)
 
