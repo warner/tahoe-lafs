@@ -22,11 +22,31 @@ from allmydata.storage.common import si_a2b, si_b2a
 class BadAccountName(Exception):
     pass
 
+
+class ShareAlreadyInDatabaseError(Exception):
+    def __init__(self, si_s, shnum):
+        Exception.__init__(self, si_s, shnum)
+        self.si_s = si_s
+        self.shnum = shnum
+
+    def __str__(self):
+        return "ShareAlreadyInDatabaseError: SI=%r shnum=%r is already in `shares` table" % (self.si_s, self.shnum)
+
+
 class NonExistentShareError(Exception):
-    pass
+    def __init__(self, si_s, shnum):
+        Exception.__init__(self, si_s, shnum)
+        self.si_s = si_s
+        self.shnum = shnum
+
+    def __str__(self):
+        return "NonExistentShareError: can't find SI=%r shnum=%r in `shares` table" % (self.si_s, self.shnum)
+
 
 class NonExistentLeaseError(Exception):
+    # FIXME not used
     pass
+
 
 class LeaseInfo(object):
     def __init__(self, storage_index, shnum, owner_num, renewal_time, expiration_time):
@@ -156,7 +176,8 @@ class LeaseDB:
             # and the crawler may not have noticed it yet, so test for an existing
             # entry and use it if present (and check the code paths carefully to
             # make sure that doesn't get too weird).
-            raise
+            # FIXME: check that the IntegrityError is really due to the share already existing.
+            raise ShareAlreadyInDatabaseError(si_s, shnum)
 
     def add_starter_lease(self, storage_index, shnum):
         si_s = si_b2a(storage_index)
@@ -179,7 +200,7 @@ class LeaseDB:
                              " WHERE `storage_index`=? AND `shnum`=? AND `state`=?",
                              (STATE_STABLE, used_space, si_s, shnum, STATE_COMING))
         if self._cursor.rowcount < 1:
-            raise NonExistentShareError()
+            raise NonExistentShareError(si_s, shnum)
 
     def mark_share_as_going(self, storage_index, shnum):
         """
@@ -193,7 +214,7 @@ class LeaseDB:
                              " WHERE `storage_index`=? AND `shnum`=? AND `state`=?",
                              (STATE_GOING, si_s, shnum, STATE_STABLE))
         if self._cursor.rowcount < 1:
-            raise NonExistentShareError()
+            raise NonExistentShareError(si_s, shnum)
 
     def remove_deleted_share(self, storage_index, shnum):
         si_s = si_b2a(storage_index)
@@ -215,7 +236,7 @@ class LeaseDB:
                              " WHERE `storage_index`=? AND `shnum`=?",
                              (used_space, si_s, shnum))
         if self._cursor.rowcount < 1:
-            raise NonExistentShareError()
+            raise NonExistentShareError(si_s, shnum)
 
     # lease management
 
