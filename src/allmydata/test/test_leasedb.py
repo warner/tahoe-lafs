@@ -4,6 +4,7 @@ from twisted.trial import unittest
 from twisted.internet import defer
 from allmydata.util import fileutil
 from allmydata.storage.leasedb import LeaseDB, AccountingCrawler
+from allmydata.storage.expiration import ExpirationPolicy
 
 
 BASE_ACCOUNTS = set([(0,u"anonymous"), (1,u"starter")])
@@ -70,7 +71,9 @@ class Crawler(unittest.TestCase):
         fileutil.make_dirs(self.sharedir)
         self.statefile = os.path.join(storedir, "leasedb_crawler.state")
         self.leasedb = LeaseDB(dbfilename)
+        ep = ExpirationPolicy(enabled=True, mode="age", override_lease_duration=2000)
         self.crawler = AccountingCrawler(FakeStorageServer(self.sharedir), self.statefile, self.leasedb)
+        self.crawler.set_expiration_policy(ep)
         return (self.leasedb, self.crawler)
 
     def add_external_share(self, shareid):
