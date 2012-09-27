@@ -221,7 +221,11 @@ class LeaseDB:
 
     def add_or_renew_leases(self, storage_index, shnum, ownerid,
                             renewal_time, expiration_time):
-        # shnum=None means renew leases on all shares
+        """
+        shnum=None means renew leases on all shares; do nothing if there are no shares for this storage_index in the `shares` table.
+
+        Raises NonExistentShareError if a specific shnum is given and that share does not exist in the `shares` table.
+        """
         si_s = si_b2a(storage_index)
         if self.debug: print "ADD_OR_RENEW_LEASES", si_s, shnum, ownerid, renewal_time, expiration_time
         self._dirty = True
@@ -229,16 +233,18 @@ class LeaseDB:
             self._cursor.execute("SELECT `storage_index`, `shnum` FROM `shares`"
                                  " WHERE `storage_index`=?",
                                  (si_s,))
+            rows = self._cursor.fetchall()
         else:
             self._cursor.execute("SELECT `storage_index`, `shnum` FROM `shares`"
                                  " WHERE `storage_index`=? AND `shnum`=?",
                                  (si_s, shnum))
-        rows = self._cursor.fetchall()
-        if not rows:
-            raise NonExistentShareError("can't find SI=%r shnum=%r in `shares` table"
-                                        % (si_s, shnum))
+            rows = self._cursor.fetchall()
+            if not rows:
+                raise NonExistentShareError(si_s, shnum)
+
         for (found_si_s, found_shnum) in rows:
             _assert(si_s == found_si_s, si_s=si_s, found_si_s=found_si_s)
+            # XXX can we simplify this by using INSERT OR REPLACE?
             self._cursor.execute("SELECT `id` FROM `leases`"
                                  " WHERE `storage_index`=? AND `shnum`=? AND `account_id`=?",
                                  (si_s, found_shnum, ownerid))
