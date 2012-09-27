@@ -16,7 +16,7 @@ from allmydata.storage.immutable import BucketWriter, BucketReader
 from allmydata.storage.common import DataTooLargeError, storage_index_to_dir, \
      UnknownMutableContainerVersionError, UnknownImmutableContainerVersionError
 from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.leasedb import AccountingCrawler, LeaseInfo
+from allmydata.storage.leasedb import AccountingCrawler
 from allmydata.storage.expiration import ExpirationPolicy
 from allmydata.immutable.layout import WriteBucketProxy, WriteBucketProxy_v2, \
      ReadBucketProxy
@@ -69,12 +69,6 @@ class BucketTestMixin:
         pass
     def count(self, name, delta=1):
         pass
-
-    def make_lease(self):
-        owner_num = 0
-        renewal_time = time.time()
-        expiration_time = renewal_time + 5000
-        return LeaseInfo(owner_num, renewal_time, expiration_time)
 
 
 class Bucket(BucketTestMixin, unittest.TestCase):

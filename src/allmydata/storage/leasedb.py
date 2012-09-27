@@ -29,7 +29,9 @@ class NonExistentLeaseError(Exception):
     pass
 
 class LeaseInfo(object):
-    def __init__(self, owner_num, renewal_time, expiration_time):
+    def __init__(self, storage_index, shnum, owner_num, renewal_time, expiration_time):
+        self.storage_index = storage_index
+        self.shnum = shnum
         self.owner_num = owner_num
         self.renewal_time = renewal_time
         self.expiration_time = expiration_time
@@ -250,14 +252,14 @@ class LeaseDB:
 
     def get_leases(self, storage_index, ownerid):
         si_s = si_b2a(storage_index)
-        self._cursor.execute("SELECT `id` FROM `leases`"
+        self._cursor.execute("SELECT `shnum`, `account_id`, `renewal_time`, `expiration_time` FROM `leases`"
                              " WHERE `storage_index`=? AND `account_id`=?",
                              (si_s, ownerid))
         rows = self._cursor.fetchall()
         def _to_LeaseInfo(row):
             print "row:", row
-            (_id, _storage_index, _shnum, account_id, renewal_time, expiration_time) = tuple(row)
-            return LeaseInfo(account_id, renewal_time, expiration_time)
+            (shnum, account_id, renewal_time, expiration_time) = tuple(row)
+            return LeaseInfo(storage_index, int(shnum), int(account_id), float(renewal_time), float(expiration_time))
         return map(_to_LeaseInfo, rows)
 
     # history
