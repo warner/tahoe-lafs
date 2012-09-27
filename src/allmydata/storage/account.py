@@ -119,7 +119,8 @@ class Account(Referenceable):
         return self.server.client_get_version(self)
 
     # all other RIStorageServer methods should pass through to self.server
-    # but add owner_num=
+    # but (except for remote_advise_corrupt_share) add the account as a final
+    # argument.
 
     def remote_allocate_buckets(self, storage_index, renew_secret, cancel_secret,
                                 sharenums, allocated_size, canary):
@@ -150,8 +151,9 @@ class Account(Referenceable):
         return self.server.client_slot_readv(storage_index, shares, readv, self)
 
     def remote_advise_corrupt_share(self, share_type, storage_index, shnum, reason):
+        # this doesn't use the account.
         return self.server.client_advise_corrupt_share(
-            share_type, storage_index, shnum, reason, self)
+            share_type, storage_index, shnum, reason)
 
 
     # these are the non-RIStorageServer methods, some remote, some local

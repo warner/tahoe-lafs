@@ -235,7 +235,7 @@ class BucketReader(Referenceable):
         return data
 
     def remote_advise_corrupt_share(self, reason):
-        return self.ss.remote_advise_corrupt_share("immutable",
+        return self.ss.client_advise_corrupt_share("immutable",
                                                    self.storage_index,
                                                    self.shnum,
                                                    reason)
