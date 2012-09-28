@@ -479,8 +479,7 @@ class StorageServer(service.MultiService):
         self.add_latency("readv", time.time() - start)
         return datavs
 
-    def client_advise_corrupt_share(self, share_type, storage_index, shnum,
-                                    reason, account):
+    def client_advise_corrupt_share(self, share_type, storage_index, shnum, reason):
         fileutil.make_dirs(self.corruption_advisory_dir)
         now = time_format.iso_utc(sep="T")
         si_s = si_b2a(storage_index)
