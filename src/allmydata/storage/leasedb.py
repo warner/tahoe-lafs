@@ -30,7 +30,7 @@ class ShareAlreadyInDatabaseError(Exception):
         self.shnum = shnum
 
     def __str__(self):
-        return "ShareAlreadyInDatabaseError: SI=%r shnum=%r is already in `shares` table" % (self.si_s, self.shnum)
+        return "SI=%r shnum=%r is already in `shares` table" % (self.si_s, self.shnum)
 
 
 class NonExistentShareError(Exception):
@@ -40,7 +40,7 @@ class NonExistentShareError(Exception):
         self.shnum = shnum
 
     def __str__(self):
-        return "NonExistentShareError: can't find SI=%r shnum=%r in `shares` table" % (self.si_s, self.shnum)
+        return "can't find SI=%r shnum=%r in `shares` table" % (self.si_s, self.shnum)
 
 
 class NonExistentLeaseError(Exception):
@@ -313,7 +313,7 @@ class LeaseDB:
             self._cursor.execute(query + " LIMIT ?", (limit,))
 
         rows = self._cursor.fetchall()
-        return map(list, rows)
+        return map(tuple, rows)
 
     def remove_expired_leases(self, expiration_policy):
         raise NotImplementedError
