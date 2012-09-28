@@ -271,6 +271,12 @@ class LeaseDB:
                                  (si_s, found_shnum, ownerid))
             row = self._cursor.fetchone()
             if row:
+                # Note that unlike the pre-LeaseDB code, this allows leases to be backdated.
+                # There is currently no way for a client to specify lease duration, and so
+                # backdating can only happen in normal operation if there is a timequake on
+                # the server and time goes backward by more than 31 days. This needs to be
+                # revisited for ticket #1816, which would allow the client to request a lease
+                # duration.
                 leaseid = row[0]
                 self._cursor.execute("UPDATE `leases` SET `renewal_time`=?, `expiration_time`=?"
                                      " WHERE `id`=?",
