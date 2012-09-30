@@ -1191,19 +1191,21 @@ class MutableServer(unittest.TestCase):
         # create a random non-numeric file in the bucket directory, to
         # exercise the code that's supposed to ignore those.
         bucket_dir = os.path.join(self.workdir("test_leases"),
-                                  "shares", storage_index_to_dir("si0"))
+                                  "shares", storage_index_to_dir("six"))
+        os.makedirs(bucket_dir)
         f = open(os.path.join(bucket_dir, "ignore_me.txt"), "w")
         f.write("you ought to be ignoring me\n")
         f.close()
 
-        #s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
+        s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
+        s0.create("nodeid", secrets(0)[0])
 
-        ss.add_share("si1", 0, 0)
+        ss.add_share("six", 0, 0)
         # adding a share does not immediately add a lease
-        self.failUnlessEqual(len(ss.get_leases("si1")), 0)
+        self.failUnlessEqual(len(ss.get_leases("six")), 0)
 
-        ss.add_lease("si1", 0)
-        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
+        ss.add_or_renew_default_lease("six", 0)
+        self.failUnlessEqual(len(ss.get_leases("six")), 1)
 
         # add-lease on a missing storage index is silently ignored
         self.failUnlessEqual(ss.remote_add_lease("si18", "", ""), None)
