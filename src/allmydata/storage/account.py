@@ -68,11 +68,14 @@ class Account(Referenceable):
         if commit:
             self._leasedb.commit()
 
-    def add_lease(self, storage_index, shnum, commit=True):
-        if self.debug: print "ADD_LEASE", si_b2a(storage_index), shnum, commit
+    def add_or_renew_default_lease(self, storage_index, shnum, commit=True):
         renewal_time, expiration_time = self.get_renewal_and_expiration_times()
-        self._leasedb.add_or_renew_leases(storage_index, shnum,
-                                          self.owner_num, renewal_time, expiration_time)
+        return self.add_or_renew_lease(storage_index, shnum, renewal_time, expiration_time, commit=commit)
+
+    def add_or_renew_lease(self, storage_index, shnum, renewal_time, expiration_time, commit=True):
+        if self.debug: print "ADD_OR_RENEW_LEASE", si_b2a(storage_index), shnum, commit
+        self._leasedb.add_or_renew_leases(storage_index, shnum, self.owner_num,
+                                          renewal_time, expiration_time)
         if commit:
             self._leasedb.commit()
 

@@ -3228,19 +3228,6 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         d.addCallback(_check_json)
         return d
 
-    def backdate_lease(self, sf, renew_secret, new_expire_time):
-        # ShareFile.renew_lease ignores attempts to back-date a lease (i.e.
-        # "renew" a lease with a new_expire_time that is older than what the
-        # current lease has), so we have to reach inside it.
-        for i,lease in enumerate(sf.get_leases()):
-            if lease.renew_secret == renew_secret:
-                lease.expiration_time = new_expire_time
-                f = open(sf.home, 'rb+')
-                sf._write_lease_record(f, i, lease)
-                f.close()
-                return
-        raise IndexError("unable to renew non-existent lease")
-
     def test_expire_age(self):
         basedir = "storage/LeaseCrawler/expire_age"
         fileutil.make_dirs(basedir)
@@ -3249,6 +3236,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         ep = ExpirationPolicy(enabled=True, mode="age", override_lease_duration=2000)
         server = InstrumentedStorageServer(basedir, "\x00" * 20, expiration_policy=ep)
         ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
 
         # make it start sooner than usual.
         lc = server.get_accounting_crawler()
@@ -3284,21 +3272,17 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         # deleted and others stay alive (with one remaining lease)
         now = time.time()
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], now - 1000)
-        sf0_size = os.stat(sf0.home).st_size
+        ss.add_or_renew_lease(immutable_si_0,  0, now - 1000, now - 1000)
+        sf0_size = _get_sharefile(immutable_si_0).get_size()
 
         # immutable_si_1 gets an extra lease
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], now - 1000)
+        ss2.add_or_renew_lease(immutable_si_1, 0, now - 1000, now - 1000)
 
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], now - 1000)
-        sf2_size = os.stat(sf2.home).st_size
+        ss.add_or_renew_lease(mutable_si_2,    0, now - 1000, now - 1000)
+        sf2_size = _get_sharefile(mutable_si_2).get_size()
 
         # mutable_si_3 gets an extra lease
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], now - 1000)
+        ss2.add_or_renew_lease(mutable_si_3,   0, now - 1000, now - 1000)
 
         server.setServiceParent(self.s)
 
@@ -3389,6 +3373,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then)
         server = InstrumentedStorageServer(basedir, "\x00" * 20, expiration_policy=ep)
         ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
 
         # make it start sooner than usual.
         lc = server.get_accounting_crawler()
@@ -3416,33 +3401,27 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         self.failUnlessEqual(count_shares(mutable_si_3), 1)
         self.failUnlessEqual(count_leases(mutable_si_3), 2)
 
-        # artificially crank back the expiration time on the first lease of
-        # each share, to make it look like was renewed 3000s ago. To achieve
-        # this, we need to set the expiration time to now-3000+31days. This
-        # will change when the lease format is improved to contain both
-        # create/renew time and duration.
-        new_expiration_time = now - 3000 + 31*24*60*60
+        # artificially crank back the renewal time on the first lease of each
+        # share to 3000s ago, and set the expiration time to 31 days later.
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         # Some shares have an extra lease which is set to expire at the
         # default time in 31 days from now (age=31days). We then run the
         # crawler, which will expire the first lease, making some shares get
         # deleted and others stay alive (with one remaining lease)
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf0_size = os.stat(sf0.home).st_size
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
+        sf0_size = _get_sharefile(immutable_si_0).get_size()
 
         # immutable_si_1 gets an extra lease
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
 
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf2_size = os.stat(sf2.home).st_size
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+        sf2_size = _get_sharefile(mutable_si_2).get_size()
 
         # mutable_si_3 gets an extra lease
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
 
         server.setServiceParent(self.s)
 
@@ -3536,6 +3515,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then, sharetypes=("immutable",))
         server = StorageServer(basedir, "\x00" * 20, expiration_policy=ep)
         ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
         lc = server.get_accounting_crawler()
         lc.slow_start = 0
         webstatus = StorageStatus(ss)
@@ -3543,7 +3523,8 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         self.make_shares(ss)
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         # set all leases to be expirable
-        new_expiration_time = now - 3000 + 31*24*60*60
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         def count_shares(si):
             return len(list(ss._iter_share_files(si)))
@@ -3552,16 +3533,15 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def count_leases(si):
             return len(ss.get_leases(si))
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
-        self.backdate_lease(sf1, self.renew_secrets[2], new_expiration_time)
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
-        self.backdate_lease(sf3, self.renew_secrets[5], new_expiration_time)
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(immutable_si_1,  0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_3,    0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
 
         server.setServiceParent(self.s)
         def _wait():
@@ -3591,6 +3571,7 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then, sharetypes=("mutable",))
         server = StorageServer(basedir, "\x00" * 20, expiration_policy=ep)
         ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
         lc = server.get_accounting_crawler()
         lc.slow_start = 0
         webstatus = StorageStatus(ss)
@@ -3598,7 +3579,8 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         self.make_shares(ss)
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         # set all leases to be expirable
-        new_expiration_time = now - 3000 + 31*24*60*60
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         def count_shares(si):
             return len(list(ss._iter_share_files(si)))
@@ -3607,16 +3589,15 @@ class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixi
         def count_leases(si):
             return len(ss.get_leases(si))
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
-        self.backdate_lease(sf1, self.renew_secrets[2], new_expiration_time)
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
-        self.backdate_lease(sf3, self.renew_secrets[5], new_expiration_time)
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(immutable_si_1,  0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_3,    0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
 
         server.setServiceParent(self.s)
         def _wait():

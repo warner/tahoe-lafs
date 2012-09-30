@@ -179,7 +179,7 @@ class BucketWriter(Referenceable):
 
         filelen = get_used_space(FilePath(self.finalhome))
         self.ss.bucket_writer_closed(self, filelen)
-        self._account.add_lease(self._storage_index, self._shnum)
+        self._account.add_or_renew_default_lease(self._storage_index, self._shnum)
         self._account.mark_share_as_stable(self._storage_index, self._shnum, filelen)
         self.ss.add_latency("close", time.time() - start)
         self.ss.count("close")

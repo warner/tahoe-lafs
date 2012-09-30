@@ -431,7 +431,7 @@ class StorageServer(service.MultiService):
                         shares[sharenum].writev(datav, new_length)
                         account.mark_share_as_stable(storage_index, sharenum,
                                                      shares[sharenum].get_used_space())
-                    account.add_lease(storage_index, sharenum)
+                    account.add_or_renew_default_lease(storage_index, sharenum)
             account.commit()
 
             if new_length == 0:
