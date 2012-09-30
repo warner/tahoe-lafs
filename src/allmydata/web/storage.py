@@ -3,7 +3,7 @@ import time, simplejson
 from nevow import rend, tags as T, inevow
 from allmydata.web.common import getxmlfile, abbreviate_time, get_arg
 from allmydata.util.abbreviate import abbreviate_space
-from allmydata.util import time_format, idlib
+from allmydata.util import idlib
 
 def remove_prefix(s, prefix):
     if not s.startswith(prefix):
@@ -28,10 +28,11 @@ class StorageStatus(rend.Page):
 
     def render_JSON(self, req):
         req.setHeader("content-type", "text/plain")
+        accounting_crawler = self.storage.get_accounting_crawler()
         d = {"stats": self.storage.get_stats(),
              "bucket-counter": self.storage.bucket_counter.get_state(),
-             "lease-checker": self.storage.lease_checker.get_state(),
-             "lease-checker-progress": self.storage.lease_checker.get_progress(),
+             "lease-checker": accounting_crawler.get_state(),
+             "lease-checker-progress": accounting_crawler.get_progress(),
              }
         return simplejson.dumps(d, indent=1) + "\n"
 
@@ -129,31 +130,13 @@ class StorageStatus(rend.Page):
                     cycletime_s]
 
     def render_lease_expiration_enabled(self, ctx, data):
-        lc = self.storage.lease_checker
-        if lc.expiration_enabled:
-            return ctx.tag["Enabled: expired leases will be removed"]
-        else:
-            return ctx.tag["Disabled: scan-only mode, no leases will be removed"]
+        ep = self.storage.get_expiration_policy()
+        return ctx.tag[ep.describe_enabled()]
 
     def render_lease_expiration_mode(self, ctx, data):
-        lc = self.storage.lease_checker
-        if lc.mode == "age":
-            if lc.override_lease_duration is None:
-                ctx.tag["Leases will expire naturally, probably 31 days after "
-                        "creation or renewal."]
-            else:
-                ctx.tag["Leases created or last renewed more than %s ago "
-                        "will be considered expired."
-                        % abbreviate_time(lc.override_lease_duration)]
-        else:
-            assert lc.mode == "cutoff-date"
-            localizedutcdate = time.strftime("%d-%b-%Y", time.gmtime(lc.cutoff_date))
-            isoutcdate = time_format.iso_utc_date(lc.cutoff_date)
-            ctx.tag["Leases created or last renewed before %s (%s) UTC "
-                    "will be considered expired." % (isoutcdate, localizedutcdate, )]
-        if len(lc.mode) > 2:
-            ctx.tag[" The following sharetypes will be expired: ",
-                    " ".join(sorted(lc.sharetypes_to_expire)), "."]
+        ep = self.storage.get_expiration_policy()
+        ctx.tag[ep.describe_expiration()]
+        ctx.tag[ep.describe_sharetypes()]
         return ctx.tag
 
     def format_recovered(self, sr, a):
@@ -172,12 +155,12 @@ class StorageStatus(rend.Page):
                 )
 
     def render_lease_current_cycle_progress(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         p = lc.get_progress()
         return ctx.tag[self.format_crawler_progress(p)]
 
     def render_lease_current_cycle_results(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         p = lc.get_progress()
         if not p["cycle-in-progress"]:
             return ""
@@ -234,7 +217,7 @@ class StorageStatus(rend.Page):
         return ctx.tag["Current cycle:", p]
 
     def render_lease_last_cycle_results(self, ctx, data):
-        lc = self.storage.lease_checker
+        lc = self.storage.get_accounting_crawler()
         h = lc.get_state()["history"]
         if not h:
             return ""

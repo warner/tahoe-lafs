@@ -9,6 +9,7 @@ from pycryptopp.publickey import rsa
 
 import allmydata
 from allmydata.storage.server import StorageServer
+from allmydata.storage.expiration import ExpirationPolicy
 from allmydata import storage_client
 from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
@@ -280,6 +281,9 @@ class Client(node.Node, pollmixin.PollMixin):
             sharetypes.append("mutable")
         expiration_sharetypes = tuple(sharetypes)
 
+        expiration_policy = ExpirationPolicy(enabled=expire, mode=mode, override_lease_duration=o_l_d,
+                                             cutoff_date=cutoff_date, sharetypes=expiration_sharetypes)
+
         ss = StorageServer(storedir, self.nodeid,
                            reserved_space=reserved,
                            discard_storage=discard,
@@ -289,12 +293,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.add_service(ss)
 
         self.accountant = ss.get_accountant()
-        self.accountant.set_expiration_policy(
-            expiration_enabled=expire,
-            expiration_mode=mode,
-            expiration_override_lease_duration=o_l_d,
-            expiration_cutoff_date=cutoff_date,
-            expiration_sharetypes=expiration_sharetypes)
+        self.accountant.set_expiration_policy(expiration_policy)
         accountant_window = self.accountant.get_accountant_window(self.tub)
 
 

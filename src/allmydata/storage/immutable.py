@@ -1,10 +1,12 @@
-import os, stat, struct, time
+import os, struct, time
 
+from twisted.python.filepath import FilePath
 from foolscap.api import Referenceable
 
 from zope.interface import implements
 from allmydata.interfaces import RIBucketWriter, RIBucketReader
 from allmydata.util import base32, fileutil, log
+from allmydata.util.fileutil import get_used_space
 from allmydata.util.assertutil import precondition
 from allmydata.storage.common import UnknownImmutableContainerVersionError, \
      DataTooLargeError
@@ -76,8 +78,14 @@ class ShareFile:
                 raise UnknownImmutableContainerVersionError(msg)
         self._data_offset = 0xc
 
+    def get_used_space(self):
+        return get_used_space(FilePath(self.home))
+
     def unlink(self):
         os.unlink(self.home)
+
+    def get_size(self):
+        return os.stat(self.home).st_size
 
     def read_share_data(self, offset, length):
         precondition(offset >= 0)
@@ -107,19 +115,21 @@ class ShareFile:
 class BucketWriter(Referenceable):
     implements(RIBucketWriter)
 
-    def __init__(self, ss, incominghome, finalhome, max_size, lease_info, canary):
+    def __init__(self, ss, account, storage_index, shnum,
+                 incominghome, finalhome, max_size, canary):
         self.ss = ss
         self.incominghome = incominghome
         self.finalhome = finalhome
         self._max_size = max_size # don't allow the client to write more than this
+        self._account = account
+        self._storage_index = storage_index
+        self._shnum = shnum
         self._canary = canary
         self._disconnect_marker = canary.notifyOnDisconnect(self._disconnected)
         self.closed = False
         self.throw_out_all_data = False
         self._sharefile = ShareFile(incominghome, create=True, max_size=max_size)
-        # also, add our lease to the file now, so that other ones can be
-        # added by simultaneous uploaders
-        self._sharefile.add_lease(lease_info)
+        self._account.add_share(self._storage_index, self._shnum, max_size)
 
     def allocated_size(self):
         return self._max_size
@@ -167,8 +177,10 @@ class BucketWriter(Referenceable):
         self.closed = True
         self._canary.dontNotifyOnDisconnect(self._disconnect_marker)
 
-        filelen = os.stat(self.finalhome)[stat.ST_SIZE]
+        filelen = get_used_space(FilePath(self.finalhome))
         self.ss.bucket_writer_closed(self, filelen)
+        self._account.add_or_renew_default_lease(self._storage_index, self._shnum)
+        self._account.mark_share_as_stable(self._storage_index, self._shnum, filelen)
         self.ss.add_latency("close", time.time() - start)
         self.ss.count("close")
 
@@ -195,6 +207,7 @@ class BucketWriter(Referenceable):
         if not os.listdir(parentdir):
             os.rmdir(parentdir)
         self._sharefile = None
+        self._account.remove_share_and_leases(self._storage_index, self._shnum)
 
         # We are now considered closed for further writing. We must tell
         # the storage server about this so that it stops expecting us to
@@ -225,7 +238,7 @@ class BucketReader(Referenceable):
         return data
 
     def remote_advise_corrupt_share(self, reason):
-        return self.ss.remote_advise_corrupt_share("immutable",
+        return self.ss.client_advise_corrupt_share("immutable",
                                                    self.storage_index,
                                                    self.shnum,
                                                    reason)

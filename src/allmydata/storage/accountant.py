@@ -33,7 +33,7 @@ class Accountant(service.MultiService):
                                           self.storage_server, self._leasedb)
 
         crawler = AccountingCrawler(storage_server, statefile, self._leasedb)
-        self.accounting_crawler = crawler
+        self._accounting_crawler = crawler
         crawler.setServiceParent(self)
 
     def get_accountant_window(self, tub):
@@ -44,13 +44,8 @@ class Accountant(service.MultiService):
     def get_leasedb(self):
         return self._leasedb
 
-    def set_expiration_policy(self,
-                              expiration_enabled=False,
-                              expiration_mode="age",
-                              expiration_override_lease_duration=None,
-                              expiration_cutoff_date=None,
-                              expiration_sharetypes=("mutable", "immutable")):
-        pass # TODO
+    def set_expiration_policy(self, policy):
+        self._accounting_crawler.set_expiration_policy(policy)
 
     # methods used by AccountantWindow
 
@@ -66,6 +61,9 @@ class Accountant(service.MultiService):
 
     def get_anonymous_account(self):
         return self._anonymous_account
+
+    def get_accounting_crawler(self):
+        return self._accounting_crawler
 
     # methods used by admin interfaces
     def get_all_accounts(self):
