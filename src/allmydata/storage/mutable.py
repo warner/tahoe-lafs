@@ -99,6 +99,9 @@ class MutableShareFile:
     def unlink(self):
         os.unlink(self.home)
 
+    def get_size(self):
+        return os.stat(self.home).st_size
+
     def _read_data_length(self, f):
         f.seek(self.DATA_LENGTH_OFFSET)
         (data_length,) = struct.unpack(">Q", f.read(8))

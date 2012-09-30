@@ -84,6 +84,9 @@ class ShareFile:
     def unlink(self):
         os.unlink(self.home)
 
+    def get_size(self):
+        return os.stat(self.home).st_size
+
     def read_share_data(self, offset, length):
         precondition(offset >= 0)
         # reads beyond the end of the data are truncated. Reads that start
