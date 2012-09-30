@@ -1,9 +1,12 @@
 import os, struct
 
+from twisted.python.filepath import FilePath
+
 from allmydata.interfaces import BadWriteEnablerError
 from allmydata.util import idlib, log
 from allmydata.util.assertutil import precondition
 from allmydata.util.hashutil import constant_time_compare
+from allmydata.util.fileutil import get_used_space
 from allmydata.storage.common import UnknownMutableContainerVersionError, \
      DataTooLargeError
 from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
@@ -90,8 +93,14 @@ class MutableShareFile:
         # extra leases go here, none at creation
         f.close()
 
+    def get_used_space(self):
+        return get_used_space(FilePath(self.home))
+
     def unlink(self):
         os.unlink(self.home)
+
+    def get_size(self):
+        return os.stat(self.home).st_size
 
     def _read_data_length(self, f):
         f.seek(self.DATA_LENGTH_OFFSET)

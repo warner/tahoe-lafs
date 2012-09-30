@@ -15,7 +15,9 @@ from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
 from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.expirer import LeaseCheckingCrawler
+from allmydata.storage.accountant import Accountant
+from allmydata.storage.expiration import ExpirationPolicy
+
 
 # storage/
 # storage/shares/incoming
@@ -35,11 +37,13 @@ NUM_RE=re.compile("^[0-9]+$")
 class StorageServer(service.MultiService):
     implements(IStatsProducer)
     name = 'storage'
-    LeaseCheckerClass = LeaseCheckingCrawler
+    BucketCounterClass = BucketCountingCrawler
+    DEFAULT_EXPIRATION_POLICY = ExpirationPolicy(enabled=False)
 
     def __init__(self, storedir, nodeid, reserved_space=0,
                  discard_storage=False, readonly_storage=False,
-                 stats_provider=None):
+                 stats_provider=None,
+                 expiration_policy=None):
         service.MultiService.__init__(self)
         assert isinstance(nodeid, str)
         assert len(nodeid) == 20
@@ -80,6 +84,23 @@ class StorageServer(service.MultiService):
                           "cancel": [],
                           }
         self.add_bucket_counter()
+        self.init_accountant(expiration_policy or self.DEFAULT_EXPIRATION_POLICY)
+
+    def init_accountant(self, expiration_policy):
+        dbfile = os.path.join(self.storedir, "leasedb.sqlite")
+        statefile = os.path.join(self.storedir, "leasedb_crawler.state")
+        self.accountant = Accountant(self, dbfile, statefile)
+        self.accountant.set_expiration_policy(expiration_policy)
+        self.accountant.setServiceParent(self)
+
+    def get_accountant(self):
+        return self.accountant
+
+    def get_accounting_crawler(self):
+        return self.accountant.get_accounting_crawler()
+
+    def get_expiration_policy(self):
+        return self.accountant.get_accounting_crawler().get_expiration_policy()
 
     def __repr__(self):
         return "<StorageServer %s>" % (idlib.shortnodeid_b2a(self.my_nodeid),)
@@ -202,7 +223,9 @@ class StorageServer(service.MultiService):
             space += bw.allocated_size()
         return space
 
-    def client_get_version(self):
+    # these methods can be invoked by our callers
+
+    def client_get_version(self, account):
         remaining_space = self.get_available_space()
         if remaining_space is None:
             # We're on a platform that has no API to get disk stats.
@@ -230,7 +253,6 @@ class StorageServer(service.MultiService):
         bucketwriters = {} # k: shnum, v: BucketWriter
         si_dir = storage_index_to_dir(storage_index)
         si_s = si_b2a(storage_index)
-        prefix = si_s[:2]
 
         log.msg("storage: allocate_buckets %s" % si_s)
 
@@ -269,8 +291,7 @@ class StorageServer(service.MultiService):
                 pass
             elif (not limited) or (remaining_space >= max_space_per_bucket):
                 # ok! we need to create the new share file.
-                bw = BucketWriter(self, account,
-                                  prefix, storage_index, shnum,
+                bw = BucketWriter(self, account, storage_index, shnum,
                                   incominghome, finalhome,
                                   max_space_per_bucket, canary)
                 if self.no_storage:
@@ -343,7 +364,6 @@ class StorageServer(service.MultiService):
         start = time.time()
         self.count("writev")
         si_s = si_b2a(storage_index)
-        prefix = si_s[:2]
 
         log.msg("storage: slot_writev %s" % si_s)
         si_dir = storage_index_to_dir(storage_index)
@@ -393,8 +413,7 @@ class StorageServer(service.MultiService):
                 if new_length == 0:
                     if sharenum in shares:
                         shares[sharenum].unlink()
-                        account.remove_share_and_leases(si_b2a(storage_index),
-                                                        sharenum)
+                        account.remove_share_and_leases(storage_index, sharenum)
                 else:
                     if sharenum not in shares:
                         # allocate a new share
@@ -405,15 +424,14 @@ class StorageServer(service.MultiService):
                                                           allocated_size)
                         shares[sharenum] = share
                         shares[sharenum].writev(datav, new_length)
-                        account.add_share(prefix,
-                                          si_b2a(storage_index), sharenum,
-                                          shares[sharenum].home)
+                        account.add_share(storage_index, sharenum,
+                                          shares[sharenum].get_used_space())
                     else:
                         # apply the write vector and update the lease
                         shares[sharenum].writev(datav, new_length)
-                        account.update_share(si_b2a(storage_index), sharenum,
-                                             shares[sharenum].home)
-                    account.add_lease(si_b2a(storage_index), sharenum)
+                        account.mark_share_as_stable(storage_index, sharenum,
+                                                     shares[sharenum].get_used_space())
+                    account.add_or_renew_default_lease(storage_index, sharenum)
             account.commit()
 
             if new_length == 0:
@@ -461,8 +479,7 @@ class StorageServer(service.MultiService):
         self.add_latency("readv", time.time() - start)
         return datavs
 
-    def client_advise_corrupt_share(self, share_type, storage_index, shnum,
-                                    reason, account):
+    def client_advise_corrupt_share(self, share_type, storage_index, shnum, reason):
         fileutil.make_dirs(self.corruption_advisory_dir)
         now = time_format.iso_utc(sep="T")
         si_s = si_b2a(storage_index)

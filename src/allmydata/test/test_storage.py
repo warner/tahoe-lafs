@@ -15,9 +15,8 @@ from allmydata.storage.mutable import MutableShareFile
 from allmydata.storage.immutable import BucketWriter, BucketReader
 from allmydata.storage.common import DataTooLargeError, storage_index_to_dir, \
      UnknownMutableContainerVersionError, UnknownImmutableContainerVersionError
-from allmydata.storage.lease import LeaseInfo
-from allmydata.storage.crawler import BucketCountingCrawler
-from allmydata.storage.expirer import LeaseCheckingCrawler
+from allmydata.storage.leasedb import AccountingCrawler
+from allmydata.storage.expiration import ExpirationPolicy
 from allmydata.immutable.layout import WriteBucketProxy, WriteBucketProxy_v2, \
      ReadBucketProxy
 from allmydata.mutable.layout import MDMFSlotWriteProxy, MDMFSlotReadProxy, \
@@ -30,12 +29,17 @@ from allmydata.mutable.layout import MDMFSlotWriteProxy, MDMFSlotReadProxy, \
                                      SHARE_HASH_CHAIN_SIZE
 from allmydata.interfaces import BadWriteEnablerError
 from allmydata.test.common import LoggingServiceParent, ShouldFailMixin
+from allmydata.test.common_util import ReallyEqualMixin
 from allmydata.test.common_web import WebRenderingMixin
 from allmydata.test.no_network import NoNetworkServer
 from allmydata.web.storage import StorageStatus, remove_prefix
 
 class Marker:
     pass
+
+class FakeAccount:
+    pass
+
 class FakeCanary:
     def __init__(self, ignore_disconnectors=False):
         self.ignore = ignore_disconnectors
@@ -57,7 +61,17 @@ class FakeStatsProvider:
     def register_producer(self, producer):
         pass
 
-class Bucket(unittest.TestCase):
+
+class BucketTestMixin:
+    def bucket_writer_closed(self, bw, consumed):
+        pass
+    def add_latency(self, category, latency):
+        pass
+    def count(self, name, delta=1):
+        pass
+
+
+class Bucket(BucketTestMixin, unittest.TestCase):
     def make_workdir(self, name):
         basedir = os.path.join("storage", "Bucket", name)
         incoming = os.path.join(basedir, "tmp", "bucket")
@@ -66,26 +80,10 @@ class Bucket(unittest.TestCase):
         fileutil.make_dirs(os.path.join(basedir, "tmp"))
         return incoming, final
 
-    def bucket_writer_closed(self, bw, consumed):
-        pass
-    def add_latency(self, category, latency):
-        pass
-    def count(self, name, delta=1):
-        pass
-
-    def make_lease(self):
-        owner_num = 0
-        renew_secret = os.urandom(32)
-        cancel_secret = os.urandom(32)
-        expiration_time = time.time() + 5000
-        return LeaseInfo(owner_num, renew_secret, cancel_secret,
-                         expiration_time, "\x00" * 20)
-
     def test_create(self):
         incoming, final = self.make_workdir("test_create")
-        bw = BucketWriter(self, incoming, final, 200, self.make_lease(),
-                          FakeCanary())
-        bw.remote_write(0, "a"*25)
+        bw = BucketWriter(self, FakeAccount(), "si1", 0, incoming, final, 200, FakeCanary())
+        bw.remote_write(0,  "a"*25)
         bw.remote_write(25, "b"*25)
         bw.remote_write(50, "c"*25)
         bw.remote_write(75, "d"*7)
@@ -93,27 +91,21 @@ class Bucket(unittest.TestCase):
 
     def test_readwrite(self):
         incoming, final = self.make_workdir("test_readwrite")
-        bw = BucketWriter(self, incoming, final, 200, self.make_lease(),
-                          FakeCanary())
-        bw.remote_write(0, "a"*25)
+        bw = BucketWriter(self, FakeAccount(), "si1", 0, incoming, final, 200, FakeCanary())
+        bw.remote_write(0,  "a"*25)
         bw.remote_write(25, "b"*25)
         bw.remote_write(50, "c"*7) # last block may be short
         bw.remote_close()
 
         # now read from it
         br = BucketReader(self, bw.finalhome)
-        self.failUnlessEqual(br.remote_read(0, 25), "a"*25)
+        self.failUnlessEqual(br.remote_read(0,  25), "a"*25)
         self.failUnlessEqual(br.remote_read(25, 25), "b"*25)
-        self.failUnlessEqual(br.remote_read(50, 7), "c"*7)
+        self.failUnlessEqual(br.remote_read(50, 7 ), "c"*7 )
 
     def test_read_past_end_of_share_data(self):
         # test vector for immutable files (hard-coded contents of an immutable share
         # file):
-
-        # The following immutable share file content is identical to that
-        # generated with storage.immutable.ShareFile from Tahoe-LAFS v1.8.2
-        # with share data == 'a'. The total size of this content is 85
-        # bytes.
 
         containerdata = struct.pack('>LLL', 1, 1, 1)
 
@@ -122,17 +114,8 @@ class Bucket(unittest.TestCase):
         # -- see allmydata/immutable/layout.py . This test, which is
         # simulating a client, just sends 'a'.
         share_data = 'a'
-
-        ownernumber = struct.pack('>L', 0)
-        renewsecret  = 'THIS LETS ME RENEW YOUR FILE....'
-        assert len(renewsecret) == 32
-        cancelsecret = 'THIS LETS ME KILL YOUR FILE HAHA'
-        assert len(cancelsecret) == 32
-        expirationtime = struct.pack('>L', 60*60*24*31) # 31 days in seconds
-
-        lease_data = ownernumber + renewsecret + cancelsecret + expirationtime
-
-        share_file_data = containerdata + share_data + lease_data
+        extra_data = 'b'
+        share_file_data = containerdata + share_data + extra_data
 
         incoming, final = self.make_workdir("test_read_past_end_of_share_data")
 
@@ -145,14 +128,10 @@ class Bucket(unittest.TestCase):
 
         self.failUnlessEqual(br.remote_read(0, len(share_data)), share_data)
 
-        # Read past the end of share data to get the cancel secret.
-        read_length = len(share_data) + len(ownernumber) + len(renewsecret) + len(cancelsecret)
-
-        result_of_read = br.remote_read(0, read_length)
-        self.failUnlessEqual(result_of_read, share_data)
-
+        # Read past the end of share data by 1 byte.
         result_of_read = br.remote_read(0, len(share_data)+1)
         self.failUnlessEqual(result_of_read, share_data)
+
 
 class RemoteBucket:
 
@@ -173,33 +152,18 @@ class RemoteBucket:
         return defer.maybeDeferred(_call)
 
 
-class BucketProxy(unittest.TestCase):
+class BucketProxy(BucketTestMixin, unittest.TestCase):
     def make_bucket(self, name, size):
         basedir = os.path.join("storage", "BucketProxy", name)
         incoming = os.path.join(basedir, "tmp", "bucket")
         final = os.path.join(basedir, "bucket")
         fileutil.make_dirs(basedir)
         fileutil.make_dirs(os.path.join(basedir, "tmp"))
-        bw = BucketWriter(self, incoming, final, size, self.make_lease(),
-                          FakeCanary())
+        si = "si1"
+        bw = BucketWriter(self, FakeAccount(), si, 0, incoming, final, size, FakeCanary())
         rb = RemoteBucket()
         rb.target = bw
         return bw, rb, final
-
-    def make_lease(self):
-        owner_num = 0
-        renew_secret = os.urandom(32)
-        cancel_secret = os.urandom(32)
-        expiration_time = time.time() + 5000
-        return LeaseInfo(owner_num, renew_secret, cancel_secret,
-                         expiration_time, "\x00" * 20)
-
-    def bucket_writer_closed(self, bw, consumed):
-        pass
-    def add_latency(self, category, latency):
-        pass
-    def count(self, name, delta=1):
-        pass
 
     def test_create(self):
         bw, rb, sharefname = self.make_bucket("test_create", 500)
@@ -314,7 +278,7 @@ class Server(unittest.TestCase):
         ss = klass(workdir, "\x00" * 20, reserved_space=reserved_space,
                    stats_provider=FakeStatsProvider())
         ss.setServiceParent(self.sparent)
-        return ss
+        return ss.get_accountant().get_anonymous_account()
 
     def test_create(self):
         self.create("test_create")
@@ -411,12 +375,12 @@ class Server(unittest.TestCase):
         # server when accounting for space.
         ss = self.create("test_abort")
         already, writers = self.allocate(ss, "allocate", [0, 1, 2], 150)
-        self.failIfEqual(ss.allocated_size(), 0)
+        self.failIfEqual(ss.server.allocated_size(), 0)
 
         # Now abort the writers.
         for writer in writers.itervalues():
             writer.remote_abort()
-        self.failUnlessEqual(ss.allocated_size(), 0)
+        self.failUnlessEqual(ss.server.allocated_size(), 0)
 
 
     def test_allocate(self):
@@ -478,7 +442,7 @@ class Server(unittest.TestCase):
         w[0].remote_write(0, "\xff"*10)
         w[0].remote_close()
 
-        fn = os.path.join(ss.sharedir, storage_index_to_dir("si1"), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir("si1"), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write(struct.pack(">L", 0)) # this is invalid: minimum used is v1
@@ -527,18 +491,18 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(writers), 3)
         # now the StorageServer should have 3000 bytes provisionally
         # allocated, allowing only 2000 more to be claimed
-        self.failUnlessEqual(len(ss._active_writers), 3)
+        self.failUnlessEqual(len(ss.server._active_writers), 3)
 
         # allocating 1001-byte shares only leaves room for one
         already2,writers2 = self.allocate(ss, "vid2", [0,1,2], 1001, canary)
         self.failUnlessEqual(len(writers2), 1)
-        self.failUnlessEqual(len(ss._active_writers), 4)
+        self.failUnlessEqual(len(ss.server._active_writers), 4)
 
         # we abandon the first set, so their provisional allocation should be
         # returned
         del already
         del writers
-        self.failUnlessEqual(len(ss._active_writers), 1)
+        self.failUnlessEqual(len(ss.server._active_writers), 1)
         # now we have a provisional allocation of 1001 bytes
 
         # and we close the second set, so their provisional allocation should
@@ -550,7 +514,7 @@ class Server(unittest.TestCase):
         del already2
         del writers2
         del bw
-        self.failUnlessEqual(len(ss._active_writers), 0)
+        self.failUnlessEqual(len(ss.server._active_writers), 0)
 
         allocated = 1001 + OVERHEAD + LEASE_SIZE
 
@@ -565,12 +529,13 @@ class Server(unittest.TestCase):
         # 5000-1085=3915 free, therefore we can fit 39 100byte shares
         already3,writers3 = self.allocate(ss,"vid3", range(100), 100, canary)
         self.failUnlessEqual(len(writers3), 39)
-        self.failUnlessEqual(len(ss._active_writers), 39)
+        self.failUnlessEqual(len(ss.server._active_writers), 39)
 
         del already3
         del writers3
-        self.failUnlessEqual(len(ss._active_writers), 0)
+        self.failUnlessEqual(len(ss.server._active_writers), 0)
         ss.disownServiceParent()
+        ss.server.disownServiceParent()
         del ss
 
     def test_seek(self):
@@ -608,7 +573,7 @@ class Server(unittest.TestCase):
         for wb in writers.values():
             wb.remote_close()
 
-        leases = list(ss.get_leases("si0"))
+        leases = ss.get_leases("si0")
         self.failUnlessEqual(len(leases), 1)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs0]))
 
@@ -627,7 +592,7 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(already), 5)
         self.failUnlessEqual(len(writers), 0)
 
-        leases = list(ss.get_leases("si1"))
+        leases = ss.get_leases("si1")
         self.failUnlessEqual(len(leases), 2)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs1, rs2]))
 
@@ -635,7 +600,7 @@ class Server(unittest.TestCase):
         rs2a,cs2a = (hashutil.tagged_hash("blah", "%d" % self._lease_secret.next()),
                      hashutil.tagged_hash("blah", "%d" % self._lease_secret.next()))
         ss.remote_add_lease("si1", rs2a, cs2a)
-        leases = list(ss.get_leases("si1"))
+        leases = ss.get_leases("si1")
         self.failUnlessEqual(len(leases), 3)
         self.failUnlessEqual(set([l.renew_secret for l in leases]), set([rs1, rs2, rs2a]))
 
@@ -676,7 +641,7 @@ class Server(unittest.TestCase):
         for wb in writers.values():
             wb.remote_close()
 
-        leases = list(ss.get_leases("si3"))
+        leases = ss.get_leases("si3")
         self.failUnlessEqual(len(leases), 1)
 
         already3,writers3 = ss.remote_allocate_buckets("si3", rs4, cs4,
@@ -684,19 +649,20 @@ class Server(unittest.TestCase):
         self.failUnlessEqual(len(already3), 5)
         self.failUnlessEqual(len(writers3), 0)
 
-        leases = list(ss.get_leases("si3"))
+        leases = ss.get_leases("si3")
         self.failUnlessEqual(len(leases), 2)
 
     def test_readonly(self):
         workdir = self.workdir("test_readonly")
-        ss = StorageServer(workdir, "\x00" * 20, readonly_storage=True)
-        ss.setServiceParent(self.sparent)
+        server = StorageServer(workdir, "\x00" * 20, readonly_storage=True)
+        server.setServiceParent(self.sparent)
+        ss = server.get_accountant().get_anonymous_account()
 
         already,writers = self.allocate(ss, "vid", [0,1,2], 75)
         self.failUnlessEqual(already, set())
         self.failUnlessEqual(writers, {})
 
-        stats = ss.get_stats()
+        stats = server.get_stats()
         self.failUnlessEqual(stats["storage_server.accepting_immutable_shares"], 0)
         if "storage_server.disk_avail" in stats:
             # Some platforms may not have an API to get disk stats.
@@ -706,8 +672,9 @@ class Server(unittest.TestCase):
     def test_discard(self):
         # discard is really only used for other tests, but we test it anyways
         workdir = self.workdir("test_discard")
-        ss = StorageServer(workdir, "\x00" * 20, discard_storage=True)
-        ss.setServiceParent(self.sparent)
+        server = StorageServer(workdir, "\x00" * 20, discard_storage=True)
+        server.setServiceParent(self.sparent)
+        ss = server.get_accountant().get_anonymous_account()
 
         already,writers = self.allocate(ss, "vid", [0,1,2], 75)
         self.failUnlessEqual(already, set())
@@ -724,8 +691,9 @@ class Server(unittest.TestCase):
 
     def test_advise_corruption(self):
         workdir = self.workdir("test_advise_corruption")
-        ss = StorageServer(workdir, "\x00" * 20, discard_storage=True)
-        ss.setServiceParent(self.sparent)
+        server = StorageServer(workdir, "\x00" * 20, discard_storage=True)
+        server.setServiceParent(self.sparent)
+        ss = server.get_accountant().get_anonymous_account()
 
         si0_s = base32.b2a("si0")
         ss.remote_advise_corrupt_share("immutable", "si0", 0,
@@ -784,7 +752,7 @@ class MutableServer(unittest.TestCase):
         workdir = self.workdir(name)
         ss = StorageServer(workdir, "\x00" * 20)
         ss.setServiceParent(self.sparent)
-        return ss
+        return ss.get_accountant().get_anonymous_account()
 
     def test_create(self):
         self.create("test_create")
@@ -818,7 +786,7 @@ class MutableServer(unittest.TestCase):
     def test_bad_magic(self):
         ss = self.create("test_bad_magic")
         self.allocate(ss, "si1", "we1", self._lease_secret.next(), set([0]), 10)
-        fn = os.path.join(ss.sharedir, storage_index_to_dir("si1"), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir("si1"), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write("BAD MAGIC")
@@ -1198,26 +1166,15 @@ class MutableServer(unittest.TestCase):
                                       1: ["1"*10],
                                       2: ["2"*10]})
 
-    def compare_leases_without_timestamps(self, leases_a, leases_b):
+    def compare_leases(self, leases_a, leases_b, with_timestamps=True):
         self.failUnlessEqual(len(leases_a), len(leases_b))
         for i in range(len(leases_a)):
             a = leases_a[i]
             b = leases_b[i]
-            self.failUnlessEqual(a.owner_num,       b.owner_num)
-            self.failUnlessEqual(a.renew_secret,    b.renew_secret)
-            self.failUnlessEqual(a.cancel_secret,   b.cancel_secret)
-            self.failUnlessEqual(a.nodeid,          b.nodeid)
-
-    def compare_leases(self, leases_a, leases_b):
-        self.failUnlessEqual(len(leases_a), len(leases_b))
-        for i in range(len(leases_a)):
-            a = leases_a[i]
-            b = leases_b[i]
-            self.failUnlessEqual(a.owner_num,       b.owner_num)
-            self.failUnlessEqual(a.renew_secret,    b.renew_secret)
-            self.failUnlessEqual(a.cancel_secret,   b.cancel_secret)
-            self.failUnlessEqual(a.nodeid,          b.nodeid)
-            self.failUnlessEqual(a.expiration_time, b.expiration_time)
+            self.failUnlessEqual(a.owner_num, b.owner_num)
+            if with_timestamps:
+                self.failUnlessEqual(a.renewal_time, b.renewal_time)
+                self.failUnlessEqual(a.expiration_time, b.expiration_time)
 
     def test_leases(self):
         ss = self.create("test_leases")
@@ -1228,46 +1185,55 @@ class MutableServer(unittest.TestCase):
         data = "".join([ ("%d" % i) * 10 for i in range(10) ])
         write = ss.remote_slot_testv_and_readv_and_writev
         read = ss.remote_slot_readv
-        rc = write("si1", secrets(0), {0: ([], [(0,data)], None)}, [])
+        rc = write("si0", secrets(0), {0: ([], [(0,data)], None)}, [])
         self.failUnlessEqual(rc, (True, {}))
 
         # create a random non-numeric file in the bucket directory, to
         # exercise the code that's supposed to ignore those.
         bucket_dir = os.path.join(self.workdir("test_leases"),
-                                  "shares", storage_index_to_dir("si1"))
+                                  "shares", storage_index_to_dir("six"))
+        os.makedirs(bucket_dir)
         f = open(os.path.join(bucket_dir, "ignore_me.txt"), "w")
         f.write("you ought to be ignoring me\n")
         f.close()
 
         s0 = MutableShareFile(os.path.join(bucket_dir, "0"))
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        s0.create("nodeid", secrets(0)[0])
+
+        ss.add_share("six", 0, 0)
+        # adding a share does not immediately add a lease
+        self.failUnlessEqual(len(ss.get_leases("six")), 0)
+
+        ss.add_or_renew_default_lease("six", 0)
+        self.failUnlessEqual(len(ss.get_leases("six")), 1)
 
         # add-lease on a missing storage index is silently ignored
         self.failUnlessEqual(ss.remote_add_lease("si18", "", ""), None)
+        self.failUnlessEqual(len(ss.get_leases("si18")), 0)
 
         # re-allocate the slots and use the same secrets, that should update
         # the lease
         write("si1", secrets(0), {0: ([], [(0,data)], None)}, [])
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # renew it directly
         ss.remote_renew_lease("si1", secrets(0)[1])
-        self.failUnlessEqual(len(list(s0.get_leases())), 1)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 1)
 
         # now allocate them with a bunch of different secrets, to trigger the
         # extended lease code. Use add_lease for one of them.
         write("si1", secrets(1), {0: ([], [(0,data)], None)}, [])
-        self.failUnlessEqual(len(list(s0.get_leases())), 2)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 2)
         secrets2 = secrets(2)
         ss.remote_add_lease("si1", secrets2[1], secrets2[2])
-        self.failUnlessEqual(len(list(s0.get_leases())), 3)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 3)
         write("si1", secrets(3), {0: ([], [(0,data)], None)}, [])
         write("si1", secrets(4), {0: ([], [(0,data)], None)}, [])
         write("si1", secrets(5), {0: ([], [(0,data)], None)}, [])
 
-        self.failUnlessEqual(len(list(s0.get_leases())), 6)
+        self.failUnlessEqual(len(ss.get_leases("si1")), 6)
 
-        all_leases = list(s0.get_leases())
+        all_leases = ss.get_leases("si1")
         # and write enough data to expand the container, forcing the server
         # to move the leases
         write("si1", secrets(0),
@@ -1275,18 +1241,18 @@ class MutableServer(unittest.TestCase):
               [])
 
         # read back the leases, make sure they're still intact.
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
         ss.remote_renew_lease("si1", secrets(0)[1])
         ss.remote_renew_lease("si1", secrets(1)[1])
         ss.remote_renew_lease("si1", secrets(2)[1])
         ss.remote_renew_lease("si1", secrets(3)[1])
         ss.remote_renew_lease("si1", secrets(4)[1])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
         # get a new copy of the leases, with the current timestamps. Reading
         # data and failing to renew/cancel leases should leave the timestamps
         # alone.
-        all_leases = list(s0.get_leases())
+        all_leases = ss.get_leases("si1")
         # renewing with a bogus token should prompt an error message
 
         # examine the exception thus raised, make sure the old nodeid is
@@ -1299,19 +1265,19 @@ class MutableServer(unittest.TestCase):
         self.failUnlessIn("I have leases accepted by nodeids:", e_s)
         self.failUnlessIn("nodeids: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' .", e_s)
 
-        self.compare_leases(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"))
 
         # reading shares should not modify the timestamp
         read("si1", [], [(0,200)])
-        self.compare_leases(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"))
 
         write("si1", secrets(0),
               {0: ([], [(200, "make me bigger")], None)}, [])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
         write("si1", secrets(0),
               {0: ([], [(500, "make me really bigger")], None)}, [])
-        self.compare_leases_without_timestamps(all_leases, list(s0.get_leases()))
+        self.compare_leases(all_leases, ss.get_leases("si1"), with_timestamps=False)
 
     def test_remove(self):
         ss = self.create("test_remove")
@@ -1416,7 +1382,7 @@ class MDMFProxies(unittest.TestCase, ShouldFailMixin):
         workdir = self.workdir(name)
         ss = StorageServer(workdir, "\x00" * 20)
         ss.setServiceParent(self.sparent)
-        return ss
+        return ss.get_accountant().get_anonymous_account()
 
 
     def build_test_mdmf_share(self, tail_segment=False, empty=False):
@@ -2794,10 +2760,10 @@ class Stats(unittest.TestCase):
         workdir = self.workdir(name)
         ss = StorageServer(workdir, "\x00" * 20)
         ss.setServiceParent(self.sparent)
-        return ss
+        return ss.get_accountant().get_anonymous_account()
 
     def test_latencies(self):
-        ss = self.create("test_latencies")
+        ss = self.create("test_latencies").server
         for i in range(10000):
             ss.add_latency("allocate", 1.0 * i)
         for i in range(1000):
@@ -2867,20 +2833,8 @@ def remove_tags(s):
     s = re.sub(r'\s+', ' ', s)
     return s
 
-class MyBucketCountingCrawler(BucketCountingCrawler):
-    def finished_prefix(self, cycle, prefix):
-        BucketCountingCrawler.finished_prefix(self, cycle, prefix)
-        if self.hook_ds:
-            d = self.hook_ds.pop(0)
-            d.callback(None)
 
-class MyStorageServer(StorageServer):
-    def add_bucket_counter(self):
-        statefile = os.path.join(self.storedir, "bucket_counter.state")
-        self.bucket_counter = MyBucketCountingCrawler(self, statefile)
-        self.bucket_counter.setServiceParent(self)
-
-class BucketCounter(unittest.TestCase, pollmixin.PollMixin):
+class BucketCounter(unittest.TestCase, pollmixin.PollMixin, ReallyEqualMixin):
 
     def setUp(self):
         self.s = service.MultiService()
@@ -2892,12 +2846,13 @@ class BucketCounter(unittest.TestCase, pollmixin.PollMixin):
         basedir = "storage/BucketCounter/bucket_counter"
         fileutil.make_dirs(basedir)
         ss = StorageServer(basedir, "\x00" * 20)
-        # to make sure we capture the bucket-counting-crawler in the middle
-        # of a cycle, we reach in and reduce its maximum slice time to 0. We
-        # also make it start sooner than usual.
+
+        # finish as fast as possible
         ss.bucket_counter.slow_start = 0
-        orig_cpu_slice = ss.bucket_counter.cpu_slice
-        ss.bucket_counter.cpu_slice = 0
+        ss.bucket_counter.cpu_slice = 100.0
+
+        d = ss.bucket_counter.set_hook('after_prefix')
+
         ss.setServiceParent(self.s)
 
         w = StorageStatus(ss)
@@ -2911,124 +2866,120 @@ class BucketCounter(unittest.TestCase, pollmixin.PollMixin):
         self.failUnlessIn("Total buckets: Not computed yet", s)
         self.failUnlessIn("Next crawl in", s)
 
-        # give the bucket-counting-crawler one tick to get started. The
-        # cpu_slice=0 will force it to yield right after it processes the
-        # first prefix
-
-        d = fireEventually()
-        def _check(ignored):
-            # are we really right after the first prefix?
+        def _after_first_prefix(prefix):
+            ss.bucket_counter.save_state()
             state = ss.bucket_counter.get_state()
-            if state["last-complete-prefix"] is None:
-                d2 = fireEventually()
-                d2.addCallback(_check)
-                return d2
-            self.failUnlessEqual(state["last-complete-prefix"],
-                                 ss.bucket_counter.prefixes[0])
-            ss.bucket_counter.cpu_slice = 100.0 # finish as fast as possible
+            self.failUnlessEqual(prefix, state["last-complete-prefix"])
+            self.failUnlessEqual(prefix, ss.bucket_counter.prefixes[0])
+
             html = w.renderSynchronously()
             s = remove_tags(html)
             self.failUnlessIn(" Current crawl ", s)
             self.failUnlessIn(" (next work in ", s)
-        d.addCallback(_check)
 
-        # now give it enough time to complete a full cycle
-        def _watch():
-            return not ss.bucket_counter.get_progress()["cycle-in-progress"]
-        d.addCallback(lambda ignored: self.poll(_watch))
-        def _check2(ignored):
-            ss.bucket_counter.cpu_slice = orig_cpu_slice
-            html = w.renderSynchronously()
-            s = remove_tags(html)
-            self.failUnlessIn("Total buckets: 0 (the number of", s)
-            self.failUnless("Next crawl in 59 minutes" in s or "Next crawl in 60 minutes" in s, s)
-        d.addCallback(_check2)
+            d2 = ss.bucket_counter.set_hook('after_cycle')
+
+            def _after_first_cycle(cycle):
+                self.failUnlessEqual(cycle, 0)
+                progress = ss.bucket_counter.get_progress()
+                self.failUnlessReallyEqual(progress["cycle-in-progress"], False)
+
+                d3 = ss.bucket_counter.set_hook('yield')
+
+                def _on_yield(ign):
+                    html = w.renderSynchronously()
+                    s = remove_tags(html)
+                    self.failUnlessIn("Total buckets: 0 (the number of", s)
+                    self.failUnless("Next crawl in 59 minutes" in s or "Next crawl in 60 minutes" in s, s)
+                d3.addCallback(_on_yield)
+                return d3
+            d2.addCallback(_after_first_cycle)
+            return d2
+        d.addCallback(_after_first_prefix)
         return d
 
     def test_bucket_counter_cleanup(self):
         basedir = "storage/BucketCounter/bucket_counter_cleanup"
         fileutil.make_dirs(basedir)
         ss = StorageServer(basedir, "\x00" * 20)
-        # to make sure we capture the bucket-counting-crawler in the middle
-        # of a cycle, we reach in and reduce its maximum slice time to 0.
+
+        # finish as fast as possible
         ss.bucket_counter.slow_start = 0
-        orig_cpu_slice = ss.bucket_counter.cpu_slice
-        ss.bucket_counter.cpu_slice = 0
+        ss.bucket_counter.cpu_slice = 100.0
+
+        d = ss.bucket_counter.set_hook('after_prefix')
+
         ss.setServiceParent(self.s)
 
-        d = fireEventually()
-
-        def _after_first_prefix(ignored):
+        def _after_first_prefix(prefix):
+            ss.bucket_counter.save_state()
             state = ss.bucket_counter.state
-            if state["last-complete-prefix"] is None:
-                d2 = fireEventually()
-                d2.addCallback(_after_first_prefix)
-                return d2
-            ss.bucket_counter.cpu_slice = 100.0 # finish as fast as possible
+            self.failUnlessEqual(prefix, state["last-complete-prefix"])
+            self.failUnlessEqual(prefix, ss.bucket_counter.prefixes[0])
+
             # now sneak in and mess with its state, to make sure it cleans up
             # properly at the end of the cycle
-            self.failUnlessEqual(state["last-complete-prefix"],
-                                 ss.bucket_counter.prefixes[0])
             state["bucket-counts"][-12] = {}
             state["storage-index-samples"]["bogusprefix!"] = (-12, [])
             ss.bucket_counter.save_state()
-        d.addCallback(_after_first_prefix)
 
-        # now give it enough time to complete a cycle
-        def _watch():
-            return not ss.bucket_counter.get_progress()["cycle-in-progress"]
-        d.addCallback(lambda ignored: self.poll(_watch))
-        def _check2(ignored):
-            ss.bucket_counter.cpu_slice = orig_cpu_slice
-            s = ss.bucket_counter.get_state()
-            self.failIf(-12 in s["bucket-counts"], s["bucket-counts"].keys())
-            self.failIf("bogusprefix!" in s["storage-index-samples"],
-                        s["storage-index-samples"].keys())
-        d.addCallback(_check2)
+            d2 = ss.bucket_counter.set_hook('after_cycle')
+
+            def _after_first_cycle(cycle):
+                self.failUnlessEqual(cycle, 0)
+                progress = ss.bucket_counter.get_progress()
+                self.failUnlessReallyEqual(progress["cycle-in-progress"], False)
+
+                s = ss.bucket_counter.get_state()
+                self.failIf(-12 in s["bucket-counts"], s["bucket-counts"].keys())
+                self.failIf("bogusprefix!" in s["storage-index-samples"],
+                            s["storage-index-samples"].keys())
+            d2.addCallback(_after_first_cycle)
+            return d2
+        d.addCallback(_after_first_prefix)
         return d
 
     def test_bucket_counter_eta(self):
         basedir = "storage/BucketCounter/bucket_counter_eta"
         fileutil.make_dirs(basedir)
-        ss = MyStorageServer(basedir, "\x00" * 20)
+        ss = StorageServer(basedir, "\x00" * 20)
+
+        # finish as fast as possible
         ss.bucket_counter.slow_start = 0
-        # these will be fired inside finished_prefix()
-        hooks = ss.bucket_counter.hook_ds = [defer.Deferred() for i in range(3)]
+        ss.bucket_counter.cpu_slice = 100.0
+
+        d = ss.bucket_counter.set_hook('after_prefix')
+
+        ss.setServiceParent(self.s)
+
         w = StorageStatus(ss)
 
-        d = defer.Deferred()
-
-        def _check_1(ignored):
+        def _check_1(prefix1):
             # no ETA is available yet
             html = w.renderSynchronously()
             s = remove_tags(html)
             self.failUnlessIn("complete (next work", s)
 
-        def _check_2(ignored):
-            # one prefix has finished, so an ETA based upon that elapsed time
-            # should be available.
-            html = w.renderSynchronously()
-            s = remove_tags(html)
-            self.failUnlessIn("complete (ETA ", s)
+            d2 = ss.bucket_counter.set_hook('after_prefix')
 
-        def _check_3(ignored):
-            # two prefixes have finished
-            html = w.renderSynchronously()
-            s = remove_tags(html)
-            self.failUnlessIn("complete (ETA ", s)
-            d.callback("done")
+            def _check_2(prefix2):
+                # an ETA based upon elapsed time should be available.
+                html = w.renderSynchronously()
+                s = remove_tags(html)
+                self.failUnlessIn("complete (ETA ", s)
 
-        hooks[0].addCallback(_check_1).addErrback(d.errback)
-        hooks[1].addCallback(_check_2).addErrback(d.errback)
-        hooks[2].addCallback(_check_3).addErrback(d.errback)
-
-        ss.setServiceParent(self.s)
+                # ensure we leave a clean reactor
+                return ss.bucket_counter.set_hook('after_cycle')
+            d2.addCallback(_check_2)
+            return d2
+        d.addCallback(_check_1)
         return d
 
-class InstrumentedLeaseCheckingCrawler(LeaseCheckingCrawler):
+
+class InstrumentedAccountingCrawler(AccountingCrawler):
     stop_after_first_bucket = False
     def process_bucket(self, *args, **kwargs):
-        LeaseCheckingCrawler.process_bucket(self, *args, **kwargs)
+        AccountingCrawler.process_bucket(self, *args, **kwargs)
         if self.stop_after_first_bucket:
             self.stop_after_first_bucket = False
             self.cpu_slice = -1.0
@@ -3038,7 +2989,7 @@ class InstrumentedLeaseCheckingCrawler(LeaseCheckingCrawler):
 
 class BrokenStatResults:
     pass
-class No_ST_BLOCKS_LeaseCheckingCrawler(LeaseCheckingCrawler):
+class No_ST_BLOCKS_AccountingCrawler(AccountingCrawler):
     def stat(self, fn):
         s = os.stat(fn)
         bsr = BrokenStatResults()
@@ -3051,11 +3002,11 @@ class No_ST_BLOCKS_LeaseCheckingCrawler(LeaseCheckingCrawler):
         return bsr
 
 class InstrumentedStorageServer(StorageServer):
-    LeaseCheckerClass = InstrumentedLeaseCheckingCrawler
+    LeaseCheckerClass = InstrumentedAccountingCrawler
 class No_ST_BLOCKS_StorageServer(StorageServer):
-    LeaseCheckerClass = No_ST_BLOCKS_LeaseCheckingCrawler
+    LeaseCheckerClass = No_ST_BLOCKS_AccountingCrawler
 
-class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
+class AccountingCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
 
     def setUp(self):
         self.s = service.MultiService()
@@ -3112,9 +3063,11 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
     def test_basic(self):
         basedir = "storage/LeaseCrawler/basic"
         fileutil.make_dirs(basedir)
-        ss = InstrumentedStorageServer(basedir, "\x00" * 20)
+        server = InstrumentedStorageServer(basedir, "\x00" * 20)
+        ss = server.get_accountant().get_anonymous_account()
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         lc.cpu_slice = 500
         lc.stop_after_first_bucket = True
@@ -3125,7 +3078,7 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
 
         # add a non-sharefile to exercise another code path
-        fn = os.path.join(ss.sharedir,
+        fn = os.path.join(ss._get_sharedir(),
                           storage_index_to_dir(immutable_si_0),
                           "not-a-share")
         f = open(fn, "wb")
@@ -3141,7 +3094,7 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         self.failUnlessIn("history", initial_state)
         self.failUnlessEqual(initial_state["history"], {})
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         DAY = 24*60*60
 
@@ -3251,10 +3204,8 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
             self.failUnlessEqual(rec["original-sharebytes"], 0)
             self.failUnlessEqual(rec["configured-sharebytes"], 0)
 
-            def _get_sharefile(si):
-                return list(ss._iter_share_files(si))[0]
             def count_leases(si):
-                return len(list(_get_sharefile(si).get_leases()))
+                return len(ss.get_leases(si))
             self.failUnlessEqual(count_leases(immutable_si_0), 1)
             self.failUnlessEqual(count_leases(immutable_si_1), 2)
             self.failUnlessEqual(count_leases(mutable_si_2), 1)
@@ -3277,30 +3228,18 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         d.addCallback(_check_json)
         return d
 
-    def backdate_lease(self, sf, renew_secret, new_expire_time):
-        # ShareFile.renew_lease ignores attempts to back-date a lease (i.e.
-        # "renew" a lease with a new_expire_time that is older than what the
-        # current lease has), so we have to reach inside it.
-        for i,lease in enumerate(sf.get_leases()):
-            if lease.renew_secret == renew_secret:
-                lease.expiration_time = new_expire_time
-                f = open(sf.home, 'rb+')
-                sf._write_lease_record(f, i, lease)
-                f.close()
-                return
-        raise IndexError("unable to renew non-existent lease")
-
     def test_expire_age(self):
         basedir = "storage/LeaseCrawler/expire_age"
         fileutil.make_dirs(basedir)
         # setting expiration_time to 2000 means that any lease which is more
         # than 2000s old will be expired.
-        ss = InstrumentedStorageServer(basedir, "\x00" * 20,
-                                       expiration_enabled=True,
-                                       expiration_mode="age",
-                                       expiration_override_lease_duration=2000)
+        ep = ExpirationPolicy(enabled=True, mode="age", override_lease_duration=2000)
+        server = InstrumentedStorageServer(basedir, "\x00" * 20, expiration_policy=ep)
+        ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         lc.stop_after_first_bucket = True
         webstatus = StorageStatus(ss)
@@ -3314,7 +3253,7 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(ss.get_leases(si))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3333,23 +3272,19 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         # deleted and others stay alive (with one remaining lease)
         now = time.time()
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], now - 1000)
-        sf0_size = os.stat(sf0.home).st_size
+        ss.add_or_renew_lease(immutable_si_0,  0, now - 1000, now - 1000)
+        sf0_size = _get_sharefile(immutable_si_0).get_size()
 
         # immutable_si_1 gets an extra lease
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], now - 1000)
+        ss2.add_or_renew_lease(immutable_si_1, 0, now - 1000, now - 1000)
 
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], now - 1000)
-        sf2_size = os.stat(sf2.home).st_size
+        ss.add_or_renew_lease(mutable_si_2,    0, now - 1000, now - 1000)
+        sf2_size = _get_sharefile(mutable_si_2).get_size()
 
         # mutable_si_3 gets an extra lease
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], now - 1000)
+        ss2.add_or_renew_lease(mutable_si_3,   0, now - 1000, now - 1000)
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         d = fireEventually()
         # examine the state right after the first bucket has been processed
@@ -3435,12 +3370,13 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         # is more than 2000s old will be expired.
         now = time.time()
         then = int(now - 2000)
-        ss = InstrumentedStorageServer(basedir, "\x00" * 20,
-                                       expiration_enabled=True,
-                                       expiration_mode="cutoff-date",
-                                       expiration_cutoff_date=then)
+        ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then)
+        server = InstrumentedStorageServer(basedir, "\x00" * 20, expiration_policy=ep)
+        ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         lc.stop_after_first_bucket = True
         webstatus = StorageStatus(ss)
@@ -3454,7 +3390,7 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(ss.get_leases(si))
 
         self.failUnlessEqual(count_shares(immutable_si_0), 1)
         self.failUnlessEqual(count_leases(immutable_si_0), 1)
@@ -3465,35 +3401,29 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         self.failUnlessEqual(count_shares(mutable_si_3), 1)
         self.failUnlessEqual(count_leases(mutable_si_3), 2)
 
-        # artificially crank back the expiration time on the first lease of
-        # each share, to make it look like was renewed 3000s ago. To achieve
-        # this, we need to set the expiration time to now-3000+31days. This
-        # will change when the lease format is improved to contain both
-        # create/renew time and duration.
-        new_expiration_time = now - 3000 + 31*24*60*60
+        # artificially crank back the renewal time on the first lease of each
+        # share to 3000s ago, and set the expiration time to 31 days later.
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         # Some shares have an extra lease which is set to expire at the
         # default time in 31 days from now (age=31days). We then run the
         # crawler, which will expire the first lease, making some shares get
         # deleted and others stay alive (with one remaining lease)
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf0_size = os.stat(sf0.home).st_size
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
+        sf0_size = _get_sharefile(immutable_si_0).get_size()
 
         # immutable_si_1 gets an extra lease
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
 
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf2_size = os.stat(sf2.home).st_size
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+        sf2_size = _get_sharefile(mutable_si_2).get_size()
 
         # mutable_si_3 gets an extra lease
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         d = fireEventually()
         # examine the state right after the first bucket has been processed
@@ -3582,39 +3512,38 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         fileutil.make_dirs(basedir)
         now = time.time()
         then = int(now - 2000)
-        ss = StorageServer(basedir, "\x00" * 20,
-                           expiration_enabled=True,
-                           expiration_mode="cutoff-date",
-                           expiration_cutoff_date=then,
-                           expiration_sharetypes=("immutable",))
-        lc = ss.lease_checker
+        ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then, sharetypes=("immutable",))
+        server = StorageServer(basedir, "\x00" * 20, expiration_policy=ep)
+        ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         webstatus = StorageStatus(ss)
 
         self.make_shares(ss)
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         # set all leases to be expirable
-        new_expiration_time = now - 3000 + 31*24*60*60
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         def count_shares(si):
             return len(list(ss._iter_share_files(si)))
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(ss.get_leases(si))
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
-        self.backdate_lease(sf1, self.renew_secrets[2], new_expiration_time)
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
-        self.backdate_lease(sf3, self.renew_secrets[5], new_expiration_time)
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
 
-        ss.setServiceParent(self.s)
+        ss.add_or_renew_lease(immutable_si_1,  0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_3,    0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
+
+        server.setServiceParent(self.s)
         def _wait():
             return bool(lc.get_state()["last-cycle-finished"] is not None)
         d = self.poll(_wait)
@@ -3639,39 +3568,38 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         fileutil.make_dirs(basedir)
         now = time.time()
         then = int(now - 2000)
-        ss = StorageServer(basedir, "\x00" * 20,
-                           expiration_enabled=True,
-                           expiration_mode="cutoff-date",
-                           expiration_cutoff_date=then,
-                           expiration_sharetypes=("mutable",))
-        lc = ss.lease_checker
+        ep = ExpirationPolicy(enabled=True, mode="cutoff-date", cutoff_date=then, sharetypes=("mutable",))
+        server = StorageServer(basedir, "\x00" * 20, expiration_policy=ep)
+        ss = server.get_accountant().get_anonymous_account()
+        ss2 = server.get_accountant().get_account("somekey")
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         webstatus = StorageStatus(ss)
 
         self.make_shares(ss)
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         # set all leases to be expirable
-        new_expiration_time = now - 3000 + 31*24*60*60
+        new_renewal_time = now - 3000
+        new_expiration_time = new_renewal_time + 31*24*60*60
 
         def count_shares(si):
             return len(list(ss._iter_share_files(si)))
         def _get_sharefile(si):
             return list(ss._iter_share_files(si))[0]
         def count_leases(si):
-            return len(list(_get_sharefile(si).get_leases()))
+            return len(ss.get_leases(si))
 
-        sf0 = _get_sharefile(immutable_si_0)
-        self.backdate_lease(sf0, self.renew_secrets[0], new_expiration_time)
-        sf1 = _get_sharefile(immutable_si_1)
-        self.backdate_lease(sf1, self.renew_secrets[1], new_expiration_time)
-        self.backdate_lease(sf1, self.renew_secrets[2], new_expiration_time)
-        sf2 = _get_sharefile(mutable_si_2)
-        self.backdate_lease(sf2, self.renew_secrets[3], new_expiration_time)
-        sf3 = _get_sharefile(mutable_si_3)
-        self.backdate_lease(sf3, self.renew_secrets[4], new_expiration_time)
-        self.backdate_lease(sf3, self.renew_secrets[5], new_expiration_time)
+        ss.add_or_renew_lease(immutable_si_0,  0, new_renewal_time, new_expiration_time)
 
-        ss.setServiceParent(self.s)
+        ss.add_or_renew_lease(immutable_si_1,  0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(immutable_si_1, 0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_2,    0, new_renewal_time, new_expiration_time)
+
+        ss.add_or_renew_lease(mutable_si_3,    0, new_renewal_time, new_expiration_time)
+        ss2.add_or_renew_lease(mutable_si_3,   0, new_renewal_time, new_expiration_time)
+
+        server.setServiceParent(self.s)
         def _wait():
             return bool(lc.get_state()["last-cycle-finished"] is not None)
         d = self.poll(_wait)
@@ -3692,11 +3620,8 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         return d
 
     def test_bad_mode(self):
-        basedir = "storage/LeaseCrawler/bad_mode"
-        fileutil.make_dirs(basedir)
-        e = self.failUnlessRaises(ValueError,
-                                  StorageServer, basedir, "\x00" * 20,
-                                  expiration_mode="bogus")
+        e = self.failUnlessRaises(AssertionError,
+                                  ExpirationPolicy, enabled=True, mode="bogus")
         self.failUnlessIn("GC mode 'bogus' must be 'age' or 'cutoff-date'", str(e))
 
     def test_parse_duration(self):
@@ -3721,16 +3646,18 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
     def test_limited_history(self):
         basedir = "storage/LeaseCrawler/limited_history"
         fileutil.make_dirs(basedir)
-        ss = StorageServer(basedir, "\x00" * 20)
+        server = StorageServer(basedir, "\x00" * 20)
+        ss = server.get_accountant().get_anonymous_account()
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         lc.cpu_slice = 500
 
         # create a few shares, with some leases on them
         self.make_shares(ss)
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         def _wait_until_15_cycles_done():
             last = lc.state["last-cycle-finished"]
@@ -3753,15 +3680,17 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
     def test_unpredictable_future(self):
         basedir = "storage/LeaseCrawler/unpredictable_future"
         fileutil.make_dirs(basedir)
-        ss = StorageServer(basedir, "\x00" * 20)
+        server = StorageServer(basedir, "\x00" * 20)
+        ss = server.get_accountant().get_anonymous_account()
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
         lc.cpu_slice = -1.0 # stop quickly
 
         self.make_shares(ss)
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         d = fireEventually()
         def _check(ignored):
@@ -3816,19 +3745,20 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
     def test_no_st_blocks(self):
         basedir = "storage/LeaseCrawler/no_st_blocks"
         fileutil.make_dirs(basedir)
-        ss = No_ST_BLOCKS_StorageServer(basedir, "\x00" * 20,
-                                        expiration_mode="age",
-                                        expiration_override_lease_duration=-1000)
-        # a negative expiration_time= means the "configured-"
+        ep = ExpirationPolicy(enabled=True, mode="age", override_lease_duration=-1000)
+        server = No_ST_BLOCKS_StorageServer(basedir, "\x00" * 20, expiration_policy=ep)
+        ss = server.get_accountant().get_anonymous_account()
+
+        # a negative override_lease_duration means the "configured-"
         # space-recovered counts will be non-zero, since all shares will have
         # expired by then
 
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.slow_start = 0
 
         self.make_shares(ss)
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
         def _wait():
             return bool(lc.get_state()["last-cycle-finished"] is not None)
         d = self.poll(_wait)
@@ -3855,10 +3785,12 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
             ]
         basedir = "storage/LeaseCrawler/share_corruption"
         fileutil.make_dirs(basedir)
-        ss = InstrumentedStorageServer(basedir, "\x00" * 20)
+        server = InstrumentedStorageServer(basedir, "\x00" * 20)
+        ss = server.get_accountant().get_anonymous_account()
         w = StorageStatus(ss)
+
         # make it start sooner than usual.
-        lc = ss.lease_checker
+        lc = server.get_accounting_crawler()
         lc.stop_after_first_bucket = True
         lc.slow_start = 0
         lc.cpu_slice = 500
@@ -3870,7 +3802,7 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
         [immutable_si_0, immutable_si_1, mutable_si_2, mutable_si_3] = self.sis
         first = min(self.sis)
         first_b32 = base32.b2a(first)
-        fn = os.path.join(ss.sharedir, storage_index_to_dir(first), "0")
+        fn = os.path.join(ss._get_sharedir(), storage_index_to_dir(first), "0")
         f = open(fn, "rb+")
         f.seek(0)
         f.write("BAD MAGIC")
@@ -3883,11 +3815,11 @@ class LeaseCrawler(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
 
         # also create an empty bucket
         empty_si = base32.b2a("\x04"*16)
-        empty_bucket_dir = os.path.join(ss.sharedir,
+        empty_bucket_dir = os.path.join(ss._get_sharedir(),
                                         storage_index_to_dir(empty_si))
         fileutil.make_dirs(empty_bucket_dir)
 
-        ss.setServiceParent(self.s)
+        server.setServiceParent(self.s)
 
         d = fireEventually()
 
