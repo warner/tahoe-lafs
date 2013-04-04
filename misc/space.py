@@ -5,16 +5,23 @@ if prefix.endswith("/"):
     prefix = prefix[:-1]
 prefixbits = prefix.split("/")
 
-subdirs = {}
-subdir_template = {"frontend_bytes": 0,
-                   "backend_bytes": 0,
-                   "num_files": 0,
-                   "num_dirs": 0,
-                   "num_objects": 0,
-                   "full_upload_time": 0,
-                   "null_upload_time": 0,
-                   }
-prefix_space = copy.copy(subdir_template)
+class Directory:
+    __slots__ = ["frontend_bytes",
+                 "backend_bytes",
+                 "num_files",
+                 "num_dirs",
+                 "num_objects",
+                 "full_upload_time",
+                 "null_upload_time",
+                 "children"
+                 ]
+
+class File:
+    __slots__ = ["frontend_bytes",
+                 "backend_bytes",
+                 "full_upload_time",
+                 "null_upload_time",
+                 ]
 
 def backend_bytes(bytes):
     # 2275 frontend -> 3529 share, FS rounds up to 512-byte boundary
@@ -41,6 +48,8 @@ def add_to(s, isdir, bytes):
         s["num_files"] += 1
     s["full_upload_time"] += full_upload_time(bytes)
     s["null_upload_time"] += null_upload_time(bytes)
+
+# 2m08s to 'find ~ -ls'
 
 # 11s to walk all 2M lines
 #f = gzip.open("all-files-10-feb-2013.txt.gz", "rb")
