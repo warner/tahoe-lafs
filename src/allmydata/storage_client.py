@@ -267,9 +267,12 @@ class NativeStorageServer:
         return self.announcement_time
 
     def get_available_space(self):
-        protocol_v1_version = self.get_version().get('http://allmydata.org/tahoe/protocols/storage/v1', {})
+        version = self.get_version()
+        if version is None:
+            return 0
+        protocol_v1_version = version.get('http://allmydata.org/tahoe/protocols/storage/v1', {})
         available_space = protocol_v1_version.get('available-space')
-        if available_space == None:
+        if available_space is None:
             available_space = protocol_v1_version.get('maximum-immutable-share-size', 0)
         return available_space
 
