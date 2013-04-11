@@ -44,7 +44,9 @@ The item descriptions below use the following types:
     a Twisted listening-port specification string, like "``tcp:80``" or
     "``tcp:3456:interface=127.0.0.1``". For a full description of the format,
     see `the Twisted strports documentation
-    <http://twistedmatrix.com/documents/current/api/twisted.application.strports.html>`_.
+    <https://twistedmatrix.com/documents/current/api/twisted.application.strports.html>`_.
+    Please note, if interface= is not specified, Tahoe-LAFS will attempt to
+    bind the port specified on all interfaces.
 
 ``FURL string``
 
@@ -292,9 +294,9 @@ Client Configuration
 
     This FURL tells the client how to connect to the introducer. Each
     Tahoe-LAFS grid is defined by an introducer. The introducer's FURL is
-    created by the introducer node and written into its base directory when
-    it starts, whereupon it should be published to everyone who wishes to
-    attach a client to that grid
+    created by the introducer node and written into its private base
+    directory when it starts, whereupon it should be published to everyone
+    who wishes to attach a client to that grid
 
 ``helper.furl = (FURL string, optional)``
 
@@ -344,8 +346,13 @@ Client Configuration
     guarantee the availability of the uploaded file. This value should not be
     larger than the number of servers on your grid.
 
-    A value of ``shares.happy`` <= ``k`` is allowed, but does not provide any
-    redundancy if some servers fail or lose shares.
+    A value of ``shares.happy`` <= ``k`` is allowed, but this is not
+    guaranteed to provide any redundancy if some servers fail or lose shares.
+    It may still provide redundancy in practice if ``N`` is greater than
+    the number of connected servers, because in that case there will typically
+    be more than one share on at least some storage nodes. However, since a
+    successful upload only guarantees that at least ``shares.happy`` shares
+    have been stored, the worst case is still that there is no redundancy.
 
     (Mutable files use a different share placement algorithm that does not
     currently consider this parameter.)
@@ -363,10 +370,13 @@ Client Configuration
     mutable-type parameter in the webapi. If you do not specify a value here,
     Tahoe-LAFS will use SDMF for all newly-created mutable files.
 
-    Note that this parameter only applies to mutable files. Mutable
-    directories, which are stored as mutable files, are not controlled by
-    this parameter and will always use SDMF. We may revisit this decision in
-    future versions of Tahoe-LAFS.
+    Note that this parameter applies only to files, not to directories.
+    Mutable directories, which are stored in mutable files, are not
+    controlled by this parameter and will always use SDMF. We may revisit
+    this decision in future versions of Tahoe-LAFS.
+
+    See `<specifications/mutable.rst>`_ for details about mutable file
+    formats.
 
 Frontend Configuration
 ======================
@@ -394,18 +404,18 @@ CLI
     filesystem, uploading/downloading files, and creating/running Tahoe
     nodes. See `<frontends/CLI.rst>`_ for details.
 
-FTP, SFTP
+SFTP, FTP
 
-    Tahoe can also run both FTP and SFTP servers, and map a username/password
+    Tahoe can also run both SFTP and FTP servers, and map a username/password
     pair to a top-level Tahoe directory. See `<frontends/FTP-and-SFTP.rst>`_
-    for instructions on configuring these services, and the ``[ftpd]`` and
-    ``[sftpd]`` sections of ``tahoe.cfg``.
+    for instructions on configuring these services, and the ``[sftpd]`` and
+    ``[ftpd]`` sections of ``tahoe.cfg``.
 
 Drop-Upload
 
     As of Tahoe-LAFS v1.9.0, a node running on Linux can be configured to
     automatically upload files that are created or changed in a specified
-    local directory. See `<frontends/drop_upload.rst>`_ for details.
+    local directory. See `<frontends/drop-upload.rst>`_ for details.
 
 
 
@@ -438,14 +448,16 @@ Storage Server Configuration
     If provided, this value defines how much disk space is reserved: the
     storage server will not accept any share that causes the amount of free
     disk space to drop below this value. (The free space is measured by a
-    call to statvfs(2) on Unix, or GetDiskFreeSpaceEx on Windows, and is the
-    space available to the user account under which the storage server runs.)
+    call to ``statvfs(2)`` on Unix, or ``GetDiskFreeSpaceEx`` on Windows, and
+    is the space available to the user account under which the storage server
+    runs.)
 
     This string contains a number, with an optional case-insensitive scale
-    suffix like "K" or "M" or "G", and an optional "B" or "iB" suffix. So
-    "100MB", "100M", "100000000B", "100000000", and "100000kb" all mean the
-    same thing. Likewise, "1MiB", "1024KiB", and "1048576B" all mean the same
-    thing.
+    suffix, optionally followed by "B" or "iB". The supported scale suffixes
+    are "K", "M", "G", "T", "P" and "E", and a following "i" indicates to use
+    powers of 1024 rather than 1000. So "100MB", "100 M", "100000000B",
+    "100000000", and "100000kb" all mean the same thing. Likewise, "1MiB",
+    "1024KiB", "1024 Ki", and "1048576 B" all mean the same thing.
 
     "``tahoe create-node``" generates a tahoe.cfg with
     "``reserved_space=1G``", but you may wish to raise, lower, or remove the
@@ -495,7 +507,7 @@ the others.
 
 The Introducer node maintains some different state than regular client nodes.
 
-``BASEDIR/introducer.furl``
+``BASEDIR/private/introducer.furl``
 
   This is generated the first time the introducer node is started, and used
   again on subsequent runs, to give the introduction service a persistent
@@ -659,19 +671,16 @@ a legal one.
   timeout.disconnect = 1800
   ssh.port = 8022
   ssh.authorized_keys_file = ~/.ssh/authorized_keys
-
-
+  
   [client]
   introducer.furl = pb://ok45ssoklj4y7eok5c3xkmj@tahoe.example:44801/ii3uumo
   helper.furl = pb://ggti5ssoklj4y7eok5c3xkmj@helper.tahoe.example:7054/kk8lhr
-
-
+  
   [storage]
   enabled = True
   readonly = True
-  sizelimit = 10000000000
-
-
+  reserved_space = 10000000000
+  
   [helper]
   enabled = True
 

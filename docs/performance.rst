@@ -10,8 +10,8 @@ Performance costs for some common operations
 6.  `Inserting/Removing B bytes in an A-byte mutable file`_
 7.  `Adding an entry to an A-entry directory`_
 8.  `Listing an A entry directory`_
-9.  `Performing a file-check on an A-byte file`_
-10. `Performing a file-verify on an A-byte file`_
+9.  `Checking an A-byte file`_
+10. `Verifying an A-byte file (immutable)`_
 11. `Repairing an A-byte file (mutable or immutable)`_
 
 ``K`` indicates the number of shares required to reconstruct the file
@@ -23,10 +23,15 @@ Performance costs for some common operations
 
 ``A`` indicates the number of bytes in a file
 
-``B`` indicates the number of bytes of a file which are being read or
+``B`` indicates the number of bytes of a file that are being read or
 written
 
 ``G`` indicates the number of storage servers on your grid
+
+Most of these cost estimates may have a further constant multiplier: when a
+formula says ``N/K*S``, the cost may actually be ``2*N/K*S`` or ``3*N/K*S``.
+Also note that all references to mutable files are for SDMF-formatted files;
+this document has not yet been updated to describe the MDMF format.
 
 Publishing an ``A``-byte immutable file
 =======================================
@@ -174,8 +179,8 @@ directory be downloaded from the grid. So listing an A entry
 directory requires downloading a (roughly) 330 * A byte mutable
 file, since each directory entry is about 300-330 bytes in size.
 
-Performing a file-check on an ``A``-byte file
-=============================================
+Checking an ``A``-byte file
+===========================
 
 cpu: ~G
 
@@ -188,8 +193,8 @@ about. Note that neither of these values directly depend on the size
 of the file. This is relatively inexpensive, compared to the verify
 and repair operations.
 
-Performing a file-verify on an ``A``-byte file
-==============================================
+Verifying an A-byte file (immutable)
+====================================
 
 cpu: ~N/K*A
 
@@ -199,9 +204,24 @@ memory footprint: N/K*S
 
 notes: To verify a file, Tahoe-LAFS downloads all of the ciphertext
 shares that were originally uploaded to the grid and integrity checks
-them. This is (for well-behaved grids) more expensive than downloading
-an A-byte file, since only a fraction of these shares are necessary to
-recover the file.
+them. This is (for grids with good redundancy) more expensive than
+downloading an A-byte file, since only a fraction of these shares would
+be necessary to recover the file.
+
+Verifying an A-byte file (mutable)
+==================================
+
+cpu: ~N/K*A
+
+network: N/K*A
+
+memory footprint: N/K*A
+
+notes: To verify a file, Tahoe-LAFS downloads all of the ciphertext
+shares that were originally uploaded to the grid and integrity checks
+them. This is (for grids with good redundancy) more expensive than
+downloading an A-byte file, since only a fraction of these shares would
+be necessary to recover the file.
 
 Repairing an ``A``-byte file (mutable or immutable)
 ===================================================
@@ -210,10 +230,15 @@ cpu: variable, between ~A and ~N/K*A
 
 network: variable; between A and N/K*A
 
-memory footprint: (1+N/K)*S
+memory footprint (immutable): (1+N/K)*S
+              (SDMF mutable): (1+N/K)*A
 
 notes: To repair a file, Tahoe-LAFS downloads the file, and
 generates/uploads missing shares in the same way as when it initially
 uploads the file.  So, depending on how many shares are missing, this
 can cost as little as a download or as much as a download followed by
 a full upload.
+
+Since SDMF files have only one segment, which must be processed in its
+entirety, repair requires a full-file download followed by a full-file
+upload.

@@ -1,31 +1,27 @@
 import os.path, re, fnmatch
 from twisted.python import usage
-from allmydata.scripts.common import BaseOptions, get_aliases, get_default_nodedir, DEFAULT_ALIAS
+from allmydata.scripts.common import get_aliases, get_default_nodedir, \
+     DEFAULT_ALIAS, BaseOptions
 from allmydata.util.encodingutil import argv_to_unicode, argv_to_abspath, quote_output
 
 NODEURL_RE=re.compile("http(s?)://([^:]*)(:([1-9][0-9]*))?")
 
 _default_nodedir = get_default_nodedir()
 
-class VDriveOptions(BaseOptions):
+class FilesystemOptions(BaseOptions):
     optParameters = [
-        ["node-directory", "d", None,
-         "Specify which Tahoe node directory should be used. The directory "
-         "should either contain a full Tahoe node, or a file named node.url "
-         "that points to some other Tahoe node. It should also contain a file "
-         "named '" + os.path.join('private', 'aliases') + "' which contains the "
-         "mapping from alias name to root dirnode URI." + (
-            _default_nodedir and (" [default: " + quote_output(_default_nodedir) + "]") or "")],
         ["node-url", "u", None,
-         "Specify the URL of the Tahoe gateway node, such as 'http://127.0.0.1:3456'. "
+         "Specify the URL of the Tahoe gateway node, such as "
+         "'http://127.0.0.1:3456'. "
          "This overrides the URL found in the --node-directory ."],
         ["dir-cap", None, None,
          "Specify which dirnode URI should be used as the 'tahoe' alias."]
         ]
 
     def postOptions(self):
-        if self['node-directory']:
-            self['node-directory'] = argv_to_abspath(self['node-directory'])
+        self["quiet"] = self.parent["quiet"]
+        if self.parent['node-directory']:
+            self['node-directory'] = argv_to_abspath(self.parent['node-directory'])
         else:
             self['node-directory'] = _default_nodedir
 
@@ -49,7 +45,7 @@ class VDriveOptions(BaseOptions):
         self.aliases = aliases # maps alias name to dircap
 
 
-class MakeDirectoryOptions(VDriveOptions):
+class MakeDirectoryOptions(FilesystemOptions):
     optParameters = [
         ("format", None, None, "Create a directory with the given format: SDMF or MDMF (case-insensitive)"),
         ]
@@ -62,11 +58,11 @@ class MakeDirectoryOptions(VDriveOptions):
                 raise usage.UsageError("%s is an invalid format" % self['format'])
 
     def getSynopsis(self):
-        return "Usage:  %s mkdir [options] [REMOTE_DIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] mkdir [options] [REMOTE_DIR]" % (self.command_name,)
 
     longdesc = """Create a new directory, either unlinked or as a subdirectory."""
 
-class AddAliasOptions(VDriveOptions):
+class AddAliasOptions(FilesystemOptions):
     def parseArgs(self, alias, cap):
         self.alias = argv_to_unicode(alias)
         if self.alias.endswith(u':'):
@@ -74,28 +70,28 @@ class AddAliasOptions(VDriveOptions):
         self.cap = cap
 
     def getSynopsis(self):
-        return "Usage:  %s add-alias [options] ALIAS[:] DIRCAP" % (self.command_name,)
+        return "Usage:  %s [global-opts] add-alias [options] ALIAS[:] DIRCAP" % (self.command_name,)
 
     longdesc = """Add a new alias for an existing directory."""
 
-class CreateAliasOptions(VDriveOptions):
+class CreateAliasOptions(FilesystemOptions):
     def parseArgs(self, alias):
         self.alias = argv_to_unicode(alias)
         if self.alias.endswith(u':'):
             self.alias = self.alias[:-1]
 
     def getSynopsis(self):
-        return "Usage:  %s create-alias [options] ALIAS[:]" % (self.command_name,)
+        return "Usage:  %s [global-opts] create-alias [options] ALIAS[:]" % (self.command_name,)
 
     longdesc = """Create a new directory and add an alias for it."""
 
-class ListAliasesOptions(VDriveOptions):
+class ListAliasesOptions(FilesystemOptions):
     def getSynopsis(self):
-        return "Usage:  %s list-aliases [options]" % (self.command_name,)
+        return "Usage:  %s [global-opts] list-aliases [options]" % (self.command_name,)
 
     longdesc = """Display a table of all configured aliases."""
 
-class ListOptions(VDriveOptions):
+class ListOptions(FilesystemOptions):
     optFlags = [
         ("long", "l", "Use long format: show file sizes, and timestamps."),
         ("uri", "u", "Show file/directory URIs."),
@@ -106,8 +102,13 @@ class ListOptions(VDriveOptions):
     def parseArgs(self, where=""):
         self.where = argv_to_unicode(where)
 
+    def getSynopsis(self):
+        return "Usage:  %s ls [options] [PATH]" % (self.command_name,)
+
     longdesc = """
     List the contents of some portion of the grid.
+
+    If PATH is omitted, "tahoe:" is assumed.
 
     When the -l or --long option is used, each line is shown in the
     following format:
@@ -132,7 +133,7 @@ class ListOptions(VDriveOptions):
     last modified.
     """
 
-class GetOptions(VDriveOptions):
+class GetOptions(FilesystemOptions):
     def parseArgs(self, arg1, arg2=None):
         # tahoe get FOO |less            # write to stdout
         # tahoe get tahoe:FOO |less      # same
@@ -150,7 +151,7 @@ class GetOptions(VDriveOptions):
             self.to_file = None
 
     def getSynopsis(self):
-        return "Usage:  %s get [options] REMOTE_FILE LOCAL_FILE" % (self.command_name,)
+        return "Usage:  %s [global-opts] get [options] REMOTE_FILE LOCAL_FILE" % (self.command_name,)
 
     longdesc = """
     Retrieve a file from the grid and write it to the local filesystem. If
@@ -158,7 +159,7 @@ class GetOptions(VDriveOptions):
     stdout."""
 
     def getUsage(self, width=None):
-        t = VDriveOptions.getUsage(self, width)
+        t = FilesystemOptions.getUsage(self, width)
         t += """
 Examples:
  % tahoe get FOO |less            # write to stdout
@@ -168,7 +169,7 @@ Examples:
 """
         return t
 
-class PutOptions(VDriveOptions):
+class PutOptions(FilesystemOptions):
     optFlags = [
         ("mutable", "m", "Create a mutable file instead of an immutable one (like --format=SDMF)"),
         ]
@@ -196,17 +197,21 @@ class PutOptions(VDriveOptions):
                 raise usage.UsageError("%s is an invalid format" % self['format'])
 
     def getSynopsis(self):
-        return "Usage:  %s put [options] LOCAL_FILE REMOTE_FILE" % (self.command_name,)
+        return "Usage:  %s [global-opts] put [options] LOCAL_FILE REMOTE_FILE" % (self.command_name,)
 
     longdesc = """
     Put a file into the grid, copying its contents from the local filesystem.
     If REMOTE_FILE is missing, upload the file but do not link it into a
     directory; also print the new filecap to stdout. If LOCAL_FILE is missing
     or '-', data will be copied from stdin. REMOTE_FILE is assumed to start
-    with tahoe: unless otherwise specified."""
+    with tahoe: unless otherwise specified.
+
+    If the destination file already exists and is mutable, it will be modified
+    in-place, whether or not --mutable is specified. (--mutable only affects
+    creation of new files.)"""
 
     def getUsage(self, width=None):
-        t = VDriveOptions.getUsage(self, width)
+        t = FilesystemOptions.getUsage(self, width)
         t += """
 Examples:
  % cat FILE | tahoe put                # create unlinked file from stdin
@@ -219,7 +224,7 @@ Examples:
 """
         return t
 
-class CpOptions(VDriveOptions):
+class CpOptions(FilesystemOptions):
     optFlags = [
         ("recursive", "r", "Copy source directory recursively."),
         ("verbose", "v", "Be noisy about what is happening."),
@@ -235,7 +240,7 @@ class CpOptions(VDriveOptions):
         self.destination = argv_to_unicode(args[-1])
 
     def getSynopsis(self):
-        return "Usage: %s cp [options] FROM.. TO" % (self.command_name,)
+        return "Usage: %s [global-opts] cp [options] FROM.. TO" % (self.command_name,)
 
     longdesc = """
     Use 'tahoe cp' to copy files between a local filesystem and a Tahoe grid.
@@ -262,24 +267,24 @@ class CpOptions(VDriveOptions):
     slashes.
     """
 
-class UnlinkOptions(VDriveOptions):
+class UnlinkOptions(FilesystemOptions):
     def parseArgs(self, where):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s unlink [options] REMOTE_FILE" % (self.command_name,)
+        return "Usage:  %s [global-opts] unlink [options] REMOTE_FILE" % (self.command_name,)
 
 class RmOptions(UnlinkOptions):
     def getSynopsis(self):
-        return "Usage:  %s rm [options] REMOTE_FILE" % (self.command_name,)
+        return "Usage:  %s [global-opts] rm [options] REMOTE_FILE" % (self.command_name,)
 
-class MvOptions(VDriveOptions):
+class MvOptions(FilesystemOptions):
     def parseArgs(self, frompath, topath):
         self.from_file = argv_to_unicode(frompath)
         self.to_file = argv_to_unicode(topath)
 
     def getSynopsis(self):
-        return "Usage:  %s mv [options] FROM TO" % (self.command_name,)
+        return "Usage:  %s [global-opts] mv [options] FROM TO" % (self.command_name,)
 
     longdesc = """
     Use 'tahoe mv' to move files that are already on the grid elsewhere on
@@ -293,13 +298,13 @@ class MvOptions(VDriveOptions):
     the grid -- use 'tahoe cp' for that.
     """
 
-class LnOptions(VDriveOptions):
+class LnOptions(FilesystemOptions):
     def parseArgs(self, frompath, topath):
         self.from_file = argv_to_unicode(frompath)
         self.to_file = argv_to_unicode(topath)
 
     def getSynopsis(self):
-        return "Usage:  %s ln [options] FROM_LINK TO_LINK" % (self.command_name,)
+        return "Usage:  %s [global-opts] ln [options] FROM_LINK TO_LINK" % (self.command_name,)
 
     longdesc = """
     Use 'tahoe ln' to duplicate a link (directory entry) already on the grid
@@ -326,7 +331,7 @@ class LnOptions(VDriveOptions):
 class BackupConfigurationError(Exception):
     pass
 
-class BackupOptions(VDriveOptions):
+class BackupOptions(FilesystemOptions):
     optFlags = [
         ("verbose", "v", "Be noisy about what is happening."),
         ("ignore-timestamps", None, "Do not use backupdb timestamps to decide whether a local file is unchanged."),
@@ -346,7 +351,7 @@ class BackupOptions(VDriveOptions):
         self.to_dir = argv_to_unicode(topath)
 
     def getSynopsis(self):
-        return "Usage:  %s backup [options] FROM ALIAS:TO" % (self.command_name,)
+        return "Usage:  %s [global-opts] backup [options] FROM ALIAS:TO" % (self.command_name,)
 
     def opt_exclude(self, pattern):
         """Ignore files matching a glob pattern. You may give multiple
@@ -396,7 +401,7 @@ class BackupOptions(VDriveOptions):
     --link-dest=TO/Archives/(previous) FROM TO/Archives/(new); ln -sf
     TO/Archives/(new) TO/Latest'."""
 
-class WebopenOptions(VDriveOptions):
+class WebopenOptions(FilesystemOptions):
     optFlags = [
         ("info", "i", "Open the t=info page for the file"),
         ]
@@ -404,13 +409,13 @@ class WebopenOptions(VDriveOptions):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s webopen [options] [ALIAS:PATH]" % (self.command_name,)
+        return "Usage:  %s [global-opts] webopen [options] [ALIAS:PATH]" % (self.command_name,)
 
     longdesc = """Open a web browser to the contents of some file or
     directory on the grid. When run without arguments, open the Welcome
     page."""
 
-class ManifestOptions(VDriveOptions):
+class ManifestOptions(FilesystemOptions):
     optFlags = [
         ("storage-index", "s", "Only print storage index strings, not pathname+cap."),
         ("verify-cap", None, "Only print verifycap, not pathname+cap."),
@@ -421,12 +426,12 @@ class ManifestOptions(VDriveOptions):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s manifest [options] [ALIAS:PATH]" % (self.command_name,)
+        return "Usage:  %s [global-opts] manifest [options] [ALIAS:PATH]" % (self.command_name,)
 
     longdesc = """Print a list of all files and directories reachable from
     the given starting point."""
 
-class StatsOptions(VDriveOptions):
+class StatsOptions(FilesystemOptions):
     optFlags = [
         ("raw", "r", "Display raw JSON data instead of parsed"),
         ]
@@ -434,12 +439,12 @@ class StatsOptions(VDriveOptions):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s stats [options] [ALIAS:PATH]" % (self.command_name,)
+        return "Usage:  %s [global-opts] stats [options] [ALIAS:PATH]" % (self.command_name,)
 
     longdesc = """Print statistics about of all files and directories
     reachable from the given starting point."""
 
-class CheckOptions(VDriveOptions):
+class CheckOptions(FilesystemOptions):
     optFlags = [
         ("raw", None, "Display raw JSON data instead of parsed."),
         ("verify", None, "Verify all hashes, instead of merely querying share presence."),
@@ -450,14 +455,14 @@ class CheckOptions(VDriveOptions):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s check [options] [ALIAS:PATH]" % (self.command_name,)
+        return "Usage:  %s [global-opts] check [options] [ALIAS:PATH]" % (self.command_name,)
 
     longdesc = """
     Check a single file or directory: count how many shares are available and
     verify their hashes. Optionally repair the file if any problems were
     found."""
 
-class DeepCheckOptions(VDriveOptions):
+class DeepCheckOptions(FilesystemOptions):
     optFlags = [
         ("raw", None, "Display raw JSON data instead of parsed."),
         ("verify", None, "Verify all hashes, instead of merely querying share presence."),
@@ -469,7 +474,7 @@ class DeepCheckOptions(VDriveOptions):
         self.where = argv_to_unicode(where)
 
     def getSynopsis(self):
-        return "Usage:  %s deep-check [options] [ALIAS:PATH]" % (self.command_name,)
+        return "Usage:  %s [global-opts] deep-check [options] [ALIAS:PATH]" % (self.command_name,)
 
     longdesc = """
     Check all files and directories reachable from the given starting point

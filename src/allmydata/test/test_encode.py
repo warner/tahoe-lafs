@@ -268,10 +268,8 @@ class Encode(unittest.TestCase):
         # force use of multiple segments
         e = encode.Encoder()
         u = upload.Data(data, convergence="some convergence string")
-        u.max_segment_size = max_segment_size
-        u.encoding_param_k = 25
-        u.encoding_param_happy = 75
-        u.encoding_param_n = 100
+        u.set_default_encoding_parameters({'max_segment_size': max_segment_size,
+                                           'k': 25, 'happy': 75, 'n': 100})
         eu = upload.EncryptAnUploadable(u)
         d = e.set_encrypted_uploadable(eu)
 
@@ -395,7 +393,7 @@ class Roundtrip(GridTestMixin, unittest.TestCase):
         u.encoding_param_happy = 1
         u.encoding_param_n = 100
         d = self.c0.upload(u)
-        d.addCallback(lambda ur: self.c0.create_node_from_uri(ur.uri))
+        d.addCallback(lambda ur: self.c0.create_node_from_uri(ur.get_uri()))
         # returns a FileNode
         return d
 

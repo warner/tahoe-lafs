@@ -52,6 +52,9 @@ class OldConfigError(Exception):
                 "See docs/historical/configuration.rst."
                 % "\n".join([quote_output(fname) for fname in self.args[0]]))
 
+class OldConfigOptionError(Exception):
+    pass
+
 
 class Node(service.MultiService):
     # this implements common functionality of both Client nodes and Introducer
@@ -119,7 +122,21 @@ class Node(service.MultiService):
     def read_config(self):
         self.error_about_old_config_files()
         self.config = ConfigParser.SafeConfigParser()
-        self.config.read([os.path.join(self.basedir, "tahoe.cfg")])
+
+        tahoe_cfg = os.path.join(self.basedir, "tahoe.cfg")
+        try:
+            f = open(tahoe_cfg, "rb")
+            try:
+                # Skip any initial Byte Order Mark. Since this is an ordinary file, we
+                # don't need to handle incomplete reads, and can assume seekability.
+                if f.read(3) != '\xEF\xBB\xBF':
+                    f.seek(0)
+                self.config.readfp(f)
+            finally:
+                f.close()
+        except EnvironmentError:
+            if os.path.exists(tahoe_cfg):
+                raise
 
         cfg_tubport = self.get_config("node", "tub.port", "")
         if not cfg_tubport:
@@ -192,30 +209,65 @@ class Node(service.MultiService):
         # TODO: merge this with allmydata.get_package_versions
         return dict(app_versions.versions)
 
+    def get_config_from_file(self, name, required=False):
+        """Get the (string) contents of a config file, or None if the file
+        did not exist. If required=True, raise an exception rather than
+        returning None. Any leading or trailing whitespace will be stripped
+        from the data."""
+        fn = os.path.join(self.basedir, name)
+        try:
+            return fileutil.read(fn).strip()
+        except EnvironmentError:
+            if not required:
+                return None
+            raise
+
     def write_private_config(self, name, value):
         """Write the (string) contents of a private config file (which is a
         config file that resides within the subdirectory named 'private'), and
-        return it. Any leading or trailing whitespace will be stripped from
-        the data.
+        return it.
         """
         privname = os.path.join(self.basedir, "private", name)
-        open(privname, "w").write(value.strip())
+        open(privname, "w").write(value)
 
-    def get_or_create_private_config(self, name, default):
+    def get_private_config(self, name, default=_None):
+        """Read the (string) contents of a private config file (which is a
+        config file that resides within the subdirectory named 'private'),
+        and return it. Return a default, or raise an error if one was not
+        given.
+        """
+        privname = os.path.join(self.basedir, "private", name)
+        try:
+            return fileutil.read(privname)
+        except EnvironmentError:
+            if os.path.exists(privname):
+                raise
+            if default is _None:
+                raise MissingConfigEntry("The required configuration file %s is missing."
+                                         % (quote_output(privname),))
+            return default
+
+    def get_or_create_private_config(self, name, default=_None):
         """Try to get the (string) contents of a private config file (which
         is a config file that resides within the subdirectory named
         'private'), and return it. Any leading or trailing whitespace will be
         stripped from the data.
 
-        If the file does not exist, try to create it using default, and
-        then return the value that was written. If 'default' is a string,
-        use it as a default value. If not, treat it as a 0-argument callable
-        which is expected to return a string.
+        If the file does not exist, and default is not given, report an error.
+        If the file does not exist and a default is specified, try to create
+        it using that default, and then return the value that was written.
+        If 'default' is a string, use it as a default value. If not, treat it
+        as a zero-argument callable that is expected to return a string.
         """
         privname = os.path.join(self.basedir, "private", name)
         try:
             value = fileutil.read(privname)
         except EnvironmentError:
+            if os.path.exists(privname):
+                raise
+            if default is _None:
+                raise MissingConfigEntry("The required configuration file %s is missing."
+                                         % (quote_output(privname),))
             if isinstance(default, basestring):
                 value = default
             else:
@@ -227,7 +279,7 @@ class Node(service.MultiService):
         """Write a string to a config file."""
         fn = os.path.join(self.basedir, name)
         try:
-            open(fn, mode).write(value)
+            fileutil.write(fn, value, mode)
         except EnvironmentError, e:
             self.log("Unable to write config file '%s'" % fn)
             self.log(e)
@@ -312,7 +364,7 @@ class Node(service.MultiService):
         self.tub.setOption("bridge-twisted-logs", True)
         incident_dir = os.path.join(self.basedir, "logs", "incidents")
         # this doesn't quite work yet: unit tests fail
-        foolscap.logging.log.setLogDir(incident_dir)
+        foolscap.logging.log.setLogDir(incident_dir.encode(get_filesystem_encoding()))
 
     def log(self, *args, **kwargs):
         return log.msg(*args, **kwargs)
@@ -324,7 +376,7 @@ class Node(service.MultiService):
         portnum = l.getPortnum()
         # record which port we're listening on, so we can grab the same one
         # next time
-        open(self._portnumfile, "w").write("%d\n" % portnum)
+        fileutil.write_atomically(self._portnumfile, "%d\n" % portnum, mode="")
 
         base_location = ",".join([ "%s:%d" % (addr, portnum)
                                    for addr in local_addresses ])

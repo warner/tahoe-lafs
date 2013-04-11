@@ -1,11 +1,11 @@
 
 import os, sys
-from allmydata.scripts.common import BasedirMixin, BaseOptions
+from allmydata.scripts.common import BasedirOptions
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, argv_to_unicode, quote_output
 import allmydata
 
-class CreateClientOptions(BasedirMixin, BaseOptions):
+class CreateClientOptions(BasedirOptions):
     optParameters = [
         # we provide 'create-node'-time options for the most common
         # configuration knobs. The rest can be controlled by editing
@@ -17,7 +17,7 @@ class CreateClientOptions(BasedirMixin, BaseOptions):
         ]
 
     def getSynopsis(self):
-        return "Usage:  %s create-client [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] create-client [options] [NODEDIR]" % (self.command_name,)
 
 
 class CreateNodeOptions(CreateClientOptions):
@@ -26,18 +26,14 @@ class CreateNodeOptions(CreateClientOptions):
         ]
 
     def getSynopsis(self):
-        return "Usage:  %s create-node [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] create-node [options] [NODEDIR]" % (self.command_name,)
 
 
-class CreateIntroducerOptions(BasedirMixin, BaseOptions):
+class CreateIntroducerOptions(BasedirOptions):
     default_nodedir = None
 
-    optParameters = [
-        ["node-directory", "d", None, "Specify which directory the introducer should be created in. [no default]"],
-    ]
-
     def getSynopsis(self):
-        return "Usage:  %s create-introducer [options] NODEDIR" % (self.command_name,)
+        return "Usage:  %s [global-opts] create-introducer [options] NODEDIR" % (self.command_name,)
 
 
 client_tac = """
@@ -155,8 +151,8 @@ def create_node(config, out=sys.stdout, err=sys.stderr):
     c.write("[drop_upload]\n")
     c.write("# Shall this node automatically upload files created or modified in a local directory?\n")
     c.write("enabled = false\n")
-    c.write("# This must be a mutable directory writecap.\n")
-    c.write("upload.dircap =\n")
+    c.write("# To specify the target of uploads, a mutable directory writecap URI must be placed\n"
+            "# in 'private/drop_upload_dircap'.\n")
     c.write("local.directory = ~/drop_upload\n")
     c.write("\n")
 

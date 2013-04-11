@@ -13,6 +13,7 @@ _pyflakes_hush = [si_b2a, si_a2b, storage_index_to_dir] # re-exported
 from allmydata.storage.lease import LeaseInfo
 from allmydata.storage.mutable import MutableShareFile, EmptyShare, \
      create_mutable_sharefile
+from allmydata.mutable.layout import MAX_MUTABLE_SHARE_SIZE
 from allmydata.storage.immutable import ShareFile, BucketWriter, BucketReader
 from allmydata.storage.crawler import BucketCountingCrawler
 from allmydata.storage.expirer import LeaseCheckingCrawler
@@ -98,6 +99,11 @@ class StorageServer(service.MultiService, Referenceable):
 
     def __repr__(self):
         return "<StorageServer %s>" % (idlib.shortnodeid_b2a(self.my_nodeid),)
+
+    def have_shares(self):
+        # quick test to decide if we need to commit to an implicit
+        # permutation-seed or if we should use a new one
+        return bool(set(os.listdir(self.sharedir)) - set(["incoming"]))
 
     def add_bucket_counter(self):
         statefile = os.path.join(self.storedir, "bucket_counter.state")
@@ -220,6 +226,7 @@ class StorageServer(service.MultiService, Referenceable):
 
         version = { "http://allmydata.org/tahoe/protocols/storage/v1" :
                     { "maximum-immutable-share-size": remaining_space,
+                      "maximum-mutable-share-size": MAX_MUTABLE_SHARE_SIZE,
                       "available-space": remaining_space,
                       "tolerates-immutable-read-overrun": True,
                       "delete-mutable-shares-with-zero-length-writev": True,

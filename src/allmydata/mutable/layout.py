@@ -1,6 +1,7 @@
 
 import struct
-from allmydata.mutable.common import NeedMoreDataError, UnknownVersionError
+from allmydata.mutable.common import NeedMoreDataError, UnknownVersionError, \
+     BadShareError
 from allmydata.interfaces import HASH_SIZE, SALT_SIZE, SDMF_VERSION, \
                                  MDMF_VERSION, IMutableSlotWriter
 from allmydata.util import mathutil
@@ -9,46 +10,43 @@ from twisted.internet import defer
 from zope.interface import implements
 
 
-# These strings describe the format of the packed structs they help process
+# These strings describe the format of the packed structs they help process.
 # Here's what they mean:
 #
 #  PREFIX:
 #    >: Big-endian byte order; the most significant byte is first (leftmost).
-#    B: The version information; an 8 bit version identifier. Stored as
-#       an unsigned char. This is currently 00 00 00 00; our modifications
-#       will turn it into 00 00 00 01.
+#    B: The container version information; stored as an unsigned 8-bit integer.
+#       This is currently either SDMF_VERSION or MDMF_VERSION.
 #    Q: The sequence number; this is sort of like a revision history for
 #       mutable files; they start at 1 and increase as they are changed after
-#       being uploaded. Stored as an unsigned long long, which is 8 bytes in
-#       length.
-#  32s: The root hash of the share hash tree. We use sha-256d, so we use 32 
-#       characters = 32 bytes to store the value.
-#  16s: The salt for the readkey. This is a 16-byte random value, stored as
-#       16 characters.
+#       being uploaded. Stored as an unsigned 64-bit integer.
+#  32s: The root hash of the share hash tree. We use sha-256d, so we use 32
+#       bytes to store the value.
+#  16s: The salt for the readkey. This is a 16-byte random value.
 #
 #  SIGNED_PREFIX additions, things that are covered by the signature:
-#    B: The "k" encoding parameter. We store this as an 8-bit character, 
-#       which is convenient because our erasure coding scheme cannot 
-#       encode if you ask for more than 255 pieces.
-#    B: The "N" encoding parameter. Stored as an 8-bit character for the 
-#       same reasons as above.
-#    Q: The segment size of the uploaded file. This will essentially be the
-#       length of the file in SDMF. An unsigned long long, so we can store 
-#       files of quite large size.
-#    Q: The data length of the uploaded file. Modulo padding, this will be
-#       the same of the data length field. Like the data length field, it is
-#       an unsigned long long and can be quite large.
+#    B: The "k" encoding parameter. We store this as an unsigned 8-bit
+#       integer, since our erasure coding scheme cannot encode to more than
+#       255 pieces.
+#    B: The "N" encoding parameter. Stored as an unsigned 8-bit integer for
+#       the same reason as above.
+#    Q: The segment size of the uploaded file. This is an unsigned 64-bit
+#       integer, to allow handling large segments and files. For SDMF the
+#       segment size is the data length plus padding; for MDMF it can be
+#       smaller.
+#    Q: The data length of the uploaded file. Like the segment size field,
+#       it is an unsigned 64-bit integer.
 #
 #   HEADER additions:
-#     L: The offset of the signature of this. An unsigned long.
-#     L: The offset of the share hash chain. An unsigned long.
-#     L: The offset of the block hash tree. An unsigned long.
-#     L: The offset of the share data. An unsigned long.
-#     Q: The offset of the encrypted private key. An unsigned long long, to
-#        account for the possibility of a lot of share data.
-#     Q: The offset of the EOF. An unsigned long long, to account for the
-#        possibility of a lot of share data.
-# 
+#     L: The offset of the signature. An unsigned 32-bit integer.
+#     L: The offset of the share hash chain. An unsigned 32-bit integer.
+#     L: The offset of the block hash tree. An unsigned 32-bit integer.
+#     L: The offset of the share data. An unsigned 32-bit integer.
+#     Q: The offset of the encrypted private key. An unsigned 64-bit integer,
+#        to account for the possibility of a lot of share data.
+#     Q: The offset of the EOF. An unsigned 64-bit integer, to account for
+#        the possibility of a lot of share data.
+#
 #  After all of these, we have the following:
 #    - The verification key: Occupies the space between the end of the header
 #      and the start of the signature (i.e.: data[HEADER_LENGTH:o['signature']].
@@ -59,13 +57,13 @@ from zope.interface import implements
 #    - The share data, which goes from the share data offset to the encrypted
 #      private key offset.
 #    - The encrypted private key offset, which goes until the end of the file.
-# 
+#
 #  The block hash tree in this encoding has only one share, so the offset of
 #  the share data will be 32 bits more than the offset of the block hash tree.
 #  Given this, we may need to check to see how many bytes a reasonably sized
 #  block hash tree will take up.
 
-PREFIX = ">BQ32s16s" # each version has a different prefix
+PREFIX = ">BQ32s16s" # each version may have a different prefix
 SIGNED_PREFIX = ">BQ32s16s BBQQ" # this is covered by the signature
 SIGNED_PREFIX_LENGTH = struct.calcsize(SIGNED_PREFIX)
 HEADER = ">BQ32s16s BBQQ LLLLQQ" # includes offsets
@@ -73,7 +71,10 @@ HEADER_LENGTH = struct.calcsize(HEADER)
 OFFSETS = ">LLLLQQ"
 OFFSETS_LENGTH = struct.calcsize(OFFSETS)
 
-# These are still used for some tests.
+MAX_MUTABLE_SHARE_SIZE = 69105*1000*1000*1000*1000 # 69105 TB, kind of arbitrary
+
+
+# These are still used for some tests of SDMF files.
 def unpack_header(data):
     o = {}
     (version,
@@ -116,7 +117,9 @@ def unpack_share(data):
     share_hash_chain_s = data[o['share_hash_chain']:o['block_hash_tree']]
     share_hash_format = ">H32s"
     hsize = struct.calcsize(share_hash_format)
-    assert len(share_hash_chain_s) % hsize == 0, len(share_hash_chain_s)
+    if len(share_hash_chain_s) % hsize != 0:
+        raise BadShareError("hash chain is %d bytes, not multiple of %d"
+                            % (len(share_hash_chain_s), hsize))
     share_hash_chain = []
     for i in range(0, len(share_hash_chain_s), hsize):
         chunk = share_hash_chain_s[i:i+hsize]
@@ -124,7 +127,9 @@ def unpack_share(data):
         share_hash_chain.append( (hid, h) )
     share_hash_chain = dict(share_hash_chain)
     block_hash_tree_s = data[o['block_hash_tree']:o['share_data']]
-    assert len(block_hash_tree_s) % 32 == 0, len(block_hash_tree_s)
+    if len(block_hash_tree_s) % 32 != 0:
+        raise BadShareError("block_hash_tree is %d bytes, not multiple of %d"
+                            % (len(block_hash_tree_s), 32))
     block_hash_tree = []
     for i in range(0, len(block_hash_tree_s), 32):
         block_hash_tree.append(block_hash_tree_s[i:i+32])
@@ -243,7 +248,7 @@ class SDMFSlotWriteProxy:
         self._segment_size = segment_size
         self._data_length = data_length
 
-        # This is an SDMF file, so it should have only one segment, so, 
+        # This is an SDMF file, so it should have only one segment, so,
         # modulo padding of the data length, the segment size and the
         # data length should be the same.
         expected_segment_size = mathutil.next_multiple(data_length,
@@ -605,12 +610,12 @@ class MDMFSlotWriteProxy:
     # in meaning to what we have with SDMF files, except now instead of
     # using the literal salt, we use a value derived from all of the
     # salts -- the share hash root.
-    # 
+    #
     # The salt is stored before the block for each segment. The block
     # hash tree is computed over the combination of block and salt for
     # each segment. In this way, we get integrity checking for both
     # block and salt with the current block hash tree arrangement.
-    # 
+    #
     # The ordering of the offsets is different to reflect the dependencies
     # that we'll run into with an MDMF file. The expected write flow is
     # something like this:
@@ -620,16 +625,16 @@ class MDMFSlotWriteProxy:
     #      and where they should go.. We can also figure out where the
     #      encrypted private key should go, because we can figure out how
     #      big the share data will be.
-    # 
+    #
     #   1: Encrypt, encode, and upload the file in chunks. Do something
-    #      like 
+    #      like
     #
     #       put_block(data, segnum, salt)
     #
     #      to write a block and a salt to the disk. We can do both of
     #      these operations now because we have enough of the offsets to
     #      know where to put them.
-    # 
+    #
     #   2: Put the encrypted private key. Use:
     #
     #        put_encprivkey(encprivkey)
@@ -639,7 +644,7 @@ class MDMFSlotWriteProxy:
     #
     #   3: We're now in a position to upload the block hash tree for
     #      a share. Put that using something like:
-    #       
+    #
     #        put_blockhashes(block_hash_tree)
     #
     #      Note that block_hash_tree is a list of hashes -- we'll take
@@ -650,20 +655,20 @@ class MDMFSlotWriteProxy:
     #
     #   4: We're now in a position to upload the share hash chain for
     #      a share. Do that with something like:
-    #      
-    #        put_sharehashes(share_hash_chain) 
     #
-    #      share_hash_chain should be a dictionary mapping shnums to 
+    #        put_sharehashes(share_hash_chain)
+    #
+    #      share_hash_chain should be a dictionary mapping shnums to
     #      32-byte hashes -- the wrapper handles serialization.
     #      We'll know where to put the signature at this point, also.
     #      The root of this tree will be put explicitly in the next
     #      step.
-    # 
+    #
     #   5: Before putting the signature, we must first put the
     #      root_hash. Do this with:
-    # 
+    #
     #        put_root_hash(root_hash).
-    #      
+    #
     #      In terms of knowing where to put this value, it was always
     #      possible to place it, but it makes sense semantically to
     #      place it after the share hash tree, so that's why you do it
@@ -674,27 +679,27 @@ class MDMFSlotWriteProxy:
     #        get_signable()
     #
     #      to get the part of the header that you want to sign, and use:
-    #       
+    #
     #        put_signature(signature)
     #
     #      to write your signature to the remote server.
     #
     #   6: Add the verification key, and finish. Do:
     #
-    #        put_verification_key(key) 
+    #        put_verification_key(key)
     #
-    #      and 
+    #      and
     #
     #        finish_publish()
     #
     # Checkstring management:
-    # 
+    #
     # To write to a mutable slot, we have to provide test vectors to ensure
     # that we are writing to the same data that we think we are. These
     # vectors allow us to detect uncoordinated writes; that is, writes
     # where both we and some other shareholder are writing to the
     # mutable slot, and to report those back to the parts of the program
-    # doing the writing. 
+    # doing the writing.
     #
     # With SDMF, this was easy -- all of the share data was written in
     # one go, so it was easy to detect uncoordinated writes, and we only
@@ -719,7 +724,7 @@ class MDMFSlotWriteProxy:
     #   - When we write out the salt hash
     #   - When we write out the root of the share hash tree
     #
-    # since these values will change the header. It is possible that we 
+    # since these values will change the header. It is possible that we
     # can just make those be written in one operation to minimize
     # disruption.
     def __init__(self,
@@ -740,7 +745,7 @@ class MDMFSlotWriteProxy:
         assert self.shnum >= 0 and self.shnum < total_shares
         self._total_shares = total_shares
         # We build up the offset table as we write things. It is the
-        # last thing we write to the remote server. 
+        # last thing we write to the remote server.
         self._offsets = {}
         self._testvs = []
         # This is a list of write vectors that will be sent to our
@@ -1005,7 +1010,7 @@ class MDMFSlotWriteProxy:
         Put the root hash (the root of the share hash tree) in the
         remote slot.
         """
-        # It does not make sense to be able to put the root 
+        # It does not make sense to be able to put the root
         # hash without first putting the share hashes, since you need
         # the share hashes to generate the root hash.
         #
@@ -1099,10 +1104,11 @@ class MDMFSlotWriteProxy:
     def get_verinfo(self):
         return (self._seqnum,
                 self._root_hash,
-                self._required_shares,
-                self._total_shares,
+                None,
                 self._segment_size,
                 self._data_length,
+                self._required_shares,
+                self._total_shares,
                 self.get_signable(),
                 self._get_offsets_tuple())
 
@@ -1168,6 +1174,11 @@ class MDMFSlotWriteProxy:
         d.addCallback(_result)
         return d
 
+def _handle_bad_struct(f):
+    # struct.unpack errors mean the server didn't give us enough data, so
+    # this share is bad
+    f.trap(struct.error)
+    raise BadShareError(f.value.args[0])
 
 class MDMFSlotReadProxy:
     """
@@ -1181,7 +1192,8 @@ class MDMFSlotReadProxy:
                  rref,
                  storage_index,
                  shnum,
-                 data=""):
+                 data="",
+                 data_is_everything=False):
         # Start the initialization process.
         self._rref = rref
         self._storage_index = storage_index
@@ -1212,8 +1224,14 @@ class MDMFSlotReadProxy:
 
         # If the user has chosen to initialize us with some data, we'll
         # try to satisfy subsequent data requests with that data before
-        # asking the storage server for it. If 
+        # asking the storage server for it.
         self._data = data
+
+        # If the provided data is known to be complete, then we know there's
+        # nothing to be gained by querying the server, so we should just
+        # partially satisfy requests with what we have.
+        self._data_is_everything = data_is_everything
+
         # The way callers interact with cache in the filenode returns
         # None if there isn't any cached data, but the way we index the
         # cached data requires a string, so convert None to "".
@@ -1229,7 +1247,7 @@ class MDMFSlotReadProxy:
         """
         if self._offsets:
             return defer.succeed(None)
-        # At this point, we may be either SDMF or MDMF. Fetching 107 
+        # At this point, we may be either SDMF or MDMF. Fetching 107
         # bytes will be enough to get header and offsets for both SDMF and
         # MDMF, though we'll be left with 4 more bytes than we
         # need if this ends up being MDMF. This is probably less
@@ -1238,11 +1256,13 @@ class MDMFSlotReadProxy:
         d = self._read(readvs, force_remote)
         d.addCallback(self._process_encoding_parameters)
         d.addCallback(self._process_offsets)
+        d.addErrback(_handle_bad_struct)
         return d
 
 
     def _process_encoding_parameters(self, encoding_parameters):
-        assert self.shnum in encoding_parameters
+        if self.shnum not in encoding_parameters:
+            raise BadShareError("no data for shnum %d" % self.shnum)
         encoding_parameters = encoding_parameters[self.shnum][0]
         # The first byte is the version number. It will tell us what
         # to do next.
@@ -1387,7 +1407,8 @@ class MDMFSlotReadProxy:
         d.addCallback(_then)
         d.addCallback(lambda readvs: self._read(readvs))
         def _process_results(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
             if self._version_number == 0:
                 # We only read the share data, but we know the salt from
                 # when we fetched the header
@@ -1395,7 +1416,8 @@ class MDMFSlotReadProxy:
                 if not data:
                     data = ""
                 else:
-                    assert len(data) == 1
+                    if len(data) != 1:
+                        raise BadShareError("got %d vectors, not 1" % len(data))
                     data = data[0]
                 salt = self._salt
             else:
@@ -1445,7 +1467,8 @@ class MDMFSlotReadProxy:
         d.addCallback(lambda readvs:
             self._read(readvs, force_remote=force_remote))
         def _build_block_hash_tree(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
 
             rawhashes = results[self.shnum][0]
             results = [rawhashes[i:i+HASH_SIZE]
@@ -1484,7 +1507,8 @@ class MDMFSlotReadProxy:
         d.addCallback(lambda readvs:
             self._read(readvs, force_remote=force_remote))
         def _build_share_hash_chain(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
 
             sharehashes = results[self.shnum][0]
             results = [sharehashes[i:i+(HASH_SIZE + 2)]
@@ -1493,6 +1517,7 @@ class MDMFSlotReadProxy:
                             for data in results])
             return results
         d.addCallback(_build_share_hash_chain)
+        d.addErrback(_handle_bad_struct)
         return d
 
 
@@ -1513,7 +1538,8 @@ class MDMFSlotReadProxy:
         d.addCallback(_make_readvs)
         d.addCallback(lambda readvs: self._read(readvs))
         def _process_results(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
             privkey = results[self.shnum][0]
             return privkey
         d.addCallback(_process_results)
@@ -1537,7 +1563,8 @@ class MDMFSlotReadProxy:
         d.addCallback(_make_readvs)
         d.addCallback(lambda readvs: self._read(readvs))
         def _process_results(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
             signature = results[self.shnum][0]
             return signature
         d.addCallback(_process_results)
@@ -1562,7 +1589,8 @@ class MDMFSlotReadProxy:
         d.addCallback(_make_readvs)
         d.addCallback(lambda readvs: self._read(readvs))
         def _process_results(results):
-            assert self.shnum in results
+            if self.shnum not in results:
+                raise BadShareError("no data for shnum %d" % self.shnum)
             verification_key = results[self.shnum][0]
             return verification_key
         d.addCallback(_process_results)
@@ -1717,7 +1745,8 @@ class MDMFSlotReadProxy:
         # TODO: It's entirely possible to tweak this so that it just
         # fulfills the requests that it can, and not demand that all
         # requests are satisfiable before running it.
-        if not unsatisfiable and not force_remote:
+
+        if not unsatisfiable or self._data_is_everything:
             results = [self._data[offset:offset+length]
                        for (offset, length) in readvs]
             results = {self.shnum: results}
@@ -1738,7 +1767,7 @@ class MDMFSlotReadProxy:
         return d
 
 
-class LayoutInvalid(Exception):
+class LayoutInvalid(BadShareError):
     """
     This isn't a valid MDMF mutable file
     """

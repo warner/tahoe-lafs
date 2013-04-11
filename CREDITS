@@ -1,4 +1,4 @@
-﻿    This is at least a partial credits-file of people that have contributed to
+﻿This is at least a partial credits-file of people that have contributed to
 the Tahoe-LAFS project.  It is formatted to allow easy grepping and
 beautification by scripts.  The fields are: name (N), email (E),
 web-address (W), PGP key ID and fingerprint (P), description (D), and
@@ -6,6 +6,21 @@ snail-mail address (S).
 
 Thanks.
 ----------
+
+N: Brian Warner
+E: warner-tahoe@lothar.com
+D: main developer
+
+N: Zooko
+E: zooko@zooko.com
+D: main developer
+
+N: Daira Hopwood (formerly David-Sarah Hopwood)
+E: daira@jacaranda.org
+E: david-sarah@jacaranda.org
+P: 3D6A 08E9 1262 3E9A 00B2 1BDC 067F 4920 98CF 2762 (preferred)
+P: 12F8 A95C C90B B68E 369C 003D 5947 3C63 3CB3 A807
+D: Tahoe-LAFS Hacker
 
 N: Faried Nawaz
 E: self@node.pk
@@ -20,9 +35,6 @@ D: improve logging, documentation, testing/porting/packaging (cygwin)
 
 N: Arc O Median
 D: bug reports
-
-N: Brian Warner
-D: Tahoe-LAFS Hacker
 
 N: RobK
 D: code
@@ -96,11 +108,6 @@ D: port to NetBSD, help debugging Crypto++ bug
 N: Sam Mason
 D: edited docs/running.rst
 
-N: David-Sarah Hopwood
-E: david-sarah@jacaranda.org
-P: 12F8 A95C C90B B68E 369C 003D 5947 3C63 3CB3 A807
-D: Tahoe-LAFS Hacker
-
 N: Jacob Appelbaum
 E: jacob@appelbaum.com
 W: http://www.appelbaum.net/
@@ -129,3 +136,23 @@ D: converted docs from .txt to .rst
 
 N: Josh Wilcox
 D: docs, return None from get_stats() when there aren't enough samples
+
+N: Vince_II
+D: fix incorrect name of other doc file in docs/configuration.rst
+
+N: Markus Reichelt
+E: mr@mareichelt.com
+W: http://mareichelt.com/
+P: DCB3 281F 38B0 711A 41C0  DC20 EE8D 363D 1687 9738
+D: packaging for Slackware on SlackBuilds.org, bug reports
+
+N: Peter Le Bek
+E: peter@hyperplex.org
+P: 0x9BAC3E97, 79CA 34B3 7272 A3CF 82AC 5655 F55A 5B63 9BAC 3E97
+D: mtime in ftpd
+
+N: Andrew Miller
+E: amiller@dappervision.com
+W: http://soc1024.com
+P: 0xE3787A7250538F3F DEB3 132A 7FBA 37A5 03AC A462 E378 7A72 5053 8F3F
+D: bugfixes, patches

@@ -15,7 +15,7 @@ from allmydata.storage.server import si_b2a
 from pycryptopp.cipher.aes import AES
 from foolscap.api import eventually, fireEventually
 
-from allmydata.mutable.common import MODE_WRITE, MODE_CHECK, \
+from allmydata.mutable.common import MODE_WRITE, MODE_CHECK, MODE_REPAIR, \
      UncoordinatedWriteError, NotEnoughServersError
 from allmydata.mutable.servermap import ServerMap
 from allmydata.mutable.layout import get_version_from_checkstring,\
@@ -51,10 +51,9 @@ class PublishStatus:
         self.started = time.time()
 
     def add_per_server_time(self, server, elapsed):
-        serverid = server.get_serverid()
-        if serverid not in self.timings["send_per_server"]:
-            self.timings["send_per_server"][serverid] = []
-        self.timings["send_per_server"][serverid].append(elapsed)
+        if server not in self.timings["send_per_server"]:
+            self.timings["send_per_server"][server] = []
+        self.timings["send_per_server"][server].append(elapsed)
     def accumulate_encode_time(self, elapsed):
         self.timings["encode"] += elapsed
     def accumulate_encrypt_time(self, elapsed):
@@ -188,7 +187,7 @@ class Publish:
         # servermap was updated in MODE_WRITE, so we can depend upon the
         # serverlist computed by that process instead of computing our own.
         assert self._servermap
-        assert self._servermap.get_last_update()[0] in (MODE_WRITE, MODE_CHECK)
+        assert self._servermap.get_last_update()[0] in (MODE_WRITE, MODE_CHECK, MODE_REPAIR)
         # we will push a version that is one larger than anything present
         # in the grid, according to the servermap.
         self._new_seqnum = self._servermap.highest_seqnum() + 1
@@ -254,7 +253,9 @@ class Publish:
         # updating, we ignore damaged and missing shares -- callers must
         # do a repair to repair and recreate these.
         self.goal = set(self._servermap.get_known_shares())
-        self.writers = {}
+
+        # shnum -> set of IMutableSlotWriter
+        self.writers = DictOfSets()
 
         # SDMF files are updated differently.
         self._version = MDMF_VERSION
@@ -269,31 +270,33 @@ class Publish:
             cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
 
-            self.writers[shnum] =  writer_class(shnum,
-                                                server.get_rref(),
-                                                self._storage_index,
-                                                secrets,
-                                                self._new_seqnum,
-                                                self.required_shares,
-                                                self.total_shares,
-                                                self.segment_size,
-                                                self.datalength)
-            self.writers[shnum].server = server
+            writer = writer_class(shnum,
+                                  server.get_rref(),
+                                  self._storage_index,
+                                  secrets,
+                                  self._new_seqnum,
+                                  self.required_shares,
+                                  self.total_shares,
+                                  self.segment_size,
+                                  self.datalength)
+
+            self.writers.add(shnum, writer)
+            writer.server = server
             known_shares = self._servermap.get_known_shares()
             assert (server, shnum) in known_shares
             old_versionid, old_timestamp = known_shares[(server,shnum)]
             (old_seqnum, old_root_hash, old_salt, old_segsize,
              old_datalength, old_k, old_N, old_prefix,
              old_offsets_tuple) = old_versionid
-            self.writers[shnum].set_checkstring(old_seqnum,
-                                                old_root_hash,
-                                                old_salt)
+            writer.set_checkstring(old_seqnum,
+                                   old_root_hash,
+                                   old_salt)
 
         # Our remote shares will not have a complete checkstring until
         # after we are done writing share data and have started to write
         # blocks. In the meantime, we need to know what to look for when
         # writing, so that we can detect UncoordinatedWriteErrors.
-        self._checkstring = self.writers.values()[0].get_checkstring()
+        self._checkstring = self._get_some_writer().get_checkstring()
 
         # Now, we start pushing shares.
         self._status.timings["setup"] = time.time() - self._started
@@ -329,7 +332,7 @@ class Publish:
         # These are filled in later, after we've modified the block hash
         # tree suitably.
         self.sharehash_leaves = None # eventually [sharehashes]
-        self.sharehashes = {} # shnum -> [sharehash leaves necessary to 
+        self.sharehashes = {} # shnum -> [sharehash leaves necessary to
                               # validate the share]
 
         self.log("Starting push")
@@ -372,7 +375,7 @@ class Publish:
         # servermap was updated in MODE_WRITE, so we can depend upon the
         # serverlist computed by that process instead of computing our own.
         if self._servermap:
-            assert self._servermap.get_last_update()[0] in (MODE_WRITE, MODE_CHECK)
+            assert self._servermap.get_last_update()[0] in (MODE_WRITE, MODE_CHECK, MODE_REPAIR)
             # we will push a version that is one larger than anything present
             # in the grid, according to the servermap.
             self._new_seqnum = self._servermap.highest_seqnum() + 1
@@ -451,7 +454,10 @@ class Publish:
 
         # TODO: Make this part do server selection.
         self.update_goal()
-        self.writers = {}
+
+        # shnum -> set of IMutableSlotWriter
+        self.writers = DictOfSets()
+
         if self._version == MDMF_VERSION:
             writer_class = MDMFSlotWriteProxy
         else:
@@ -466,34 +472,35 @@ class Publish:
             cancel_secret = self._node.get_cancel_secret(server)
             secrets = (write_enabler, renew_secret, cancel_secret)
 
-            self.writers[shnum] =  writer_class(shnum,
-                                                server.get_rref(),
-                                                self._storage_index,
-                                                secrets,
-                                                self._new_seqnum,
-                                                self.required_shares,
-                                                self.total_shares,
-                                                self.segment_size,
-                                                self.datalength)
-            self.writers[shnum].server = server
+            writer =  writer_class(shnum,
+                                   server.get_rref(),
+                                   self._storage_index,
+                                   secrets,
+                                   self._new_seqnum,
+                                   self.required_shares,
+                                   self.total_shares,
+                                   self.segment_size,
+                                   self.datalength)
+            self.writers.add(shnum, writer)
+            writer.server = server
             known_shares = self._servermap.get_known_shares()
             if (server, shnum) in known_shares:
                 old_versionid, old_timestamp = known_shares[(server,shnum)]
                 (old_seqnum, old_root_hash, old_salt, old_segsize,
                  old_datalength, old_k, old_N, old_prefix,
                  old_offsets_tuple) = old_versionid
-                self.writers[shnum].set_checkstring(old_seqnum,
-                                                    old_root_hash,
-                                                    old_salt)
+                writer.set_checkstring(old_seqnum,
+                                       old_root_hash,
+                                       old_salt)
             elif (server, shnum) in self.bad_share_checkstrings:
                 old_checkstring = self.bad_share_checkstrings[(server, shnum)]
-                self.writers[shnum].set_checkstring(old_checkstring)
+                writer.set_checkstring(old_checkstring)
 
         # Our remote shares will not have a complete checkstring until
         # after we are done writing share data and have started to write
         # blocks. In the meantime, we need to know what to look for when
         # writing, so that we can detect UncoordinatedWriteErrors.
-        self._checkstring = self.writers.values()[0].get_checkstring()
+        self._checkstring = self._get_some_writer().get_checkstring()
 
         # Now, we start pushing shares.
         self._status.timings["setup"] = time.time() - self._started
@@ -509,7 +516,7 @@ class Publish:
             for j in xrange(self.num_segments):
                 blocks.append(None)
         self.sharehash_leaves = None # eventually [sharehashes]
-        self.sharehashes = {} # shnum -> [sharehash leaves necessary to 
+        self.sharehashes = {} # shnum -> [sharehash leaves necessary to
                               # validate the share]
 
         self.log("Starting push")
@@ -519,6 +526,8 @@ class Publish:
 
         return self.done_deferred
 
+    def _get_some_writer(self):
+        return list(self.writers.values()[0])[0]
 
     def _update_status(self):
         self._status.set_status("Sending Shares: %d placed out of %d, "
@@ -620,7 +629,8 @@ class Publish:
         # Can we still successfully publish this file?
         # TODO: Keep track of outstanding queries before aborting the
         #       process.
-        if len(self.writers) < self.required_shares or self.surprised:
+        num_shnums = len(self.writers)
+        if num_shnums < self.required_shares or self.surprised:
             return self._failure()
 
         # Figure out what we need to do next. Each of these needs to
@@ -675,8 +685,9 @@ class Publish:
         salt = os.urandom(16)
         assert self._version == SDMF_VERSION
 
-        for writer in self.writers.itervalues():
-            writer.put_salt(salt)
+        for shnum, writers in self.writers.iteritems():
+            for writer in writers:
+                writer.put_salt(salt)
 
 
     def _encode_segment(self, segnum):
@@ -751,8 +762,9 @@ class Publish:
             block_hash = hashutil.block_hash(hashed)
             self.blockhashes[shareid][segnum] = block_hash
             # find the writer for this share
-            writer = self.writers[shareid]
-            writer.put_block(sharedata, segnum, salt)
+            writers = self.writers[shareid]
+            for writer in writers:
+                writer.put_block(sharedata, segnum, salt)
 
 
     def push_everything_else(self):
@@ -775,8 +787,9 @@ class Publish:
     def push_encprivkey(self):
         encprivkey = self._encprivkey
         self._status.set_status("Pushing encrypted private key")
-        for writer in self.writers.itervalues():
-            writer.put_encprivkey(encprivkey)
+        for shnum, writers in self.writers.iteritems():
+            for writer in writers:
+                writer.put_encprivkey(encprivkey)
 
 
     def push_blockhashes(self):
@@ -788,8 +801,9 @@ class Publish:
             # set the leaf for future use.
             self.sharehash_leaves[shnum] = t[0]
 
-            writer = self.writers[shnum]
-            writer.put_blockhashes(self.blockhashes[shnum])
+            writers = self.writers[shnum]
+            for writer in writers:
+                writer.put_blockhashes(self.blockhashes[shnum])
 
 
     def push_sharehashes(self):
@@ -799,8 +813,9 @@ class Publish:
             needed_indices = share_hash_tree.needed_hashes(shnum)
             self.sharehashes[shnum] = dict( [ (i, share_hash_tree[i])
                                              for i in needed_indices] )
-            writer = self.writers[shnum]
-            writer.put_sharehashes(self.sharehashes[shnum])
+            writers = self.writers[shnum]
+            for writer in writers:
+                writer.put_sharehashes(self.sharehashes[shnum])
         self.root_hash = share_hash_tree[0]
 
 
@@ -811,8 +826,9 @@ class Publish:
         #   - Push the signature
         self._status.set_status("Pushing root hashes and signature")
         for shnum in xrange(self.total_shares):
-            writer = self.writers[shnum]
-            writer.put_root_hash(self.root_hash)
+            writers = self.writers[shnum]
+            for writer in writers:
+                writer.put_root_hash(self.root_hash)
         self._update_checkstring()
         self._make_and_place_signature()
 
@@ -825,7 +841,7 @@ class Publish:
         uncoordinated writes. SDMF files will have the same checkstring,
         so we need not do anything.
         """
-        self._checkstring = self.writers.values()[0].get_checkstring()
+        self._checkstring = self._get_some_writer().get_checkstring()
 
 
     def _make_and_place_signature(self):
@@ -834,11 +850,12 @@ class Publish:
         """
         started = time.time()
         self._status.set_status("Signing prefix")
-        signable = self.writers[0].get_signable()
+        signable = self._get_some_writer().get_signable()
         self.signature = self._privkey.sign(signable)
 
-        for (shnum, writer) in self.writers.iteritems():
-            writer.put_signature(self.signature)
+        for (shnum, writers) in self.writers.iteritems():
+            for writer in writers:
+                writer.put_signature(self.signature)
         self._status.timings['sign'] = time.time() - started
 
 
@@ -851,25 +868,26 @@ class Publish:
         ds = []
         verification_key = self._pubkey.serialize()
 
-        for (shnum, writer) in self.writers.copy().iteritems():
-            writer.put_verification_key(verification_key)
-            self.num_outstanding += 1
-            def _no_longer_outstanding(res):
-                self.num_outstanding -= 1
-                return res
+        for (shnum, writers) in self.writers.copy().iteritems():
+            for writer in writers:
+                writer.put_verification_key(verification_key)
+                self.num_outstanding += 1
+                def _no_longer_outstanding(res):
+                    self.num_outstanding -= 1
+                    return res
 
-            d = writer.finish_publishing()
-            d.addBoth(_no_longer_outstanding)
-            d.addErrback(self._connection_problem, writer)
-            d.addCallback(self._got_write_answer, writer, started)
-            ds.append(d)
+                d = writer.finish_publishing()
+                d.addBoth(_no_longer_outstanding)
+                d.addErrback(self._connection_problem, writer)
+                d.addCallback(self._got_write_answer, writer, started)
+                ds.append(d)
         self._record_verinfo()
         self._status.timings['pack'] = time.time() - started
         return defer.DeferredList(ds)
 
 
     def _record_verinfo(self):
-        self.versioninfo = self.writers.values()[0].get_verinfo()
+        self.versioninfo = self._get_some_writer().get_verinfo()
 
 
     def _connection_problem(self, f, writer):
@@ -879,7 +897,7 @@ class Publish:
         """
         self.log("found problem: %s" % str(f))
         self._last_failure = f
-        del(self.writers[writer.shnum])
+        self.writers.discard(writer.shnum, writer)
 
 
     def log_goal(self, goal, message=""):
@@ -988,9 +1006,11 @@ class Publish:
         # knowingly also writing to that server from other writers.
 
         # TODO: Precompute this.
-        known_shnums = [x.shnum for x in self.writers.values()
-                        if x.server == server]
-        surprise_shares -= set(known_shnums)
+        shares = []
+        for shnum, writers in self.writers.iteritems():
+            shares.extend([x.shnum for x in writers if x.server == server])
+        known_shnums = set(shares)
+        surprise_shares -= known_shnums
         self.log("found the following surprise shares: %s" %
                  str(surprise_shares))
 
@@ -1210,7 +1230,7 @@ class MutableFileHandle:
             old_position = self._filehandle.tell()
             # Seek to the end of the file by seeking 0 bytes from the
             # file's end
-            self._filehandle.seek(0, 2) # 2 == os.SEEK_END in 2.5+
+            self._filehandle.seek(0, os.SEEK_END)
             self._size = self._filehandle.tell()
             # Restore the previous position, in case this was called
             # after a read.
@@ -1304,7 +1324,7 @@ class TransformingUploadable:
 
 
     def read(self, length):
-        # We can get data from 3 sources here. 
+        # We can get data from 3 sources here.
         #   1. The first of the segments provided to us.
         #   2. The data that we're replacing things with.
         #   3. The last of the segments provided to us.

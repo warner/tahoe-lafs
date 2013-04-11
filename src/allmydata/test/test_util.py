@@ -420,6 +420,15 @@ class FileUtil(unittest.TestCase):
         fileutil.rm_dir(basedir)
         fileutil.remove_if_possible(fn) # should survive errors
 
+    def test_write_atomically(self):
+        basedir = "util/FileUtil/test_write_atomically"
+        fileutil.make_dirs(basedir)
+        fn = os.path.join(basedir, "here")
+        fileutil.write_atomically(fn, "one")
+        self.failUnlessEqual(fileutil.read(fn), "one")
+        fileutil.write_atomically(fn, "two", mode="") # non-binary
+        self.failUnlessEqual(fileutil.read(fn), "two")
+
     def test_open_or_create(self):
         basedir = "util/FileUtil/test_open_or_create"
         fileutil.make_dirs(basedir)
@@ -428,7 +437,7 @@ class FileUtil(unittest.TestCase):
         f.write("stuff.")
         f.close()
         f = fileutil.open_or_create(fn)
-        f.seek(0, 2)
+        f.seek(0, os.SEEK_END)
         f.write("more.")
         f.close()
         f = open(fn, "r")
@@ -724,7 +733,8 @@ class Abbreviate(unittest.TestCase):
                     (1000*1000*1000, "1.00 GB"),
                     (1000*1000*1000*1000, "1.00 TB"),
                     (1000*1000*1000*1000*1000, "1.00 PB"),
-                    (1234567890123456, "1.23 PB"),
+                    (1000*1000*1000*1000*1000*1000, "1.00 EB"),
+                    (1234567890123456789, "1.23 EB"),
                     ]
         for (x, expected) in tests_si:
             got = abbreviate.abbreviate_space(x, SI=True)
@@ -744,7 +754,8 @@ class Abbreviate(unittest.TestCase):
                           (1024*1024*1024*1024, "1.00 TiB"),
                           (1000*1000*1000*1000*1000, "909.49 TiB"),
                           (1024*1024*1024*1024*1024, "1.00 PiB"),
-                          (1234567890123456, "1.10 PiB"),
+                          (1024*1024*1024*1024*1024*1024, "1.00 EiB"),
+                          (1234567890123456789, "1.07 EiB"),
                     ]
         for (x, expected) in tests_base1024:
             got = abbreviate.abbreviate_space(x, SI=False)
@@ -766,8 +777,19 @@ class Abbreviate(unittest.TestCase):
         self.failUnlessEqual(p("10MiB"), 10*1024*1024)
         self.failUnlessEqual(p("5G"), 5*1000*1000*1000)
         self.failUnlessEqual(p("4GiB"), 4*1024*1024*1024)
+        self.failUnlessEqual(p("3TB"), 3*1000*1000*1000*1000)
+        self.failUnlessEqual(p("3TiB"), 3*1024*1024*1024*1024)
+        self.failUnlessEqual(p("6PB"), 6*1000*1000*1000*1000*1000)
+        self.failUnlessEqual(p("6PiB"), 6*1024*1024*1024*1024*1024)
+        self.failUnlessEqual(p("9EB"), 9*1000*1000*1000*1000*1000*1000)
+        self.failUnlessEqual(p("9EiB"), 9*1024*1024*1024*1024*1024*1024)
+
         e = self.failUnlessRaises(ValueError, p, "12 cubits")
-        self.failUnless("12 cubits" in str(e))
+        self.failUnlessIn("12 cubits", str(e))
+        e = self.failUnlessRaises(ValueError, p, "1 BB")
+        self.failUnlessIn("1 BB", str(e))
+        e = self.failUnlessRaises(ValueError, p, "fhtagn")
+        self.failUnlessIn("fhtagn", str(e))
 
 class Limiter(unittest.TestCase):
     timeout = 480 # This takes longer than 240 seconds on Francois's arm box.
@@ -1110,16 +1132,13 @@ class DictUtil(unittest.TestCase):
         ds.discard(2, "c")
         self.failIf(2 in ds)
 
-        ds.union(1, ["a", "e"])
-        ds.union(3, ["f"])
-        self.failUnlessEqual(ds[1], set(["a","e"]))
-        self.failUnlessEqual(ds[3], set(["f"]))
+        ds.add(3, "f")
         ds2 = dictutil.DictOfSets()
         ds2.add(3, "f")
         ds2.add(3, "g")
         ds2.add(4, "h")
         ds.update(ds2)
-        self.failUnlessEqual(ds[1], set(["a","e"]))
+        self.failUnlessEqual(ds[1], set(["a"]))
         self.failUnlessEqual(ds[3], set(["f", "g"]))
         self.failUnlessEqual(ds[4], set(["h"]))
 

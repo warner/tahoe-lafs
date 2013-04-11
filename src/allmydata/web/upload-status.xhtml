@@ -1,8 +1,8 @@
 <html xmlns:n="http://nevow.com/ns/nevow/0.1">
   <head>
     <title>Tahoe-LAFS - File Upload Status</title>
-    <link href="/tahoe_css" rel="stylesheet" type="text/css"/>
-    <link href="/webform_css" rel="stylesheet" type="text/css"/>
+    <link href="/tahoe.css" rel="stylesheet" type="text/css"/>
+    <link href="/icon.png" rel="shortcut icon" />
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
   </head>
   <body>
@@ -36,9 +36,6 @@
         <li>Storage Index: <span n:render="time" n:data="time_storage_index" />
         (<span n:render="rate" n:data="rate_storage_index" />)</li>
         <li>[Contacting Helper]: <span n:render="time" n:data="time_contacting_helper" /></li>
-        <ul>
-          <li>[Helper Already-In-Grid Check]: <span n:render="time" n:data="time_existence_check" /></li>
-        </ul>
         <li>[Upload Ciphertext To Helper]: <span n:render="time" n:data="time_cumulative_fetch" />
         (<span n:render="rate" n:data="rate_ciphertext_fetch" />)</li>
 

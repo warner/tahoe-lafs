@@ -3,7 +3,7 @@ from twisted.trial import unittest
 from twisted.application import service
 
 import allmydata
-from allmydata.node import OldConfigError
+from allmydata.node import OldConfigError, OldConfigOptionError, MissingConfigEntry
 from allmydata import client
 from allmydata.storage_client import StorageFarmBroker
 from allmydata.util import base32, fileutil
@@ -132,16 +132,17 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
                            "[storage]\n" + \
                            "enabled = true\n" + \
                            "reserved_space = bogus\n")
-        c = client.Client(basedir)
-        self.failUnlessEqual(c.getServiceNamed("storage").reserved_space, 0)
+        self.failUnlessRaises(ValueError, client.Client, basedir)
 
     def _permute(self, sb, key):
-        return [ s.get_serverid() for s in sb.get_servers_for_psi(key) ]
+        return [ s.get_longname() for s in sb.get_servers_for_psi(key) ]
 
     def test_permute(self):
         sb = StorageFarmBroker(None, True)
         for k in ["%d" % i for i in range(5)]:
-            sb.test_add_rref(k, "rref")
+            ann = {"anonymous-storage-FURL": "pb://abcde@nowhere/fake",
+                   "permutation-seed-base32": base32.b2a(k) }
+            sb.test_add_rref(k, "rref", ann)
 
         self.failUnlessReallyEqual(self._permute(sb, "one"), ['3','1','0','4','2'])
         self.failUnlessReallyEqual(self._permute(sb, "two"), ['0','4','2','1','3'])
@@ -170,6 +171,24 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
         self.failUnless("node.uptime" in stats)
         self.failUnless(isinstance(stats["node.uptime"], float))
 
+    def test_helper_furl(self):
+        basedir = "test_client.Basic.test_helper_furl"
+        os.mkdir(basedir)
+
+        def _check(config, expected_furl):
+            fileutil.write(os.path.join(basedir, "tahoe.cfg"),
+                           BASECONFIG + config)
+            c = client.Client(basedir)
+            uploader = c.getServiceNamed("uploader")
+            furl, connected = uploader.get_helper_info()
+            self.failUnlessEqual(furl, expected_furl)
+
+        _check("", None)
+        _check("helper.furl =\n", None)
+        _check("helper.furl = \n", None)
+        _check("helper.furl = None", None)
+        _check("helper.furl = pb://blah\n", "pb://blah")
+
     @mock.patch('allmydata.util.log.msg')
     @mock.patch('allmydata.frontends.drop_upload.DropUploader')
     def test_create_drop_uploader(self, mock_drop_uploader, mock_log_msg):
@@ -191,13 +210,24 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
                   "[storage]\n" +
                   "enabled = false\n" +
                   "[drop_upload]\n" +
-                  "enabled = true\n" +
-                  "upload.dircap = " + upload_dircap + "\n" +
-                  "local.directory = " + local_dir_utf8 + "\n")
+                  "enabled = true\n")
 
         basedir1 = "test_client.Basic.test_create_drop_uploader1"
         os.mkdir(basedir1)
+        fileutil.write(os.path.join(basedir1, "tahoe.cfg"),
+                       config + "local.directory = " + local_dir_utf8 + "\n")
+        self.failUnlessRaises(MissingConfigEntry, client.Client, basedir1)
+
         fileutil.write(os.path.join(basedir1, "tahoe.cfg"), config)
+        fileutil.write(os.path.join(basedir1, "private", "drop_upload_dircap"), "URI:DIR2:blah")
+        self.failUnlessRaises(MissingConfigEntry, client.Client, basedir1)
+
+        fileutil.write(os.path.join(basedir1, "tahoe.cfg"),
+                       config + "upload.dircap = " + upload_dircap + "\n")
+        self.failUnlessRaises(OldConfigOptionError, client.Client, basedir1)
+
+        fileutil.write(os.path.join(basedir1, "tahoe.cfg"),
+                       config + "local.directory = " + local_dir_utf8 + "\n")
         c1 = client.Client(basedir1)
         uploader = c1.getServiceNamed('drop-upload')
         self.failUnless(isinstance(uploader, MockDropUploader), uploader)
@@ -213,21 +243,15 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
 
         basedir2 = "test_client.Basic.test_create_drop_uploader2"
         os.mkdir(basedir2)
+        os.mkdir(os.path.join(basedir2, "private"))
         fileutil.write(os.path.join(basedir2, "tahoe.cfg"),
                        BASECONFIG +
                        "[drop_upload]\n" +
-                       "enabled = true\n")
+                       "enabled = true\n" +
+                       "local.directory = " + local_dir_utf8 + "\n")
+        fileutil.write(os.path.join(basedir2, "private", "drop_upload_dircap"), "URI:DIR2:blah")
         c2 = client.Client(basedir2)
         self.failUnlessRaises(KeyError, c2.getServiceNamed, 'drop-upload')
-        self.failIf([True for arg in mock_log_msg.call_args_list if "Boom" in repr(arg)],
-                    mock_log_msg.call_args_list)
-        self.failUnless([True for arg in mock_log_msg.call_args_list if "upload.dircap or local.directory not specified" in repr(arg)],
-                        mock_log_msg.call_args_list)
-
-        basedir3 = "test_client.Basic.test_create_drop_uploader3"
-        os.mkdir(basedir3)
-        fileutil.write(os.path.join(basedir3, "tahoe.cfg"), config)
-        client.Client(basedir3)
         self.failUnless([True for arg in mock_log_msg.call_args_list if "Boom" in repr(arg)],
                         mock_log_msg.call_args_list)
 
@@ -305,6 +329,18 @@ class NodeMaker(testutil.ReallyEqualMixin, unittest.TestCase):
         self.failIf(IDirectoryNode.providedBy(n))
         self.failUnless(n.is_readonly())
         self.failIf(n.is_mutable())
+
+        # Testing #1679. There was a bug that would occur when downloader was
+        # downloading the same readcap more than once concurrently, so the
+        # filenode object was cached, and there was a failure from one of the
+        # servers in one of the download attempts. No subsequent download
+        # attempt would attempt to use that server again, which would lead to
+        # the file being undownloadable until the gateway was restarted. The
+        # current fix for this (hopefully to be superceded by a better fix
+        # eventually) is to prevent re-use of filenodes, so the NodeMaker is
+        # hereby required *not* to cache and re-use filenodes for CHKs.
+        other_n = c.create_node_from_uri("URI:CHK:6nmrpsubgbe57udnexlkiwzmlu:bjt7j6hshrlmadjyr7otq3dc24end5meo5xcr5xe5r663po6itmq:3:10:7277")
+        self.failIf(n is other_n, (n, other_n))
 
         n = c.create_node_from_uri("URI:LIT:n5xgk")
         self.failUnless(IFilesystemNode.providedBy(n))

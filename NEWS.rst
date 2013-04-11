@@ -3,6 +3,207 @@
 User-Visible Changes in Tahoe-LAFS
 ==================================
 
+Release 1.10 (2013-??-??)
+
+New Features
+''''''''''''
+
+- The Welcome page has been redesigned. This is a preview of the design style
+  that is likely to be used in other parts of the WUI in future Tahoe-LAFS
+  versions. (`#1713`_, `#1457`_, `#1735`_)
+- A new, more extensible Introducer protocol has been added, to act as the
+  basis for future improvements such as accounting. Compatibility with older
+  nodes is not affected. When server, introducer, and client are all
+  upgraded, the welcome page will show node IDs that start with "v0-" instead
+  of the old tubid. (`#466`_)
+- The web-API has a new ``relink`` operation that supports directly moving
+  files between directories. (`#1579`_)
+
+Security Improvements
+'''''''''''''''''''''
+
+- The ``introducer.furl`` for new Introducers is now unguessable. In previous
+  releases, this FURL used a predictable swissnum, allowing a network
+  eavesdropper who observes any node connecting to the Introducer to access
+  the Introducer themselves, and thus use servers or offer storage service to
+  clients (i.e. "join the grid"). In the new code, the only way to join a
+  grid is to be told the ``introducer.furl`` by someone who already knew it.
+  Note that pre-existing introducers are not changed. To force an introducer
+  to generate a new FURL, delete the existing ``introducer.furl`` file and
+  restart it. After doing this, the ``[client]introducer.furl`` setting of
+  every client and server that should connect to that introducer must be
+  updated. (`#1802`_)
+- Both ``introducer.furl`` and ``helper.furl`` are now censored from the
+  Welcome page, to prevent users of your gateway from learning enough to
+  create gateway nodes of their own.  For existing guessable introducer
+  FURLs, the ``introducer`` swissnum is still displayed to show that a
+  guessable FURL is in use. (`#860`_)
+
+Notable Bugfixes
+''''''''''''''''
+
+- If an immutable file failed to download, e.g. due to a connection problem,
+  subsequent attempts to download the same file could also fail. (`#1679`_)
+- The SFTP frontend now works with recent versions of Twisted, rather than
+  giving errors or warnings about use of ``IFinishableConsumer``. (`#1926`_,
+  `#1564`_, `#1525`_)
+- Failure handling in the SFTP frontend has been improved. (`#1525`_)
+- Checking a LIT file using ``tahoe check`` no longer results in an
+  exception. (`#1758`_)
+- Filenames in WUI directory pages are now displayed correctly when they
+  contain characters that require HTML escaping. (`#1143`_)
+- Non-ASCII node nicknames no longer cause WUI errors. (`#1298`_)
+- Error messages containing tracebacks may be slightly more readable.
+  (`#1484`_)
+- ``tahoe cp --verbose`` counts the files being processed correctly.
+  (`#1805`_, `#1783`_)
+- Exceptions no longer trigger an unhelpful crash reporter on Ubuntu 12.04
+  ("Precise") or later. (`#1746`_)
+- Improve error message when CLI tools cannot connect to a gateway. (`#974`_)
+- Other minor changes: `#1781`_, `#1812`_
+
+Performance Improvements
+''''''''''''''''''''''''
+
+- Allow web clients to cache immutable directory pages. (`#443`_)
+
+Documentation
+'''''''''''''
+
+- docs/helper.rst has been brought up to date. (`#1915`_)
+- docs/convergence_secret.rst was added to document the adminstration of
+  convergence secrets. (`#1761`_)
+
+Packaging Changes
+'''''''''''''''''
+
+- The flogtool utility, used to read logs, can now be accessed as
+  ``tahoe debug flogtool`` even when foolscap is not installed system-wide.
+  (`#1693`_)
+- The provisioning/reliability pages were removed from the main client's web
+  interface, and moved into a standalone web-based tool in
+  misc/operations_helpers/provisioning. Use the ``run.py`` script to access
+  them.
+
+Compatibility and Dependencies
+''''''''''''''''''''''''''''''
+
+- Python >= 2.6, except Python 3 (`#1658`_)
+- Twisted >= 11.0.0 (`#1771`_)
+- mock >= 0.8
+- pycryptopp >= 0.6.0 (for ed25519)
+
+Precautions when Upgrading
+''''''''''''''''''''''''''
+
+- When upgrading a grid from a recent version of trunk, follow the
+  precautions from this `message to the tahoe-dev mailing list`_, to ensure
+  that announcements to the Introducer are recognized after the upgrade.
+  This is not necessary when upgrading from a previous release.
+
+.. _`#443`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/443
+.. _`#466`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/466
+.. _`#860`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/860
+.. _`#974`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/974
+.. _`#1143`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1143
+.. _`#1298`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1298
+.. _`#1457`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1457
+.. _`#1484`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1484
+.. _`#1525`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1525
+.. _`#1564`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1564
+.. _`#1579`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1579
+.. _`#1658`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1658
+.. _`#1679`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1679
+.. _`#1693`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1693
+.. _`#1713`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1713
+.. _`#1735`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1735
+.. _`#1746`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1746
+.. _`#1758`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1758
+.. _`#1761`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1761
+.. _`#1771`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1771
+.. _`#1781`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1781
+.. _`#1783`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1783
+.. _`#1802`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1802
+.. _`#1805`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1805
+.. _`#1812`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1812
+.. _`#1915`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1915
+.. _`#1926`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1926
+.. _`message to the tahoe-dev mailing list`:
+             https://tahoe-lafs.org/pipermail/tahoe-dev/2013-March/008096.html
+
+Release 1.9.2 (2012-07-03)
+--------------------------
+
+Notable Bugfixes
+''''''''''''''''
+
+- Several regressions in support for reading (`#1636`_), writing/modifying
+  (`#1670`_, `#1749`_), verifying (`#1628`_) and repairing (`#1655`_, `#1669`_,
+  `#1676`_, `#1689`_) mutable files have been fixed.
+- FTP can now list directories containing mutable files, although it
+  still does not support reading or writing mutable files. (`#680`_)
+- The FTP frontend would previously show Jan 1 1970 for all timestamps;
+  now it shows the correct modification time of the directory entry.
+  (`#1688`_)
+- If a node is configured to report incidents to a log gatherer, but the
+  gatherer is offline when some incidents occur, it would previously not
+  "catch up" with those incidents as intended. (`#1725`_)
+- OpenBSD 5 is now supported. (`#1584`_)
+- The ``count-good-share-hosts`` field of file check results is now
+  computed correctly. (`#1115`_)
+
+Configuration/Behavior Changes
+''''''''''''''''''''''''''''''
+
+- The capability of the upload directory for the drop-upload frontend
+  is now specified in the file ``private/drop_upload_dircap`` under
+  the gateway's node directory, rather than in its ``tahoe.cfg``.
+  (`#1593`_)
+
+Packaging Changes
+'''''''''''''''''
+
+- Tahoe-LAFS can be built correctly from a git repository as well as
+  from darcs.
+
+Compatibility and Dependencies
+''''''''''''''''''''''''''''''
+
+- foolscap >= 0.6.3 is required, in order to make Tahoe-LAFS compatible
+  with Twisted >= 11.1.0. (`#1788`_)
+- Versions 2.0.1 and 2.4 of PyCrypto are excluded. (`#1631`_, `#1574`_)
+
+.. _`#680`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/680
+.. _`#1115`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1115
+.. _`#1574`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1574
+.. _`#1584`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1584
+.. _`#1593`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1593
+.. _`#1628`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1628
+.. _`#1631`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1631
+.. _`#1636`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1636
+.. _`#1655`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1655
+.. _`#1669`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1669
+.. _`#1670`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1670
+.. _`#1676`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1676
+.. _`#1688`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1688
+.. _`#1689`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1689
+.. _`#1725`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1725
+.. _`#1749`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1749
+.. _`#1788`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1788
+
+
+Release 1.9.1 (2012-01-12)
+--------------------------
+
+Security-related Bugfix
+'''''''''''''''''''''''
+
+- Fix flaw that would allow servers to cause undetected corruption when
+  retrieving the contents of mutable files (both SDMF and MDMF). (`#1654`_)
+
+.. _`#1654`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1654
+
+
 Release 1.9.0 (2011-10-30)
 --------------------------
 
@@ -17,15 +218,15 @@ New Features
   versions, and because the algorithm does not yet meet memory-usage goals.
   Enable it with ``--format=MDMF`` in the CLI (``tahoe put`` and ``tahoe
   mkdir``), or the "format" radioboxes in the web interface. See
-  `<docs/specifications/mutable.rst>`_ for more details (`#393`_, `#1507`_)
+  `<docs/specifications/mutable.rst>`__ for more details (`#393`_, `#1507`_)
 - A "blacklist" feature allows blocking access to specific files through
   a particular gateway. See the "Access Blacklist" section of
-  `<docs/configuration.rst>`_ for more details. (`#1425`_)
+  `<docs/configuration.rst>`__ for more details. (`#1425`_)
 - A "drop-upload" feature has been added, which allows you to upload
   files to a Tahoe-LAFS directory just by writing them to a local
   directory. This feature is experimental and should not be relied on
   to store the only copy of valuable data. It is currently available
-  only on Linux. See `<docs/frontends/drop-upload.rst>`_ for documentation.
+  only on Linux. See `<docs/frontends/drop-upload.rst>`__ for documentation.
   (`#1429`_)
 - The timeline of immutable downloads can be viewed using a zoomable and
   pannable JavaScript-based visualization. This is accessed using the
@@ -117,13 +318,10 @@ Minor Changes
 .. _`#1268`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1268
 .. _`#1274`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1274
 .. _`#1304`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1304
-.. _`#1355`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1355
 .. _`#1383`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1383
 .. _`#1384`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1384
 .. _`#1385`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1385
-.. _`#1388`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1388
 .. _`#1391`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1391
-.. _`#1392`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1392
 .. _`#1395`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1395
 .. _`#1409`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1409
 .. _`#1420`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1420
@@ -185,7 +383,6 @@ Other Changes
 - "tahoe --version" should now report correct values in situations
   where 1.8.1 might have been wrong (`#1287`_)
 
-.. _`#174`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/174
 .. _`#1208`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1208
 .. _`#1282`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1282
 .. _`#1286`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1286
@@ -321,7 +518,6 @@ Dependency Updates
 - pycrypto 2.2 is excluded due to a bug
 
 .. _`#188`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/188
-.. _`#287`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/287
 .. _`#288`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/288
 .. _`#448`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/448
 .. _`#685`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/685
@@ -744,7 +940,6 @@ To include the tickets mentioned above, go to
 .. _`#741`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/741
 .. _`#760`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/760
 .. _`#761`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/761
-.. _`#768`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/768
 .. _`#773`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/773
 .. _`#786`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/786
 .. _`#828`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/828

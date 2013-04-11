@@ -17,7 +17,7 @@ from pycryptopp.cipher.aes import AES
 from allmydata.mutable.publish import Publish, MutableData,\
                                       TransformingUploadable
 from allmydata.mutable.common import MODE_READ, MODE_WRITE, MODE_CHECK, UnrecoverableFileError, \
-     ResponseCache, UncoordinatedWriteError
+     UncoordinatedWriteError
 from allmydata.mutable.servermap import ServerMap, ServermapUpdater
 from allmydata.mutable.retrieve import Retrieve
 from allmydata.mutable.checker import MutableChecker, MutableCheckAndRepairer
@@ -65,7 +65,6 @@ class MutableFileNode:
         self._required_shares = default_encoding_parameters["k"]
         self._total_shares = default_encoding_parameters["n"]
         self._sharemap = {} # known shares, shnum-to-[nodeids]
-        self._cache = ResponseCache()
         self._most_recent_size = None
         # filled in after __init__ if we're being created for the first time;
         # filled in by the servermap updater before publishing, otherwise.
@@ -180,10 +179,6 @@ class MutableFileNode:
         self._privkey = privkey
     def _populate_encprivkey(self, encprivkey):
         self._encprivkey = encprivkey
-    def _add_to_cache(self, verinfo, shnum, offset, data):
-        self._cache.add(verinfo, shnum, offset, data)
-    def _read_from_cache(self, verinfo, shnum, offset, length):
-        return self._cache.read(verinfo, shnum, offset, length)
 
     def get_write_enabler(self, server):
         seed = server.get_foolscap_write_enabler_seed()
@@ -308,9 +303,10 @@ class MutableFileNode:
     #################################
     # IRepairable
 
-    def repair(self, check_results, force=False):
+    def repair(self, check_results, force=False, monitor=None):
         assert ICheckResults(check_results)
-        r = Repairer(self, check_results)
+        r = Repairer(self, check_results, self._storage_broker,
+                     self._history, monitor)
         d = r.start(force)
         return d
 
@@ -642,7 +638,7 @@ class MutableFileNode:
     #def set_version(self, version):
         # I can be set in two ways:
         #  1. When the node is created.
-        #  2. (for an existing share) when the Servermap is updated 
+        #  2. (for an existing share) when the Servermap is updated
         #     before I am read.
     #    assert version in (MDMF_VERSION, SDMF_VERSION)
     #    self._protocol_version = version
@@ -1053,7 +1049,7 @@ class MutableFileVersion:
         log.msg("got %d old segments, %d new segments" % \
                         (num_old_segments, num_new_segments))
 
-        # We do a whole file re-encode if the file is an SDMF file. 
+        # We do a whole file re-encode if the file is an SDMF file.
         if self._version[2]: # version[2] == SDMF salt, which MDMF lacks
             log.msg("doing re-encode instead of in-place update")
             return self._do_modify_update(data, offset)
@@ -1143,6 +1139,7 @@ class MutableFileVersion:
         blockhashes = {} # shnum -> blockhash tree
         for (shnum, original_data) in update_data.iteritems():
             data = [d[1] for d in original_data if d[0] == self._version]
+            # data is [(blockhashes,start,end)..]
 
             # Every data entry in our list should now be share shnum for
             # a particular version of the mutable file, so all of the
@@ -1150,8 +1147,9 @@ class MutableFileVersion:
             datum = data[0]
             assert [x for x in data if x != datum] == []
 
+            # datum is (blockhashes,start,end)
             blockhashes[shnum] = datum[0]
-            start_segments[shnum] = datum[1]
+            start_segments[shnum] = datum[1] # (block,salt) bytestrings
             end_segments[shnum] = datum[2]
 
         d1 = r.decode(start_segments, self._start_segment)

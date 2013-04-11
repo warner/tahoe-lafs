@@ -6,7 +6,7 @@ from twisted.python import failure
 from twisted.application import service
 from twisted.web.error import Error as WebError
 from foolscap.api import flushEventualQueue, fireEventually
-from allmydata import uri, dirnode, client
+from allmydata import uri, client
 from allmydata.introducer.server import IntroducerNode
 from allmydata.interfaces import IMutableFileNode, IImmutableFileNode,\
                                  NotEnoughSharesError, ICheckable, \
@@ -14,6 +14,7 @@ from allmydata.interfaces import IMutableFileNode, IImmutableFileNode,\
                                  MDMF_VERSION
 from allmydata.check_results import CheckResults, CheckAndRepairResults, \
      DeepCheckResults, DeepCheckAndRepairResults
+from allmydata.storage_client import StubServer
 from allmydata.mutable.layout import unpack_header
 from allmydata.mutable.publish import MutableData
 from allmydata.storage.mutable import MutableShareFile
@@ -43,11 +44,10 @@ class FakeCHKFileNode:
     """I provide IImmutableFileNode, but all of my data is stored in a
     class-level dictionary."""
     implements(IImmutableFileNode)
-    all_contents = {}
-    bad_shares = {}
 
-    def __init__(self, filecap):
+    def __init__(self, filecap, all_contents):
         precondition(isinstance(filecap, (uri.CHKFileURI, uri.LiteralFileURI)), filecap)
+        self.all_contents = all_contents
         self.my_uri = filecap
         self.storage_index = self.my_uri.get_storage_index()
 
@@ -67,35 +67,27 @@ class FakeCHKFileNode:
         return self.storage_index
 
     def check(self, monitor, verify=False, add_lease=False):
-        r = CheckResults(self.my_uri, self.storage_index)
-        is_bad = self.bad_shares.get(self.storage_index, None)
-        data = {}
-        data["count-shares-needed"] = 3
-        data["count-shares-expected"] = 10
-        data["count-good-share-hosts"] = 10
-        data["count-wrong-shares"] = 0
-        nodeid = "\x00"*20
-        data["list-corrupt-shares"] = []
-        data["sharemap"] = {1: [nodeid]}
-        data["servers-responding"] = [nodeid]
-        data["count-recoverable-versions"] = 1
-        data["count-unrecoverable-versions"] = 0
-        if is_bad:
-            r.set_healthy(False)
-            r.set_recoverable(True)
-            data["count-shares-good"] = 9
-            data["list-corrupt-shares"] = [(nodeid, self.storage_index, 0)]
-            # XXX: this whole 'is_bad' clause is unused. When a test is added
-            # to take advantage of it, we must find a way to provide 'server'
-            # (and IServer instance) to the CorruptShareError
-            #r.problems = failure.Failure(CorruptShareError(server, 0, is_bad))
-        else:
-            r.set_healthy(True)
-            r.set_recoverable(True)
-            data["count-shares-good"] = 10
-            r.problems = []
-        r.set_data(data)
-        r.set_needs_rebalancing(False)
+        s = StubServer("\x00"*20)
+        r = CheckResults(self.my_uri, self.storage_index,
+                         healthy=True, recoverable=True,
+                         needs_rebalancing=False,
+                         count_shares_needed=3,
+                         count_shares_expected=10,
+                         count_shares_good=10,
+                         count_good_share_hosts=10,
+                         count_recoverable_versions=1,
+                         count_unrecoverable_versions=0,
+                         servers_responding=[s],
+                         sharemap={1: [s]},
+                         count_wrong_shares=0,
+                         list_corrupt_shares=[],
+                         count_corrupt_shares=0,
+                         list_incompatible_shares=[],
+                         count_incompatible_shares=0,
+                         summary="",
+                         report=[],
+                         share_problems=[],
+                         servermap=None)
         return defer.succeed(r)
     def check_and_repair(self, monitor, verify=False, add_lease=False):
         d = self.check(verify)
@@ -125,6 +117,8 @@ class FakeCHKFileNode:
         except KeyError, le:
             raise NotEnoughSharesError(le, 0, 3)
         return len(data)
+    def get_current_size(self):
+        return defer.succeed(self.get_size())
 
     def read(self, consumer, offset=0, size=None):
         # we don't bother to call registerProducer/unregisterProducer,
@@ -177,10 +171,10 @@ def make_chk_file_cap(size):
 def make_chk_file_uri(size):
     return make_chk_file_cap(size).to_string()
 
-def create_chk_filenode(contents):
+def create_chk_filenode(contents, all_contents):
     filecap = make_chk_file_cap(len(contents))
-    n = FakeCHKFileNode(filecap)
-    FakeCHKFileNode.all_contents[filecap.to_string()] = contents
+    n = FakeCHKFileNode(filecap, all_contents)
+    all_contents[filecap.to_string()] = contents
     return n
 
 
@@ -190,12 +184,11 @@ class FakeMutableFileNode:
 
     implements(IMutableFileNode, ICheckable)
     MUTABLE_SIZELIMIT = 10000
-    all_contents = {}
-    bad_shares = {}
-    file_types = {} # storage index => MDMF_VERSION or SDMF_VERSION
 
     def __init__(self, storage_broker, secret_holder,
-                 default_encoding_parameters, history):
+                 default_encoding_parameters, history, all_contents):
+        self.all_contents = all_contents
+        self.file_types = {} # storage index => MDMF_VERSION or SDMF_VERSION
         self.init_from_cap(make_mutable_file_cap())
         self._k = default_encoding_parameters['k']
         self._segsize = default_encoding_parameters['max_segment_size']
@@ -286,34 +279,27 @@ class FakeMutableFileNode:
         return self.file_types[self.storage_index]
 
     def check(self, monitor, verify=False, add_lease=False):
-        r = CheckResults(self.my_uri, self.storage_index)
-        is_bad = self.bad_shares.get(self.storage_index, None)
-        data = {}
-        data["count-shares-needed"] = 3
-        data["count-shares-expected"] = 10
-        data["count-good-share-hosts"] = 10
-        data["count-wrong-shares"] = 0
-        data["list-corrupt-shares"] = []
-        nodeid = "\x00"*20
-        data["sharemap"] = {"seq1-abcd-sh0": [nodeid]}
-        data["servers-responding"] = [nodeid]
-        data["count-recoverable-versions"] = 1
-        data["count-unrecoverable-versions"] = 0
-        if is_bad:
-            r.set_healthy(False)
-            r.set_recoverable(True)
-            data["count-shares-good"] = 9
-            # XXX: this whole 'is_bad' clause is unused. When a test is added
-            # to take advantage of it, we must find a way to provide 'server'
-            # (and IServer instance) to the CorruptShareError
-            #r.problems = failure.Failure(CorruptShareError(server, 0, is_bad))
-        else:
-            r.set_healthy(True)
-            r.set_recoverable(True)
-            data["count-shares-good"] = 10
-            r.problems = []
-        r.set_data(data)
-        r.set_needs_rebalancing(False)
+        s = StubServer("\x00"*20)
+        r = CheckResults(self.my_uri, self.storage_index,
+                         healthy=True, recoverable=True,
+                         needs_rebalancing=False,
+                         count_shares_needed=3,
+                         count_shares_expected=10,
+                         count_shares_good=10,
+                         count_good_share_hosts=10,
+                         count_recoverable_versions=1,
+                         count_unrecoverable_versions=0,
+                         servers_responding=[s],
+                         sharemap={"seq1-abcd-sh0": [s]},
+                         count_wrong_shares=0,
+                         list_corrupt_shares=[],
+                         count_corrupt_shares=0,
+                         list_incompatible_shares=[],
+                         count_incompatible_shares=0,
+                         summary="",
+                         report=[],
+                         share_problems=[],
+                         servermap=None)
         return defer.succeed(r)
 
     def check_and_repair(self, monitor, verify=False, add_lease=False):
@@ -423,8 +409,8 @@ def make_verifier_uri():
     return uri.SSKVerifierURI(storage_index=os.urandom(16),
                               fingerprint=os.urandom(32)).to_string()
 
-def create_mutable_filenode(contents, mdmf=False):
-    # XXX: All of these arguments are kind of stupid. 
+def create_mutable_filenode(contents, mdmf=False, all_contents=None):
+    # XXX: All of these arguments are kind of stupid.
     if mdmf:
         cap = make_mdmf_mutable_file_cap()
     else:
@@ -434,7 +420,8 @@ def create_mutable_filenode(contents, mdmf=False):
     encoding_params['k'] = 3
     encoding_params['max_segment_size'] = 128*1024
 
-    filenode = FakeMutableFileNode(None, None, encoding_params, None)
+    filenode = FakeMutableFileNode(None, None, encoding_params, None,
+                                   all_contents)
     filenode.init_from_cap(cap)
     if mdmf:
         filenode.create(MutableData(contents), version=MDMF_VERSION)
@@ -442,14 +429,6 @@ def create_mutable_filenode(contents, mdmf=False):
         filenode.create(MutableData(contents), version=SDMF_VERSION)
     return filenode
 
-
-class FakeDirectoryNode(dirnode.DirectoryNode):
-    """This offers IDirectoryNode, but uses a FakeMutableFileNode for the
-    backing store, so it doesn't go to the grid. The child data is still
-    encrypted and serialized, so this isn't useful for tests that want to
-    look inside the dirnodes and check their contents.
-    """
-    filenode_class = FakeMutableFileNode
 
 class LoggingServiceParent(service.MultiService):
     def log(self, *args, **kwargs):
@@ -491,9 +470,10 @@ class SystemTestMixin(pollmixin.PollMixin, testutil.StallMixin):
         iv_dir = self.getdir("introducer")
         if not os.path.isdir(iv_dir):
             fileutil.make_dirs(iv_dir)
-            fileutil.write(os.path.join(iv_dir, 'tahoe.cfg'), \
-                               "[node]\n" + \
-                               "web.port = tcp:0:interface=127.0.0.1\n")
+            fileutil.write(os.path.join(iv_dir, 'tahoe.cfg'),
+                           "[node]\n" +
+                           u"nickname = introducer \u263A\n".encode('utf-8') +
+                           "web.port = tcp:0:interface=127.0.0.1\n")
             if SYSTEM_TEST_CERTS:
                 os.mkdir(os.path.join(iv_dir, "private"))
                 f = open(os.path.join(iv_dir, "private", "node.pem"), "w")
@@ -574,21 +554,26 @@ class SystemTestMixin(pollmixin.PollMixin, testutil.StallMixin):
             if self.stats_gatherer_furl:
                 config += "stats_gatherer.furl = %s\n" % self.stats_gatherer_furl
 
+            nodeconfig = "[node]\n"
+            nodeconfig += (u"nickname = client %d \u263A\n" % (i,)).encode('utf-8')
+
             if i == 0:
                 # clients[0] runs a webserver and a helper, no key_generator
-                config += "[node]\n"
+                config += nodeconfig
                 config += "web.port = tcp:0:interface=127.0.0.1\n"
                 config += "timeout.keepalive = 600\n"
                 config += "[helper]\n"
                 config += "enabled = True\n"
-            if i == 3:
+            elif i == 3:
                 # clients[3] runs a webserver and uses a helper, uses
                 # key_generator
                 if self.key_generator_furl:
                     config += "key_generator.furl = %s\n" % self.key_generator_furl
-                config += "[node]\n"
+                config += nodeconfig
                 config += "web.port = tcp:0:interface=127.0.0.1\n"
                 config += "timeout.disconnect = 1800\n"
+            else:
+                config += nodeconfig
 
             fileutil.write(os.path.join(basedir, 'tahoe.cfg'), config)
 
@@ -696,12 +681,12 @@ class SystemTestMixin(pollmixin.PollMixin, testutil.StallMixin):
             sb = c.get_storage_broker()
             if len(sb.get_connected_servers()) != self.numclients:
                 return False
+            up = c.getServiceNamed("uploader")
+            if up._helper_furl and not up._helper:
+                return False
         return True
 
     def wait_for_connections(self, ignored=None):
-        # TODO: replace this with something that takes a list of peerids and
-        # fires when they've all been heard from, instead of using a count
-        # and a threshold
         return self.poll(self._check_connections, timeout=200)
 
 

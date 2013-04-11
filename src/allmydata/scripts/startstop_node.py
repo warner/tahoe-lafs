@@ -1,45 +1,41 @@
 
 import os, sys, signal, time
-from allmydata.scripts.common import BasedirMixin, BaseOptions
+from allmydata.scripts.common import BasedirOptions
 from allmydata.util import fileutil
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, quote_output
 
 
-class StartOptions(BasedirMixin, BaseOptions):
+class StartOptions(BasedirOptions):
     optFlags = [
         ["profile", "p", "Run under the Python profiler, putting results in 'profiling_results.prof'."],
         ["syslog", None, "Tell the node to log to syslog, not a file."],
         ]
 
     def getSynopsis(self):
-        return "Usage:  %s start [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] start [options] [NODEDIR]" % (self.command_name,)
 
 
-class StopOptions(BasedirMixin, BaseOptions):
+class StopOptions(BasedirOptions):
     def getSynopsis(self):
-        return "Usage:  %s stop [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] stop [options] [NODEDIR]" % (self.command_name,)
 
 
-class RestartOptions(BasedirMixin, BaseOptions):
+class RestartOptions(BasedirOptions):
     optFlags = [
         ["profile", "p", "Run under the Python profiler, putting results in 'profiling_results.prof'."],
         ["syslog", None, "Tell the node to log to syslog, not a file."],
         ]
 
     def getSynopsis(self):
-        return "Usage:  %s restart [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] restart [options] [NODEDIR]" % (self.command_name,)
 
 
-class RunOptions(BasedirMixin, BaseOptions):
+class RunOptions(BasedirOptions):
     default_nodedir = u"."
 
-    optParameters = [
-        ["node-directory", "d", None, "Specify the directory of the node to be run. [default, for 'tahoe run' only: current directory]"],
-    ]
-
     def getSynopsis(self):
-        return "Usage:  %s run [options] [NODEDIR]" % (self.command_name,)
+        return "Usage:  %s [global-opts] run [options] [NODEDIR]" % (self.command_name,)
 
 
 def start(opts, out=sys.stdout, err=sys.stderr):

@@ -22,54 +22,51 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
 
     def render_pushed_shares(self, ctx, data):
         d = self.upload_results()
-        d.addCallback(lambda res: res.pushed_shares)
+        d.addCallback(lambda res: res.get_pushed_shares())
         return d
 
     def render_preexisting_shares(self, ctx, data):
         d = self.upload_results()
-        d.addCallback(lambda res: res.preexisting_shares)
+        d.addCallback(lambda res: res.get_preexisting_shares())
         return d
 
     def render_sharemap(self, ctx, data):
         d = self.upload_results()
-        d.addCallback(lambda res: res.sharemap)
+        d.addCallback(lambda res: res.get_sharemap())
         def _render(sharemap):
             if sharemap is None:
                 return "None"
             l = T.ul()
-            for shnum, peerids in sorted(sharemap.items()):
-                peerids = ', '.join([idlib.shortnodeid_b2a(i) for i in peerids])
-                l[T.li["%d -> placed on [%s]" % (shnum, peerids)]]
+            for shnum, servers in sorted(sharemap.items()):
+                server_names = ', '.join([s.get_name() for s in servers])
+                l[T.li["%d -> placed on [%s]" % (shnum, server_names)]]
             return l
         d.addCallback(_render)
         return d
 
     def render_servermap(self, ctx, data):
         d = self.upload_results()
-        d.addCallback(lambda res: res.servermap)
+        d.addCallback(lambda res: res.get_servermap())
         def _render(servermap):
             if servermap is None:
                 return "None"
             l = T.ul()
-            for peerid in sorted(servermap.keys()):
-                peerid_s = idlib.shortnodeid_b2a(peerid)
-                shares_s = ",".join(["#%d" % shnum
-                                     for shnum in servermap[peerid]])
-                l[T.li["[%s] got share%s: %s" % (peerid_s,
-                                                 plural(servermap[peerid]),
-                                                 shares_s)]]
+            for server, shnums in sorted(servermap.items()):
+                shares_s = ",".join(["#%d" % shnum for shnum in shnums])
+                l[T.li["[%s] got share%s: %s" % (server.get_name(),
+                                                 plural(shnums), shares_s)]]
             return l
         d.addCallback(_render)
         return d
 
     def data_file_size(self, ctx, data):
         d = self.upload_results()
-        d.addCallback(lambda res: res.file_size)
+        d.addCallback(lambda res: res.get_file_size())
         return d
 
     def _get_time(self, name):
         d = self.upload_results()
-        d.addCallback(lambda res: res.timings.get(name))
+        d.addCallback(lambda res: res.get_timings().get(name))
         return d
 
     def data_time_total(self, ctx, data):
@@ -80,9 +77,6 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
 
     def data_time_contacting_helper(self, ctx, data):
         return self._get_time("contacting_helper")
-
-    def data_time_existence_check(self, ctx, data):
-        return self._get_time("existence_check")
 
     def data_time_cumulative_fetch(self, ctx, data):
         return self._get_time("cumulative_fetch")
@@ -108,8 +102,8 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
     def _get_rate(self, name):
         d = self.upload_results()
         def _convert(r):
-            file_size = r.file_size
-            time = r.timings.get(name)
+            file_size = r.get_file_size()
+            time = r.get_timings().get(name)
             return compute_rate(file_size, time)
         d.addCallback(_convert)
         return d
@@ -129,9 +123,9 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
     def data_rate_encode_and_push(self, ctx, data):
         d = self.upload_results()
         def _convert(r):
-            file_size = r.file_size
-            time1 = r.timings.get("cumulative_encoding")
-            time2 = r.timings.get("cumulative_sending")
+            file_size = r.get_file_size()
+            time1 = r.get_timings().get("cumulative_encoding")
+            time2 = r.get_timings().get("cumulative_sending")
             if (time1 is None or time2 is None):
                 return None
             else:
@@ -142,8 +136,8 @@ class UploadResultsRendererMixin(RateAndTimeMixin):
     def data_rate_ciphertext_fetch(self, ctx, data):
         d = self.upload_results()
         def _convert(r):
-            fetch_size = r.ciphertext_fetched
-            time = r.timings.get("cumulative_fetch")
+            fetch_size = r.get_ciphertext_fetched()
+            time = r.get_timings().get("cumulative_fetch")
             return compute_rate(fetch_size, time)
         d.addCallback(_convert)
         return d
@@ -371,7 +365,7 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
         for ev in events:
             ev = ev.copy()
             if ev.has_key('server'):
-                ev["serverid"] = base32.b2a(ev["server"].get_serverid())
+                ev["serverid"] = ev["server"].get_longname()
                 del ev["server"]
             # find an empty slot in the rows
             free_slot = None
@@ -411,7 +405,7 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
         for ev in events:
             # DownloadStatus promises to give us events in temporal order
             ev = ev.copy()
-            ev["serverid"] = base32.b2a(ev["server"].get_serverid())
+            ev["serverid"] = ev["server"].get_longname()
             del ev["server"]
             if ev["serverid"] not in serverid_to_group:
                 groupnum = len(serverid_to_group)
@@ -459,23 +453,23 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
                                           "start_time", "finish_time")
         data["block"],data["block_rownums"] = self._find_overlap_requests(ds.block_requests)
 
-        servernums = {}
-        serverid_strings = {}
-        for d_ev in data["dyhb"]:
-            if d_ev["serverid"] not in servernums:
-                servernum = len(servernums)
-                servernums[d_ev["serverid"]] = servernum
-                #title= "%s: %s" % ( ",".join([str(shnum) for shnum in shnums]))
-                serverid_strings[servernum] = d_ev["serverid"][:4]
-        data["server_info"] = dict([(serverid, {"num": servernums[serverid],
-                                                "color": self.color(base32.a2b(serverid)),
-                                                "short": serverid_strings[servernums[serverid]],
-                                                })
-                                   for serverid in servernums.keys()])
-        data["num_serverids"] = len(serverid_strings)
+        server_info = {} # maps longname to {num,color,short}
+        server_shortnames = {} # maps servernum to shortname
+        for d_ev in ds.dyhb_requests:
+            s = d_ev["server"]
+            longname = s.get_longname()
+            if longname not in server_info:
+                num = len(server_info)
+                server_info[longname] = {"num": num,
+                                         "color": self.color(s),
+                                         "short": s.get_name() }
+                server_shortnames[str(num)] = s.get_name()
+
+        data["server_info"] = server_info
+        data["num_serverids"] = len(server_info)
         # we'd prefer the keys of serverids[] to be ints, but this is JSON,
         # so they get converted to strings. Stupid javascript.
-        data["serverids"] = serverid_strings
+        data["serverids"] = server_shortnames
         data["bounds"] = {"min": ds.first_timestamp, "max": ds.last_timestamp}
         return simplejson.dumps(data, indent=1) + "\n"
 
@@ -509,7 +503,7 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
                 rtt = received - sent
             if not shnums:
                 shnums = ["-"]
-            t[T.tr(style="background: %s" % self.color(server.get_serverid()))[
+            t[T.tr(style="background: %s" % self.color(server))[
                 [T.td[server.get_name()], T.td[srt(sent)], T.td[srt(received)],
                  T.td[",".join([str(shnum) for shnum in shnums])],
                  T.td[self.render_time(None, rtt)],
@@ -589,7 +583,7 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
             rtt = None
             if r_ev["finish_time"] is not None:
                 rtt = r_ev["finish_time"] - r_ev["start_time"]
-            color = self.color(server.get_serverid())
+            color = self.color(server)
             t[T.tr(style="background: %s" % color)[
                 T.td[server.get_name()], T.td[r_ev["shnum"]],
                 T.td["[%d:+%d]" % (r_ev["start"], r_ev["length"])],
@@ -603,7 +597,8 @@ class DownloadStatusPage(DownloadResultsRendererMixin, rend.Page):
 
         return l
 
-    def color(self, peerid):
+    def color(self, server):
+        peerid = server.get_serverid() # binary
         def m(c):
             return min(ord(c) / 2 + 0x80, 0xff)
         return "#%02x%02x%02x" % (m(peerid[0]), m(peerid[1]), m(peerid[2]))
@@ -761,11 +756,10 @@ class RetrieveStatusPage(rend.Page, RateAndTimeMixin):
         if not per_server:
             return ""
         l = T.ul()
-        for peerid in sorted(per_server.keys()):
-            peerid_s = idlib.shortnodeid_b2a(peerid)
+        for server in sorted(per_server.keys(), key=lambda s: s.get_name()):
             times_s = ", ".join([self.render_time(None, t)
-                                 for t in per_server[peerid]])
-            l[T.li["[%s]: %s" % (peerid_s, times_s)]]
+                                 for t in per_server[server]])
+            l[T.li["[%s]: %s" % (server.get_name(), times_s)]]
         return T.li["Per-Server Fetch Response Times: ", l]
 
 
@@ -874,11 +868,10 @@ class PublishStatusPage(rend.Page, RateAndTimeMixin):
         if not per_server:
             return ""
         l = T.ul()
-        for peerid in sorted(per_server.keys()):
-            peerid_s = idlib.shortnodeid_b2a(peerid)
+        for server in sorted(per_server.keys(), key=lambda s: s.get_name()):
             times_s = ", ".join([self.render_time(None, t)
-                                 for t in per_server[peerid]])
-            l[T.li["[%s]: %s" % (peerid_s, times_s)]]
+                                 for t in per_server[server]])
+            l[T.li["[%s]: %s" % (server.get_name(), times_s)]]
         return T.li["Per-Server Response Times: ", l]
 
 class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
@@ -932,10 +925,9 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         return ctx.tag["Server Problems:", l]
 
     def render_privkey_from(self, ctx, data):
-        peerid = data.get_privkey_from()
-        if peerid:
-            return ctx.tag["Got privkey from: [%s]"
-                           % idlib.shortnodeid_b2a(peerid)]
+        server = data.get_privkey_from()
+        if server:
+            return ctx.tag["Got privkey from: [%s]" % server.get_name()]
         else:
             return ""
 
@@ -953,10 +945,9 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         if not per_server:
             return ""
         l = T.ul()
-        for peerid in sorted(per_server.keys()):
-            peerid_s = idlib.shortnodeid_b2a(peerid)
+        for server in sorted(per_server.keys(), key=lambda s: s.get_name()):
             times = []
-            for op,started,t in per_server[peerid]:
+            for op,started,t in per_server[server]:
                 #times.append("%s/%.4fs/%s/%s" % (op,
                 #                              started,
                 #                              self.render_time(None, started - self.update_status.get_started()),
@@ -968,7 +959,7 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
                 else:
                     times.append( "privkey(" + self.render_time(None, t) + ")" )
             times_s = ", ".join(times)
-            l[T.li["[%s]: %s" % (peerid_s, times_s)]]
+            l[T.li["[%s]: %s" % (server.get_name(), times_s)]]
         return T.li["Per-Server Response Times: ", l]
 
     def render_timing_chart(self, ctx, data):
@@ -979,6 +970,7 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         started = self.update_status.get_started()
         total = self.update_status.timings.get("total")
         per_server = self.update_status.timings.get("per_server")
+        # We'd like to use an https: URL here, but the site has a domain/cert mismatch.
         base = "http://chart.apis.google.com/chart?"
         pieces = ["cht=bhs"]
         pieces.append("chco=ffffff,4d89f9,c6d9fd") # colors
@@ -988,19 +980,19 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         nb_nodes = 0
         graph_botom_margin= 21
         graph_top_margin = 5
-        peerids_s = []
+        server_names = []
         top_abs = started
         # we sort the queries by the time at which we sent the first request
-        sorttable = [ (times[0][1], peerid)
-                      for peerid, times in per_server.items() ]
+        sorttable = [ (times[0][1], server)
+                      for server, times in per_server.items() ]
         sorttable.sort()
-        peerids = [t[1] for t in sorttable]
+        servers = [t[1] for t in sorttable]
 
-        for peerid in peerids:
+        for server in servers:
             nb_nodes += 1
-            times = per_server[peerid]
-            peerid_s = idlib.shortnodeid_b2a(peerid)
-            peerids_s.append(peerid_s)
+            times = per_server[server]
+            name = server.get_name()
+            server_names.append(name)
             # for servermap updates, there are either one or two queries per
             # peer. The second (if present) is to get the privkey.
             op,q_started,q_elapsed = times[0]
@@ -1027,7 +1019,7 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         pieces.append(chds)
         pieces.append("chxt=x,y")
         pieces.append("chxr=0,0.0,%0.3f" % top_rel)
-        pieces.append("chxl=1:|" + "|".join(reversed(peerids_s)))
+        pieces.append("chxl=1:|" + "|".join(reversed(server_names)))
         # use up to 10 grid lines, at decimal multiples.
         # mathutil.next_power_of_k doesn't handle numbers smaller than one,
         # unfortunately.

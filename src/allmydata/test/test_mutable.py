@@ -1,4 +1,3 @@
-
 import os, re, base64
 from cStringIO import StringIO
 from twisted.trial import unittest
@@ -22,7 +21,7 @@ from allmydata.storage.common import storage_index_to_dir
 from allmydata.scripts import debug
 
 from allmydata.mutable.filenode import MutableFileNode, BackoffAgent
-from allmydata.mutable.common import ResponseCache, \
+from allmydata.mutable.common import \
      MODE_CHECK, MODE_ANYTHING, MODE_WRITE, MODE_READ, \
      NeedMoreDataError, UnrecoverableFileError, UncoordinatedWriteError, \
      NotEnoughServersError, CorruptShareError
@@ -39,6 +38,12 @@ from allmydata.test.common import TEST_RSA_KEY_SIZE
 from allmydata.test.test_download import PausingConsumer, \
      PausingAndStoppingConsumer, StoppingConsumer, \
      ImmediatelyStoppingConsumer
+
+def eventuaaaaaly(res=None):
+    d = fireEventually(res)
+    d.addCallback(fireEventually)
+    d.addCallback(fireEventually)
+    return d
 
 
 # this "FakeStorage" exists to put the share data in RAM and avoid using real
@@ -70,7 +75,7 @@ class FakeStorage:
     def read(self, peerid, storage_index):
         shares = self._peers.get(peerid, {})
         if self._sequence is None:
-            return defer.succeed(shares)
+            return eventuaaaaaly(shares)
         d = defer.Deferred()
         if not self._pending:
             self._pending_timer = reactor.callLater(1.0, self._fire_readers)
@@ -229,14 +234,17 @@ def make_storagebroker(s=None, num_peers=10):
     storage_broker = StorageFarmBroker(None, True)
     for peerid in peerids:
         fss = FakeStorageServer(peerid, s)
-        storage_broker.test_add_rref(peerid, fss)
+        ann = {"anonymous-storage-FURL": "pb://%s@nowhere/fake" % base32.b2a(peerid),
+               "permutation-seed-base32": base32.b2a(peerid) }
+        storage_broker.test_add_rref(peerid, fss, ann)
     return storage_broker
 
-def make_nodemaker(s=None, num_peers=10):
+def make_nodemaker(s=None, num_peers=10, keysize=TEST_RSA_KEY_SIZE):
     storage_broker = make_storagebroker(s, num_peers)
     sh = client.SecretHolder("lease secret", "convergence secret")
     keygen = client.KeyGenerator()
-    keygen.set_default_keysize(TEST_RSA_KEY_SIZE)
+    if keysize:
+        keygen.set_default_keysize(keysize)
     nodemaker = NodeMaker(storage_broker, sh, None,
                           None, None,
                           {"k": 3, "n": 10}, SDMF_VERSION, keygen)
@@ -476,7 +484,7 @@ class Filenode(unittest.TestCase, testutil.ShouldFailMixin):
                 dumped = servermap.dump(StringIO())
                 self.failUnlessIn("3-of-10", dumped.getvalue())
             d.addCallback(_then)
-            # Now overwrite the contents with some new contents. We want 
+            # Now overwrite the contents with some new contents. We want
             # to make them big enough to force the file to be uploaded
             # in more than one segment.
             big_contents = "contents1" * 100000 # about 900 KiB
@@ -491,7 +499,7 @@ class Filenode(unittest.TestCase, testutil.ShouldFailMixin):
             # before, they need to be big enough to force multiple
             # segments, so that we make the downloader deal with
             # multiple segments.
-            bigger_contents = "contents2" * 1000000 # about 9MiB 
+            bigger_contents = "contents2" * 1000000 # about 9MiB
             bigger_contents_uploadable = MutableData(bigger_contents)
             d.addCallback(lambda ignored:
                 n.overwrite(bigger_contents_uploadable))
@@ -627,25 +635,6 @@ class Filenode(unittest.TestCase, testutil.ShouldFailMixin):
             d.addCallback(lambda data:
                 self.failUnlessEqual(data, initial_contents +
                                            "foobarbaz"))
-            return d
-        d.addCallback(_created)
-        return d
-
-
-    def test_response_cache_memory_leak(self):
-        d = self.nodemaker.create_mutable_file("contents")
-        def _created(n):
-            d = n.download_best_version()
-            d.addCallback(lambda res: self.failUnlessEqual(res, "contents"))
-            d.addCallback(lambda ign: self.failUnless(isinstance(n._cache, ResponseCache)))
-
-            def _check_cache(expected):
-                # The total size of cache entries should not increase on the second download;
-                # in fact the cache contents should be identical.
-                d2 = n.download_best_version()
-                d2.addCallback(lambda rep: self.failUnlessEqual(repr(n._cache.cache), expected))
-                return d2
-            d.addCallback(lambda ign: _check_cache(repr(n._cache.cache)))
             return d
         d.addCallback(_created)
         return d
@@ -950,6 +939,20 @@ class PublishMixin:
         self._nodemaker = make_nodemaker(self._storage)
         self._storage_broker = self._nodemaker.storage_broker
         d = self._nodemaker.create_mutable_file(self.uploadable, version=SDMF_VERSION)
+        def _created(node):
+            self._fn = node
+            self._fn2 = self._nodemaker.create_from_cap(node.get_uri())
+        d.addCallback(_created)
+        return d
+
+    def publish_empty_sdmf(self):
+        self.CONTENTS = ""
+        self.uploadable = MutableData(self.CONTENTS)
+        self._storage = FakeStorage()
+        self._nodemaker = make_nodemaker(self._storage, keysize=None)
+        self._storage_broker = self._nodemaker.storage_broker
+        d = self._nodemaker.create_mutable_file(self.uploadable,
+                                                version=SDMF_VERSION)
         def _created(node):
             self._fn = node
             self._fn2 = self._nodemaker.create_from_cap(node.get_uri())
@@ -1479,7 +1482,7 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
 
 
     def test_corrupt_all_encprivkey_late(self):
-        # this should work for the same reason as above, but we corrupt 
+        # this should work for the same reason as above, but we corrupt
         # after the servermap update to exercise the error handling
         # code.
         # We need to remove the privkey from the node, or the retrieve
@@ -1503,15 +1506,6 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
             self.failUnless(f.check(NotEnoughSharesError))
             self.failUnless("uncoordinated write" in str(f))
         return self._test_corrupt_all(1, "ran out of servers",
-                                      corrupt_early=False,
-                                      failure_checker=_check)
-
-    def test_corrupt_all_block_hash_tree_late(self):
-        def _check(res):
-            f = res[0]
-            self.failUnless(f.check(NotEnoughSharesError))
-        return self._test_corrupt_all("block_hash_tree",
-                                      "block hash tree failure",
                                       corrupt_early=False,
                                       failure_checker=_check)
 
@@ -1596,17 +1590,20 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
         d.addCallback(lambda ignored:
             self._test_corrupt_all(("block_hash_tree", 12 * 32),
                                    "block hash tree failure",
-                                   corrupt_early=False,
+                                   corrupt_early=True,
                                    should_succeed=False))
         return d
 
 
     def test_corrupt_mdmf_block_hash_tree_late(self):
+        # Note - there is no SDMF counterpart to this test, as the SDMF
+        # files are guaranteed to have exactly one block, and therefore
+        # the block hash tree fits within the initial read (#1240).
         d = self.publish_mdmf()
         d.addCallback(lambda ignored:
             self._test_corrupt_all(("block_hash_tree", 12 * 32),
                                    "block hash tree failure",
-                                   corrupt_early=True,
+                                   corrupt_early=False,
                                    should_succeed=False))
         return d
 
@@ -1638,14 +1635,14 @@ class CheckerMixin:
         return r
 
     def check_expected_failure(self, r, expected_exception, substring, where):
-        for (peerid, storage_index, shnum, f) in r.problems:
+        for (peerid, storage_index, shnum, f) in r.get_share_problems():
             if f.check(expected_exception):
                 self.failUnless(substring in str(f),
                                 "%s: substring '%s' not in '%s'" %
                                 (where, substring, str(f)))
                 return
         self.fail("%s: didn't see expected exception %s in problems %s" %
-                  (where, expected_exception, r.problems))
+                  (where, expected_exception, r.get_share_problems()))
 
 
 class Checker(unittest.TestCase, CheckerMixin, PublishMixin):
@@ -1720,6 +1717,33 @@ class Checker(unittest.TestCase, CheckerMixin, PublishMixin):
         d.addCallback(lambda ignored:
             self._fn.check(Monitor()))
         d.addCallback(self.check_bad, "test_check_mdmf_all_bad_sig")
+        return d
+
+    def test_verify_mdmf_all_bad_sharedata(self):
+        d = self.publish_mdmf()
+        # On 8 of the shares, corrupt the beginning of the share data.
+        # The signature check during the servermap update won't catch this.
+        d.addCallback(lambda ignored:
+            corrupt(None, self._storage, "share_data", range(8)))
+        # On 2 of the shares, corrupt the end of the share data.
+        # The signature check during the servermap update won't catch
+        # this either, and the retrieval process will have to process
+        # all of the segments before it notices.
+        d.addCallback(lambda ignored:
+            # the block hash tree comes right after the share data, so if we
+            # corrupt a little before the block hash tree, we'll corrupt in the
+            # last block of each share.
+            corrupt(None, self._storage, "block_hash_tree", [8, 9], -5))
+        d.addCallback(lambda ignored:
+            self._fn.check(Monitor(), verify=True))
+        # The verifier should flag the file as unhealthy, and should
+        # list all 10 shares as bad.
+        d.addCallback(self.check_bad, "test_verify_mdmf_all_bad_sharedata")
+        def _check_num_bad(r):
+            self.failIf(r.is_recoverable())
+            smap = r.get_servermap()
+            self.failUnlessEqual(len(smap.get_bad_shares()), 10)
+        d.addCallback(_check_num_bad)
         return d
 
     def test_check_all_bad_blocks(self):
@@ -1925,101 +1949,77 @@ class Repair(unittest.TestCase, PublishMixin, ShouldFailMixin):
         self.failUnlessEqual(old_shares, current_shares)
 
 
-    def test_unrepairable_0shares(self):
-        d = self.publish_one()
-        def _delete_all_shares(ign):
-            shares = self._storage._peers
-            for peerid in shares:
-                shares[peerid] = {}
-        d.addCallback(_delete_all_shares)
-        d.addCallback(lambda ign: self._fn.check(Monitor()))
-        d.addCallback(lambda check_results: self._fn.repair(check_results))
-        def _check(crr):
-            self.failUnlessEqual(crr.get_successful(), False)
-        d.addCallback(_check)
-        return d
-
-    def test_mdmf_unrepairable_0shares(self):
-        d = self.publish_mdmf()
-        def _delete_all_shares(ign):
-            shares = self._storage._peers
-            for peerid in shares:
-                shares[peerid] = {}
-        d.addCallback(_delete_all_shares)
-        d.addCallback(lambda ign: self._fn.check(Monitor()))
-        d.addCallback(lambda check_results: self._fn.repair(check_results))
-        d.addCallback(lambda crr: self.failIf(crr.get_successful()))
-        return d
-
-
-    def test_unrepairable_1share(self):
-        d = self.publish_one()
-        def _delete_all_shares(ign):
-            shares = self._storage._peers
-            for peerid in shares:
-                for shnum in list(shares[peerid]):
-                    if shnum > 0:
-                        del shares[peerid][shnum]
-        d.addCallback(_delete_all_shares)
-        d.addCallback(lambda ign: self._fn.check(Monitor()))
-        d.addCallback(lambda check_results: self._fn.repair(check_results))
-        def _check(crr):
-            self.failUnlessEqual(crr.get_successful(), False)
-        d.addCallback(_check)
-        return d
-
-    def test_mdmf_unrepairable_1share(self):
-        d = self.publish_mdmf()
-        def _delete_all_shares(ign):
-            shares = self._storage._peers
-            for peerid in shares:
-                for shnum in list(shares[peerid]):
-                    if shnum > 0:
-                        del shares[peerid][shnum]
-        d.addCallback(_delete_all_shares)
-        d.addCallback(lambda ign: self._fn.check(Monitor()))
-        d.addCallback(lambda check_results: self._fn.repair(check_results))
-        def _check(crr):
-            self.failUnlessEqual(crr.get_successful(), False)
-        d.addCallback(_check)
-        return d
-
-    def test_repairable_5shares(self):
-        d = self.publish_mdmf()
-        def _delete_all_shares(ign):
-            shares = self._storage._peers
-            for peerid in shares:
-                for shnum in list(shares[peerid]):
-                    if shnum > 4:
-                        del shares[peerid][shnum]
-        d.addCallback(_delete_all_shares)
-        d.addCallback(lambda ign: self._fn.check(Monitor()))
-        d.addCallback(lambda check_results: self._fn.repair(check_results))
-        def _check(crr):
-            self.failUnlessEqual(crr.get_successful(), True)
-        d.addCallback(_check)
-        return d
-
-    def test_mdmf_repairable_5shares(self):
-        d = self.publish_mdmf()
+    def _test_whether_repairable(self, publisher, nshares, expected_result):
+        d = publisher()
         def _delete_some_shares(ign):
             shares = self._storage._peers
             for peerid in shares:
                 for shnum in list(shares[peerid]):
-                    if shnum > 5:
+                    if shnum >= nshares:
                         del shares[peerid][shnum]
         d.addCallback(_delete_some_shares)
         d.addCallback(lambda ign: self._fn.check(Monitor()))
         def _check(cr):
             self.failIf(cr.is_healthy())
-            self.failUnless(cr.is_recoverable())
+            self.failUnlessEqual(cr.is_recoverable(), expected_result)
             return cr
         d.addCallback(_check)
         d.addCallback(lambda check_results: self._fn.repair(check_results))
-        def _check1(crr):
-            self.failUnlessEqual(crr.get_successful(), True)
-        d.addCallback(_check1)
+        d.addCallback(lambda crr: self.failUnlessEqual(crr.get_successful(), expected_result))
         return d
+
+    def test_unrepairable_0shares(self):
+        return self._test_whether_repairable(self.publish_one, 0, False)
+
+    def test_mdmf_unrepairable_0shares(self):
+        return self._test_whether_repairable(self.publish_mdmf, 0, False)
+
+    def test_unrepairable_1share(self):
+        return self._test_whether_repairable(self.publish_one, 1, False)
+
+    def test_mdmf_unrepairable_1share(self):
+        return self._test_whether_repairable(self.publish_mdmf, 1, False)
+
+    def test_repairable_5shares(self):
+        return self._test_whether_repairable(self.publish_one, 5, True)
+
+    def test_mdmf_repairable_5shares(self):
+        return self._test_whether_repairable(self.publish_mdmf, 5, True)
+
+    def _test_whether_checkandrepairable(self, publisher, nshares, expected_result):
+        """
+        Like the _test_whether_repairable tests, but invoking check_and_repair
+        instead of invoking check and then invoking repair.
+        """
+        d = publisher()
+        def _delete_some_shares(ign):
+            shares = self._storage._peers
+            for peerid in shares:
+                for shnum in list(shares[peerid]):
+                    if shnum >= nshares:
+                        del shares[peerid][shnum]
+        d.addCallback(_delete_some_shares)
+        d.addCallback(lambda ign: self._fn.check_and_repair(Monitor()))
+        d.addCallback(lambda crr: self.failUnlessEqual(crr.get_repair_successful(), expected_result))
+        return d
+
+    def test_unrepairable_0shares_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_one, 0, False)
+
+    def test_mdmf_unrepairable_0shares_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_mdmf, 0, False)
+
+    def test_unrepairable_1share_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_one, 1, False)
+
+    def test_mdmf_unrepairable_1share_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_mdmf, 1, False)
+
+    def test_repairable_5shares_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_one, 5, True)
+
+    def test_mdmf_repairable_5shares_checkandrepair(self):
+        return self._test_whether_checkandrepairable(self.publish_mdmf, 5, True)
 
 
     def test_merge(self):
@@ -2129,6 +2129,26 @@ class Repair(unittest.TestCase, PublishMixin, ShouldFailMixin):
         d.addCallback(_check_results)
         return d
 
+    def test_repair_empty(self):
+        # bug 1689: delete one share of an empty mutable file, then repair.
+        # In the buggy version, the check that precedes the retrieve+publish
+        # cycle uses MODE_READ, instead of MODE_REPAIR, and fails to get the
+        # privkey that repair needs.
+        d = self.publish_empty_sdmf()
+        def _delete_one_share(ign):
+            shares = self._storage._peers
+            for peerid in shares:
+                for shnum in list(shares[peerid]):
+                    if shnum == 0:
+                        del shares[peerid][shnum]
+        d.addCallback(_delete_one_share)
+        d.addCallback(lambda ign: self._fn2.check(Monitor()))
+        d.addCallback(lambda check_results: self._fn2.repair(check_results))
+        def _check(crr):
+            self.failUnlessEqual(crr.get_successful(), True)
+        d.addCallback(_check)
+        return d
+
 class DevNullDictionary(dict):
     def __setitem__(self, key, value):
         return
@@ -2188,9 +2208,9 @@ class MultipleEncodings(unittest.TestCase):
         # then mix up the shares, to make sure that download survives seeing
         # a variety of encodings. This is actually kind of tricky to set up.
 
-        contents1 = "Contents for encoding 1 (3-of-10) go here"
-        contents2 = "Contents for encoding 2 (4-of-9) go here"
-        contents3 = "Contents for encoding 3 (4-of-7) go here"
+        contents1 = "Contents for encoding 1 (3-of-10) go here"*1000
+        contents2 = "Contents for encoding 2 (4-of-9) go here"*1000
+        contents3 = "Contents for encoding 3 (4-of-7) go here"*1000
 
         # we make a retrieval object that doesn't know what encoding
         # parameters to use
@@ -2358,45 +2378,13 @@ class MultipleVersions(unittest.TestCase, PublishMixin, CheckerMixin):
         return d
 
 
-class Utils(unittest.TestCase):
-    def test_cache(self):
-        c = ResponseCache()
-        # xdata = base62.b2a(os.urandom(100))[:100]
-        xdata = "1Ex4mdMaDyOl9YnGBM3I4xaBF97j8OQAg1K3RBR01F2PwTP4HohB3XpACuku8Xj4aTQjqJIR1f36mEj3BCNjXaJmPBEZnnHL0U9l"
-        ydata = "4DCUQXvkEPnnr9Lufikq5t21JsnzZKhzxKBhLhrBB6iIcBOWRuT4UweDhjuKJUre8A4wOObJnl3Kiqmlj4vjSLSqUGAkUD87Y3vs"
-        c.add("v1", 1, 0, xdata)
-        c.add("v1", 1, 2000, ydata)
-        self.failUnlessEqual(c.read("v2", 1, 10, 11), None)
-        self.failUnlessEqual(c.read("v1", 2, 10, 11), None)
-        self.failUnlessEqual(c.read("v1", 1, 0, 10), xdata[:10])
-        self.failUnlessEqual(c.read("v1", 1, 90, 10), xdata[90:])
-        self.failUnlessEqual(c.read("v1", 1, 300, 10), None)
-        self.failUnlessEqual(c.read("v1", 1, 2050, 5), ydata[50:55])
-        self.failUnlessEqual(c.read("v1", 1, 0, 101), None)
-        self.failUnlessEqual(c.read("v1", 1, 99, 1), xdata[99:100])
-        self.failUnlessEqual(c.read("v1", 1, 100, 1), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 9), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 10), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 11), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 15), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 19), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 20), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 21), None)
-        self.failUnlessEqual(c.read("v1", 1, 1990, 25), None)
-        self.failUnlessEqual(c.read("v1", 1, 1999, 25), None)
-
-        # test joining fragments
-        c = ResponseCache()
-        c.add("v1", 1, 0, xdata[:10])
-        c.add("v1", 1, 10, xdata[10:20])
-        self.failUnlessEqual(c.read("v1", 1, 0, 20), xdata[:20])
-
 class Exceptions(unittest.TestCase):
     def test_repr(self):
         nmde = NeedMoreDataError(100, 50, 100)
         self.failUnless("NeedMoreDataError" in repr(nmde), repr(nmde))
         ucwe = UncoordinatedWriteError()
         self.failUnless("UncoordinatedWriteError" in repr(ucwe), repr(ucwe))
+
 
 class SameKeyGenerator:
     def __init__(self, pubkey, privkey):
@@ -2469,7 +2457,7 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
         self.basedir = "mutable/Problems/test_retrieve_surprise"
         self.set_up_grid()
         nm = self.g.clients[0].nodemaker
-        d = nm.create_mutable_file(MutableData("contents 1"))
+        d = nm.create_mutable_file(MutableData("contents 1"*4000))
         def _created(n):
             d = defer.succeed(None)
             d.addCallback(lambda res: n.get_servermap(MODE_READ))
@@ -2483,7 +2471,6 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
             # now attempt to retrieve the old version with the old servermap.
             # This will look like someone has changed the file since we
             # updated the servermap.
-            d.addCallback(lambda res: n._cache._clear())
             d.addCallback(lambda res: log.msg("starting doomed read"))
             d.addCallback(lambda res:
                           self.shouldFail(NotEnoughSharesError,
@@ -2532,6 +2519,44 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
                                           MutableData("contents 2a"), self.old_map))
             return d
         d.addCallback(_created)
+        return d
+
+    def test_multiply_placed_shares(self):
+        self.basedir = "mutable/Problems/test_multiply_placed_shares"
+        self.set_up_grid()
+        nm = self.g.clients[0].nodemaker
+        d = nm.create_mutable_file(MutableData("contents 1"))
+        # remove one of the servers and reupload the file.
+        def _created(n):
+            self._node = n
+
+            servers = self.g.get_all_serverids()
+            self.ss = self.g.remove_server(servers[len(servers)-1])
+
+            new_server = self.g.make_server(len(servers)-1)
+            self.g.add_server(len(servers)-1, new_server)
+
+            return self._node.download_best_version()
+        d.addCallback(_created)
+        d.addCallback(lambda data: MutableData(data))
+        d.addCallback(lambda data: self._node.overwrite(data))
+
+        # restore the server we removed earlier, then download+upload
+        # the file again
+        def _overwritten(ign):
+            self.g.add_server(len(self.g.servers_by_number), self.ss)
+            return self._node.download_best_version()
+        d.addCallback(_overwritten)
+        d.addCallback(lambda data: MutableData(data))
+        d.addCallback(lambda data: self._node.overwrite(data))
+        d.addCallback(lambda ignored:
+            self._node.get_servermap(MODE_CHECK))
+        def _overwritten_again(smap):
+            # Make sure that all shares were updated by making sure that
+            # there aren't any other versions in the sharemap.
+            self.failUnlessEqual(len(smap.recoverable_versions()), 1)
+            self.failUnlessEqual(len(smap.unrecoverable_versions()), 0)
+        d.addCallback(_overwritten_again)
         return d
 
     def test_bad_server(self):
@@ -2751,6 +2776,155 @@ class Problems(GridTestMixin, unittest.TestCase, testutil.ShouldFailMixin):
         d.addCallback(lambda data:
             self.failUnlessEqual(data, CONTENTS))
         return d
+
+    def test_1654(self):
+        # test that the Retrieve object unconditionally verifies the block
+        # hash tree root for mutable shares. The failure mode is that
+        # carefully crafted shares can cause undetected corruption (the
+        # retrieve appears to finish successfully, but the result is
+        # corrupted). When fixed, these shares always cause a
+        # CorruptShareError, which results in NotEnoughSharesError in this
+        # 2-of-2 file.
+        self.basedir = "mutable/Problems/test_1654"
+        self.set_up_grid(num_servers=2)
+        cap = uri.from_string(TEST_1654_CAP)
+        si = cap.get_storage_index()
+
+        for share, shnum in [(TEST_1654_SH0, 0), (TEST_1654_SH1, 1)]:
+            sharedata = base64.b64decode(share)
+            storedir = self.get_serverdir(shnum)
+            storage_path = os.path.join(storedir, "shares",
+                                        storage_index_to_dir(si))
+            fileutil.make_dirs(storage_path)
+            fileutil.write(os.path.join(storage_path, "%d" % shnum),
+                           sharedata)
+
+        nm = self.g.clients[0].nodemaker
+        n = nm.create_from_cap(TEST_1654_CAP)
+        # to exercise the problem correctly, we must ensure that sh0 is
+        # processed first, and sh1 second. NoNetworkGrid has facilities to
+        # stall the first request from a single server, but it's not
+        # currently easy to extend that to stall the second request (mutable
+        # retrievals will see two: first the mapupdate, then the fetch).
+        # However, repeated executions of this run without the #1654 fix
+        # suggests that we're failing reliably even without explicit stalls,
+        # probably because the servers are queried in a fixed order. So I'm
+        # ok with relying upon that.
+        d = self.shouldFail(NotEnoughSharesError, "test #1654 share corruption",
+                            "ran out of servers",
+                            n.download_best_version)
+        return d
+
+
+TEST_1654_CAP = "URI:SSK:6jthysgozssjnagqlcxjq7recm:yxawei54fmf2ijkrvs2shs6iey4kpdp6joi7brj2vrva6sp5nf3a"
+
+TEST_1654_SH0 = """\
+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
+72mXGlqyLyWYuAAAAAA="""
+
+TEST_1654_SH1 = """\
+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
+72mXGlqyLyWYuAAAAAA="""
 
 
 class FileHandle(unittest.TestCase):

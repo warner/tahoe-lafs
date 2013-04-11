@@ -325,6 +325,13 @@ class Server(unittest.TestCase):
         sv1 = ver['http://allmydata.org/tahoe/protocols/storage/v1']
         self.failUnless(sv1.get('prevents-read-past-end-of-share-data'), sv1)
 
+    def test_declares_maximum_share_sizes(self):
+        ss = self.create("test_declares_maximum_share_sizes")
+        ver = ss.remote_get_version()
+        sv1 = ver['http://allmydata.org/tahoe/protocols/storage/v1']
+        self.failUnlessIn('maximum-immutable-share-size', sv1)
+        self.failUnlessIn('maximum-mutable-share-size', sv1)
+
     def allocate(self, ss, storage_index, sharenums, size, canary=None):
         renew_secret = hashutil.tagged_hash("blah", "%d" % self._lease_secret.next())
         cancel_secret = hashutil.tagged_hash("blah", "%d" % self._lease_secret.next())
@@ -1586,7 +1593,7 @@ class MDMFProxies(unittest.TestCase, ShouldFailMixin):
     def write_sdmf_share_to_server(self,
                                    storage_index,
                                    empty=False):
-        # Some tests need SDMF shares to verify that we can still 
+        # Some tests need SDMF shares to verify that we can still
         # read them. This method writes one, which resembles but is not
         assert self.rref
         write = self.ss.remote_slot_testv_and_readv_and_writev
@@ -1870,8 +1877,8 @@ class MDMFProxies(unittest.TestCase, ShouldFailMixin):
 
 
     def test_write_test_vectors(self):
-        # If we give the write proxy a bogus test vector at 
-        # any point during the process, it should fail to write when we 
+        # If we give the write proxy a bogus test vector at
+        # any point during the process, it should fail to write when we
         # tell it to write.
         def _check_failure(results):
             self.failUnlessEqual(len(results), 2)
@@ -2146,7 +2153,7 @@ class MDMFProxies(unittest.TestCase, ShouldFailMixin):
         # 5: Write the root hash and salt hash
         # 6: Write the signature and verification key
         # 7: Write the file.
-        # 
+        #
         # Some of these can be performed out-of-order, and some can't.
         # The dependencies that I want to test here are:
         #  - Private key before block hashes
@@ -2671,7 +2678,7 @@ class MDMFProxies(unittest.TestCase, ShouldFailMixin):
     def test_sdmf_writer(self):
         # Go through the motions of writing an SDMF share to the storage
         # server. Then read the storage server to see that the share got
-        # written in the way that we think it should have. 
+        # written in the way that we think it should have.
 
         # We do this first so that the necessary instance variables get
         # set the way we want them for the tests below.
@@ -3966,13 +3973,16 @@ class WebStatus(unittest.TestCase, pollmixin.PollMixin, WebRenderingMixin):
     def test_status(self):
         basedir = "storage/WebStatus/status"
         fileutil.make_dirs(basedir)
-        ss = StorageServer(basedir, "\x00" * 20)
+        nodeid = "\x00" * 20
+        ss = StorageServer(basedir, nodeid)
         ss.setServiceParent(self.s)
-        w = StorageStatus(ss)
+        w = StorageStatus(ss, "nickname")
         d = self.render1(w)
         def _check_html(html):
             self.failUnlessIn("<h1>Storage Server Status</h1>", html)
             s = remove_tags(html)
+            self.failUnlessIn("Server Nickname: nickname", s)
+            self.failUnlessIn("Server Nodeid: %s"  % base32.b2a(nodeid), s)
             self.failUnlessIn("Accepting new shares: Yes", s)
             self.failUnlessIn("Reserved space: - 0 B (0)", s)
         d.addCallback(_check_html)

@@ -19,8 +19,8 @@ from allmydata.web.common import text_plain, WebError, RenderMixin, \
      boolean_of_arg, get_arg, should_create_intermediate_directories, \
      MyExceptionHandler, parse_replace_arg, parse_offset_arg, \
      get_format, get_mutable_type
-from allmydata.web.check_results import CheckResults, \
-     CheckAndRepairResults, LiteralCheckResults
+from allmydata.web.check_results import CheckResultsRenderer, \
+     CheckAndRepairResultsRenderer, LiteralCheckResultsRenderer
 from allmydata.web.info import MoreInfo
 
 class ReplaceMeMixin:
@@ -157,6 +157,16 @@ class FileNodeHandler(RenderMixin, rend.Page, ReplaceMeMixin):
     def render_GET(self, ctx):
         req = IRequest(ctx)
         t = get_arg(req, "t", "").strip()
+
+        # t=info contains variable ophandles, so is not allowed an ETag.
+        FIXED_OUTPUT_TYPES = ["", "json", "uri", "readonly-uri"]
+        if not self.node.is_mutable() and t in FIXED_OUTPUT_TYPES:
+            # if the client already has the ETag then we can
+            # short-circuit the whole process.
+            si = self.node.get_storage_index()
+            if si and req.setETag('%s-%s' % (base32.b2a(si), t or "")):
+                return ""
+
         if not t:
             # just get the contents
             # the filename arrives as part of the URL or in a form input
@@ -206,7 +216,7 @@ class FileNodeHandler(RenderMixin, rend.Page, ReplaceMeMixin):
         req = IRequest(ctx)
         t = get_arg(req, "t", "").strip()
         if t:
-            raise WebError("GET file: bad t=%s" % t)
+            raise WebError("HEAD file: bad t=%s" % t)
         filename = get_arg(req, "filename", self.name) or "unknown"
         d = self.node.get_best_readable_version()
         d.addCallback(lambda dn: FileDownloader(dn, filename))
@@ -285,7 +295,7 @@ class FileNodeHandler(RenderMixin, rend.Page, ReplaceMeMixin):
     def _maybe_literal(self, res, Results_Class):
         if res:
             return Results_Class(self.client, res)
-        return LiteralCheckResults(self.client)
+        return LiteralCheckResultsRenderer(self.client)
 
     def _POST_check(self, req):
         verify = boolean_of_arg(get_arg(req, "verify", "false"))
@@ -293,10 +303,10 @@ class FileNodeHandler(RenderMixin, rend.Page, ReplaceMeMixin):
         add_lease = boolean_of_arg(get_arg(req, "add-lease", "false"))
         if repair:
             d = self.node.check_and_repair(Monitor(), verify, add_lease)
-            d.addCallback(self._maybe_literal, CheckAndRepairResults)
+            d.addCallback(self._maybe_literal, CheckAndRepairResultsRenderer)
         else:
             d = self.node.check(Monitor(), verify, add_lease)
-            d.addCallback(self._maybe_literal, CheckResults)
+            d.addCallback(self._maybe_literal, CheckResultsRenderer)
         return d
 
     def render_DELETE(self, ctx):
@@ -414,13 +424,7 @@ class FileDownloader(rend.Page):
         first, size = 0, None
         contentsize = filesize
         req.setHeader("accept-ranges", "bytes")
-        if not self.filenode.is_mutable():
-            # TODO: look more closely at Request.setETag and how it interacts
-            # with a conditional "if-etag-equals" request, I think this may
-            # need to occur after the setResponseCode below
-            si = self.filenode.get_storage_index()
-            if si:
-                req.setETag(base32.b2a(si))
+
         # TODO: for mutable files, use the roothash. For LIT, hash the data.
         # or maybe just use the URI for CHK and LIT.
         rangeheader = req.getHeader('range')

@@ -2,17 +2,20 @@
 import os.path
 from twisted.trial import unittest
 from cStringIO import StringIO
-import urllib, re
+import urllib, re, sys
 import simplejson
 
-from mock import patch
+from mock import patch, Mock, call
 
-from allmydata.util import fileutil, hashutil, base32
+from allmydata.util import fileutil, hashutil, base32, keyutil
 from allmydata import uri
 from allmydata.immutable import upload
 from allmydata.interfaces import MDMF_VERSION, SDMF_VERSION
 from allmydata.mutable.publish import MutableData
 from allmydata.dirnode import normalize
+from allmydata.scripts.common_http import socket_error
+import allmydata.scripts.common_http
+from pycryptopp.publickey import ed25519
 
 # Test that the scripts can be imported.
 from allmydata.scripts import create_node, debug, keygen, startstop_node, \
@@ -41,13 +44,19 @@ from allmydata.util.fileutil import abspath_expanduser_unicode
 
 timeout = 480 # deep_check takes 360s on Zandr's linksys box, others take > 240s
 
+def parse_options(basedir, command, args):
+    o = runner.Options()
+    o.parseOptions(["--node-directory", basedir, command] + args)
+    while hasattr(o, "subOptions"):
+        o = o.subOptions
+    return o
 
 class CLITestMixin(ReallyEqualMixin):
     def do_cli(self, verb, *args, **kwargs):
         nodeargs = [
             "--node-directory", self.get_clientdir(),
             ]
-        argv = [verb] + nodeargs + list(args)
+        argv = nodeargs + [verb] + list(args)
         stdin = kwargs.get("stdin", "")
         stdout, stderr = StringIO(), StringIO()
         d = threads.deferToThread(runner.runner, argv, run_by_human=False,
@@ -70,69 +79,6 @@ class CLITestMixin(ReallyEqualMixin):
 
 
 class CLI(CLITestMixin, unittest.TestCase):
-    # this test case only looks at argument-processing and simple stuff.
-    def test_options(self):
-        fileutil.rm_dir("cli/test_options")
-        fileutil.make_dirs("cli/test_options")
-        fileutil.make_dirs("cli/test_options/private")
-        fileutil.write("cli/test_options/node.url", "http://localhost:8080/\n")
-        filenode_uri = uri.WriteableSSKFileURI(writekey="\x00"*16,
-                                               fingerprint="\x00"*32)
-        private_uri = uri.DirectoryURI(filenode_uri).to_string()
-        fileutil.write("cli/test_options/private/root_dir.cap", private_uri + "\n")
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options"])
-        self.failUnlessReallyEqual(o['node-url'], "http://localhost:8080/")
-        self.failUnlessReallyEqual(o.aliases[DEFAULT_ALIAS], private_uri)
-        self.failUnlessReallyEqual(o.where, u"")
-
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--node-url", "http://example.org:8111/"])
-        self.failUnlessReallyEqual(o['node-url'], "http://example.org:8111/")
-        self.failUnlessReallyEqual(o.aliases[DEFAULT_ALIAS], private_uri)
-        self.failUnlessReallyEqual(o.where, u"")
-
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--dir-cap", "root"])
-        self.failUnlessReallyEqual(o['node-url'], "http://localhost:8080/")
-        self.failUnlessReallyEqual(o.aliases[DEFAULT_ALIAS], "root")
-        self.failUnlessReallyEqual(o.where, u"")
-
-        o = cli.ListOptions()
-        other_filenode_uri = uri.WriteableSSKFileURI(writekey="\x11"*16,
-                                                     fingerprint="\x11"*32)
-        other_uri = uri.DirectoryURI(other_filenode_uri).to_string()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--dir-cap", other_uri])
-        self.failUnlessReallyEqual(o['node-url'], "http://localhost:8080/")
-        self.failUnlessReallyEqual(o.aliases[DEFAULT_ALIAS], other_uri)
-        self.failUnlessReallyEqual(o.where, u"")
-
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--dir-cap", other_uri, "subdir"])
-        self.failUnlessReallyEqual(o['node-url'], "http://localhost:8080/")
-        self.failUnlessReallyEqual(o.aliases[DEFAULT_ALIAS], other_uri)
-        self.failUnlessReallyEqual(o.where, u"subdir")
-
-        o = cli.ListOptions()
-        self.failUnlessRaises(usage.UsageError,
-                              o.parseOptions,
-                              ["--node-directory", "cli/test_options",
-                               "--node-url", "NOT-A-URL"])
-
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--node-url", "http://localhost:8080"])
-        self.failUnlessReallyEqual(o["node-url"], "http://localhost:8080/")
-
-        o = cli.ListOptions()
-        o.parseOptions(["--node-directory", "cli/test_options",
-                        "--node-url", "https://localhost/"])
-        self.failUnlessReallyEqual(o["node-url"], "https://localhost/")
-
     def _dump_cap(self, *args):
         config = debug.DumpCapOptions()
         config.stdout,config.stderr = StringIO(), StringIO()
@@ -579,6 +525,27 @@ class CLI(CLITestMixin, unittest.TestCase):
         for file in listdir_unicode(unicode(basedir)):
             self.failUnlessIn(normalize(file), filenames)
 
+    def test_exception_catcher(self):
+        self.basedir = "cli/exception_catcher"
+
+        runner_mock = Mock()
+        sys_exit_mock = Mock()
+        stderr = StringIO()
+        self.patch(sys, "argv", ["tahoe"])
+        self.patch(runner, "runner", runner_mock)
+        self.patch(sys, "exit", sys_exit_mock)
+        self.patch(sys, "stderr", stderr)
+        exc = Exception("canary")
+
+        def call_runner(args, install_node_control=True):
+            raise exc
+        runner_mock.side_effect = call_runner
+
+        runner.run()
+        self.failUnlessEqual(runner_mock.call_args_list, [call([], install_node_control=True)])
+        self.failUnlessEqual(sys_exit_mock.call_args_list, [call(1)])
+        self.failUnlessIn(str(exc), stderr.getvalue())
+
 
 class Help(unittest.TestCase):
     def test_get(self):
@@ -590,6 +557,10 @@ class Help(unittest.TestCase):
         help = str(cli.PutOptions())
         self.failUnlessIn(" put [options] LOCAL_FILE REMOTE_FILE", help)
         self.failUnlessIn("% cat FILE | tahoe put", help)
+
+    def test_ls(self):
+        help = str(cli.ListOptions())
+        self.failUnlessIn(" ls [options] [PATH]", help)
 
     def test_unlink(self):
         help = str(cli.UnlinkOptions())
@@ -688,15 +659,25 @@ class Help(unittest.TestCase):
         self.failUnlessIn(" debug trial [options] [[file|package|module|TestCase|testmethod]...]", help)
         self.failUnlessIn("The 'tahoe debug trial' command uses the correct imports", help)
 
+    def test_debug_flogtool(self):
+        options = debug.FlogtoolOptions()
+        help = str(options)
+        self.failUnlessIn(" debug flogtool ", help)
+        self.failUnlessIn("The 'tahoe debug flogtool' command uses the correct imports", help)
+
+        for (option, shortcut, oClass, desc) in options.subCommands:
+            subhelp = str(oClass())
+            self.failUnlessIn(" debug flogtool %s " % (option,), subhelp)
+
 
 class CreateAlias(GridTestMixin, CLITestMixin, unittest.TestCase):
 
     def _test_webopen(self, args, expected_url):
-        woo = cli.WebopenOptions()
-        all_args = ["--node-directory", self.get_clientdir()] + list(args)
-        woo.parseOptions(all_args)
+        o = runner.Options()
+        o.parseOptions(["--node-directory", self.get_clientdir(), "webopen"]
+                       + list(args))
         urls = []
-        rc = cli.webopen(woo, urls.append)
+        rc = cli.webopen(o, urls.append)
         self.failUnlessReallyEqual(rc, 0)
         self.failUnlessReallyEqual(len(urls), 1)
         self.failUnlessReallyEqual(urls[0], expected_url)
@@ -1135,8 +1116,20 @@ class Put(GridTestMixin, CLITestMixin, unittest.TestCase):
         d = self.do_cli("create-alias", "tahoe")
         d.addCallback(lambda res:
                       self.do_cli("put", "--mutable", fn1, "tahoe:uploaded.txt"))
+        def _check(res):
+            (rc, out, err) = res
+            self.failUnlessEqual(rc, 0, str(res))
+            self.failUnlessEqual(err.strip(), "201 Created", str(res))
+            self.uri = out
+        d.addCallback(_check)
         d.addCallback(lambda res:
                       self.do_cli("put", fn2, "tahoe:uploaded.txt"))
+        def _check2(res):
+            (rc, out, err) = res
+            self.failUnlessEqual(rc, 0, str(res))
+            self.failUnlessEqual(err.strip(), "200 OK", str(res))
+            self.failUnlessEqual(out, self.uri, str(res))
+        d.addCallback(_check2)
         d.addCallback(lambda res:
                       self.do_cli("get", "tahoe:uploaded.txt"))
         d.addCallback(lambda (rc,out,err): self.failUnlessReallyEqual(out, DATA2))
@@ -1365,6 +1358,55 @@ class Put(GridTestMixin, CLITestMixin, unittest.TestCase):
                       self.failUnlessReallyEqual(out, DATA))
 
         return d
+
+class Admin(unittest.TestCase):
+    def do_cli(self, *args, **kwargs):
+        argv = list(args)
+        stdin = kwargs.get("stdin", "")
+        stdout, stderr = StringIO(), StringIO()
+        d = threads.deferToThread(runner.runner, argv, run_by_human=False,
+                                  stdin=StringIO(stdin),
+                                  stdout=stdout, stderr=stderr)
+        def _done(res):
+            return stdout.getvalue(), stderr.getvalue()
+        d.addCallback(_done)
+        return d
+
+    def test_generate_keypair(self):
+        d = self.do_cli("admin", "generate-keypair")
+        def _done( (stdout, stderr) ):
+            lines = [line.strip() for line in stdout.splitlines()]
+            privkey_bits = lines[0].split()
+            pubkey_bits = lines[1].split()
+            sk_header = "private:"
+            vk_header = "public:"
+            self.failUnlessEqual(privkey_bits[0], sk_header, lines[0])
+            self.failUnlessEqual(pubkey_bits[0], vk_header, lines[1])
+            self.failUnless(privkey_bits[1].startswith("priv-v0-"), lines[0])
+            self.failUnless(pubkey_bits[1].startswith("pub-v0-"), lines[1])
+            sk_bytes = base32.a2b(keyutil.remove_prefix(privkey_bits[1], "priv-v0-"))
+            sk = ed25519.SigningKey(sk_bytes)
+            vk_bytes = base32.a2b(keyutil.remove_prefix(pubkey_bits[1], "pub-v0-"))
+            self.failUnlessEqual(sk.get_verifying_key_bytes(), vk_bytes)
+        d.addCallback(_done)
+        return d
+
+    def test_derive_pubkey(self):
+        priv1,pub1 = keyutil.make_keypair()
+        d = self.do_cli("admin", "derive-pubkey", priv1)
+        def _done( (stdout, stderr) ):
+            lines = stdout.split("\n")
+            privkey_line = lines[0].strip()
+            pubkey_line = lines[1].strip()
+            sk_header = "private: priv-v0-"
+            vk_header = "public: pub-v0-"
+            self.failUnless(privkey_line.startswith(sk_header), privkey_line)
+            self.failUnless(pubkey_line.startswith(vk_header), pubkey_line)
+            pub2 = pubkey_line[len(vk_header):]
+            self.failUnlessEqual("pub-v0-"+pub2, pub1)
+        d.addCallback(_done)
+        return d
+
 
 class List(GridTestMixin, CLITestMixin, unittest.TestCase):
     def test_list(self):
@@ -1969,6 +2011,12 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
             results = fileutil.read(fn3)
             self.failUnlessReallyEqual(results, DATA1)
         d.addCallback(_get_resp2)
+        #  cp --verbose filename3 dircap:test_file
+        d.addCallback(lambda ign:
+                      self.do_cli("cp", "--verbose", '--recursive', self.basedir, self.dircap))
+        def _test_for_wrong_indices((rc, out, err)):
+            self.failUnless('examining 1 of 1\n' in err)
+        d.addCallback(_test_for_wrong_indices)
         return d
 
     def test_cp_with_nonexistent_alias(self):
@@ -2375,6 +2423,34 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
         d.addCallback(_got_testdir_json)
         return d
 
+    def test_cp_verbose(self):
+        self.basedir = "cli/Cp/cp_verbose"
+        self.set_up_grid()
+
+        # Write two test files, which we'll copy to the grid.
+        test1_path = os.path.join(self.basedir, "test1")
+        test2_path = os.path.join(self.basedir, "test2")
+        fileutil.write(test1_path, "test1")
+        fileutil.write(test2_path, "test2")
+
+        d = self.do_cli("create-alias", "tahoe")
+        d.addCallback(lambda ign:
+            self.do_cli("cp", "--verbose", test1_path, test2_path, "tahoe:"))
+        def _check(res):
+            (rc, out, err) = res
+            self.failUnlessEqual(rc, 0, str(res))
+            self.failUnlessIn("Success: files copied", out, str(res))
+            self.failUnlessEqual(err, """\
+attaching sources to targets, 2 files / 0 dirs in root
+targets assigned, 1 dirs, 2 files
+starting copy, 2 files, 1 directories
+1/2 files, 0/1 directories
+2/2 files, 0/1 directories
+1/1 directories
+""", str(res))
+        d.addCallback(_check)
+        return d
+
 
 class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
 
@@ -2401,8 +2477,9 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         # is the backupdb available? If so, we test that a second backup does
         # not create new directories.
         hush = StringIO()
-        have_bdb = backupdb.get_backupdb(os.path.join(self.basedir, "dbtest"),
-                                         hush)
+        bdb = backupdb.get_backupdb(os.path.join(self.basedir, "dbtest"),
+                                    hush)
+        self.failUnless(bdb)
 
         # create a small local directory with a couple of files
         source = os.path.join(self.basedir, "home")
@@ -2420,13 +2497,6 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
             return self.do_cli(*cmd)
 
         d = self.do_cli("create-alias", "tahoe")
-
-        if not have_bdb:
-            d.addCallback(lambda res: self.do_cli("backup", source, "tahoe:backups"))
-            def _should_complain((rc, out, err)):
-                self.failUnless("I was unable to import a python sqlite library" in err, err)
-            d.addCallback(_should_complain)
-            d.addCallback(self.stall, 1.1) # make sure the backups get distinct timestamps
 
         d.addCallback(lambda res: do_backup())
         def _check0((rc, out, err)):
@@ -2488,61 +2558,56 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
             # available
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
-            if have_bdb:
-                fu, fr, fs, dc, dr, ds = self.count_output(out)
-                # foo.txt, bar.txt, blah.txt
-                self.failUnlessReallyEqual(fu, 0)
-                self.failUnlessReallyEqual(fr, 3)
-                self.failUnlessReallyEqual(fs, 0)
-                # empty, home, home/parent, home/parent/subdir
-                self.failUnlessReallyEqual(dc, 0)
-                self.failUnlessReallyEqual(dr, 4)
-                self.failUnlessReallyEqual(ds, 0)
+            fu, fr, fs, dc, dr, ds = self.count_output(out)
+            # foo.txt, bar.txt, blah.txt
+            self.failUnlessReallyEqual(fu, 0)
+            self.failUnlessReallyEqual(fr, 3)
+            self.failUnlessReallyEqual(fs, 0)
+            # empty, home, home/parent, home/parent/subdir
+            self.failUnlessReallyEqual(dc, 0)
+            self.failUnlessReallyEqual(dr, 4)
+            self.failUnlessReallyEqual(ds, 0)
         d.addCallback(_check4a)
 
-        if have_bdb:
-            # sneak into the backupdb, crank back the "last checked"
-            # timestamp to force a check on all files
-            def _reset_last_checked(res):
-                dbfile = os.path.join(self.get_clientdir(),
-                                      "private", "backupdb.sqlite")
-                self.failUnless(os.path.exists(dbfile), dbfile)
-                bdb = backupdb.get_backupdb(dbfile)
-                bdb.cursor.execute("UPDATE last_upload SET last_checked=0")
-                bdb.cursor.execute("UPDATE directories SET last_checked=0")
-                bdb.connection.commit()
+        # sneak into the backupdb, crank back the "last checked"
+        # timestamp to force a check on all files
+        def _reset_last_checked(res):
+            dbfile = os.path.join(self.get_clientdir(),
+                                  "private", "backupdb.sqlite")
+            self.failUnless(os.path.exists(dbfile), dbfile)
+            bdb = backupdb.get_backupdb(dbfile)
+            bdb.cursor.execute("UPDATE last_upload SET last_checked=0")
+            bdb.cursor.execute("UPDATE directories SET last_checked=0")
+            bdb.connection.commit()
 
-            d.addCallback(_reset_last_checked)
+        d.addCallback(_reset_last_checked)
 
-            d.addCallback(self.stall, 1.1)
-            d.addCallback(lambda res: do_backup(verbose=True))
-            def _check4b((rc, out, err)):
-                # we should check all files, and re-use all of them. None of
-                # the directories should have been changed, so we should
-                # re-use all of them too.
-                self.failUnlessReallyEqual(err, "")
-                self.failUnlessReallyEqual(rc, 0)
-                fu, fr, fs, dc, dr, ds = self.count_output(out)
-                fchecked, dchecked = self.count_output2(out)
-                self.failUnlessReallyEqual(fchecked, 3)
-                self.failUnlessReallyEqual(fu, 0)
-                self.failUnlessReallyEqual(fr, 3)
-                self.failUnlessReallyEqual(fs, 0)
-                self.failUnlessReallyEqual(dchecked, 4)
-                self.failUnlessReallyEqual(dc, 0)
-                self.failUnlessReallyEqual(dr, 4)
-                self.failUnlessReallyEqual(ds, 0)
-            d.addCallback(_check4b)
+        d.addCallback(self.stall, 1.1)
+        d.addCallback(lambda res: do_backup(verbose=True))
+        def _check4b((rc, out, err)):
+            # we should check all files, and re-use all of them. None of
+            # the directories should have been changed, so we should
+            # re-use all of them too.
+            self.failUnlessReallyEqual(err, "")
+            self.failUnlessReallyEqual(rc, 0)
+            fu, fr, fs, dc, dr, ds = self.count_output(out)
+            fchecked, dchecked = self.count_output2(out)
+            self.failUnlessReallyEqual(fchecked, 3)
+            self.failUnlessReallyEqual(fu, 0)
+            self.failUnlessReallyEqual(fr, 3)
+            self.failUnlessReallyEqual(fs, 0)
+            self.failUnlessReallyEqual(dchecked, 4)
+            self.failUnlessReallyEqual(dc, 0)
+            self.failUnlessReallyEqual(dr, 4)
+            self.failUnlessReallyEqual(ds, 0)
+        d.addCallback(_check4b)
 
         d.addCallback(lambda res: self.do_cli("ls", "tahoe:backups/Archives"))
         def _check5((rc, out, err)):
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
             self.new_archives = out.split()
-            expected_new = 2
-            if have_bdb:
-                expected_new += 1
-            self.failUnlessReallyEqual(len(self.new_archives), expected_new, out)
+            self.failUnlessReallyEqual(len(self.new_archives), 3, out)
             # the original backup should still be the oldest (i.e. sorts
             # alphabetically towards the beginning)
             self.failUnlessReallyEqual(sorted(self.new_archives)[0],
@@ -2567,27 +2632,23 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
             # and upload the rest. None of the directories can be reused.
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
-            if have_bdb:
-                fu, fr, fs, dc, dr, ds = self.count_output(out)
-                # new foo.txt, surprise file, subfile, empty
-                self.failUnlessReallyEqual(fu, 4)
-                # old bar.txt
-                self.failUnlessReallyEqual(fr, 1)
-                self.failUnlessReallyEqual(fs, 0)
-                # home, parent, subdir, blah.txt, surprisedir
-                self.failUnlessReallyEqual(dc, 5)
-                self.failUnlessReallyEqual(dr, 0)
-                self.failUnlessReallyEqual(ds, 0)
+            fu, fr, fs, dc, dr, ds = self.count_output(out)
+            # new foo.txt, surprise file, subfile, empty
+            self.failUnlessReallyEqual(fu, 4)
+            # old bar.txt
+            self.failUnlessReallyEqual(fr, 1)
+            self.failUnlessReallyEqual(fs, 0)
+            # home, parent, subdir, blah.txt, surprisedir
+            self.failUnlessReallyEqual(dc, 5)
+            self.failUnlessReallyEqual(dr, 0)
+            self.failUnlessReallyEqual(ds, 0)
         d.addCallback(_check5a)
         d.addCallback(lambda res: self.do_cli("ls", "tahoe:backups/Archives"))
         def _check6((rc, out, err)):
             self.failUnlessReallyEqual(err, "")
             self.failUnlessReallyEqual(rc, 0)
             self.new_archives = out.split()
-            expected_new = 3
-            if have_bdb:
-                expected_new += 1
-            self.failUnlessReallyEqual(len(self.new_archives), expected_new)
+            self.failUnlessReallyEqual(len(self.new_archives), 4)
             self.failUnlessReallyEqual(sorted(self.new_archives)[0],
                                  self.old_archives[0])
         d.addCallback(_check6)
@@ -2629,25 +2690,20 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         fileutil.make_dirs(basedir)
         nodeurl_path = os.path.join(basedir, 'node.url')
         fileutil.write(nodeurl_path, 'http://example.net:2357/')
+        def parse(args): return parse_options(basedir, "backup", args)
 
         # test simple exclude
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', '*lyx', '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', '*lyx', 'from', 'to'])
         filtered = list(backup_options.filter_listdir(root_listdir))
         self._check_filtering(filtered, root_listdir, (u'lib.a', u'_darcs', u'subdir'),
                               (u'nice_doc.lyx',))
         # multiple exclude
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', '*lyx', '--exclude', 'lib.?', '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', '*lyx', '--exclude', 'lib.?', 'from', 'to'])
         filtered = list(backup_options.filter_listdir(root_listdir))
         self._check_filtering(filtered, root_listdir, (u'_darcs', u'subdir'),
                               (u'nice_doc.lyx', u'lib.a'))
         # vcs metadata exclusion
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude-vcs', '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude-vcs', 'from', 'to'])
         filtered = list(backup_options.filter_listdir(subdir_listdir))
         self._check_filtering(filtered, subdir_listdir, (u'another_doc.lyx', u'run_snake_run.py',),
                               (u'CVS', u'.svn', u'_darcs'))
@@ -2655,22 +2711,17 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         exclusion_string = "_darcs\n*py\n.svn"
         excl_filepath = os.path.join(basedir, 'exclusion')
         fileutil.write(excl_filepath, exclusion_string)
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude-from', excl_filepath, '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude-from', excl_filepath, 'from', 'to'])
         filtered = list(backup_options.filter_listdir(subdir_listdir))
         self._check_filtering(filtered, subdir_listdir, (u'another_doc.lyx', u'CVS'),
                               (u'.svn', u'_darcs', u'run_snake_run.py'))
         # test BackupConfigurationError
         self.failUnlessRaises(cli.BackupConfigurationError,
-                              backup_options.parseOptions,
-                              ['--exclude-from', excl_filepath + '.no', '--node-directory',
-                               basedir, 'from', 'to'])
+                              parse,
+                              ['--exclude-from', excl_filepath + '.no', 'from', 'to'])
 
         # test that an iterator works too
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', '*lyx', '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', '*lyx', 'from', 'to'])
         filtered = list(backup_options.filter_listdir(iter(root_listdir)))
         self._check_filtering(filtered, root_listdir, (u'lib.a', u'_darcs', u'subdir'),
                               (u'nice_doc.lyx',))
@@ -2687,18 +2738,15 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         fileutil.make_dirs(basedir)
         nodeurl_path = os.path.join(basedir, 'node.url')
         fileutil.write(nodeurl_path, 'http://example.net:2357/')
+        def parse(args): return parse_options(basedir, "backup", args)
 
         # test simple exclude
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', doc_pattern_arg, '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', doc_pattern_arg, 'from', 'to'])
         filtered = list(backup_options.filter_listdir(root_listdir))
         self._check_filtering(filtered, root_listdir, (u'lib.a', u'_darcs', u'subdir'),
                               (nice_doc,))
         # multiple exclude
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', doc_pattern_arg, '--exclude', 'lib.?', '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', doc_pattern_arg, '--exclude', 'lib.?', 'from', 'to'])
         filtered = list(backup_options.filter_listdir(root_listdir))
         self._check_filtering(filtered, root_listdir, (u'_darcs', u'subdir'),
                              (nice_doc, u'lib.a'))
@@ -2706,17 +2754,13 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         exclusion_string = doc_pattern_arg + "\nlib.?"
         excl_filepath = os.path.join(basedir, 'exclusion')
         fileutil.write(excl_filepath, exclusion_string)
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude-from', excl_filepath, '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude-from', excl_filepath, 'from', 'to'])
         filtered = list(backup_options.filter_listdir(root_listdir))
         self._check_filtering(filtered, root_listdir, (u'_darcs', u'subdir'),
                              (nice_doc, u'lib.a'))
 
         # test that an iterator works too
-        backup_options = cli.BackupOptions()
-        backup_options.parseOptions(['--exclude', doc_pattern_arg, '--node-directory',
-                                     basedir, 'from', 'to'])
+        backup_options = parse(['--exclude', doc_pattern_arg, 'from', 'to'])
         filtered = list(backup_options.filter_listdir(iter(root_listdir)))
         self._check_filtering(filtered, root_listdir, (u'lib.a', u'_darcs', u'subdir'),
                               (nice_doc,))
@@ -2727,14 +2771,13 @@ class Backup(GridTestMixin, CLITestMixin, StallMixin, unittest.TestCase):
         fileutil.make_dirs(basedir)
         nodeurl_path = os.path.join(basedir, 'node.url')
         fileutil.write(nodeurl_path, 'http://example.net:2357/')
+        def parse(args): return parse_options(basedir, "backup", args)
 
         # ensure that tilde expansion is performed on exclude-from argument
         exclude_file = u'~/.tahoe/excludes.dummy'
-        backup_options = cli.BackupOptions()
 
         mock.return_value = StringIO()
-        backup_options.parseOptions(['--exclude-from', unicode_to_argv(exclude_file),
-                                     '--node-directory', basedir, 'from', 'to'])
+        parse(['--exclude-from', unicode_to_argv(exclude_file), 'from', 'to'])
         self.failUnlessIn(((abspath_expanduser_unicode(exclude_file),), {}), mock.call_args_list)
 
     def test_ignore_symlinks(self):
@@ -2896,7 +2939,40 @@ class Check(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.failUnlessReallyEqual(rc, 0)
             data = simplejson.loads(out)
             self.failUnlessReallyEqual(to_str(data["summary"]), "Healthy")
+            self.failUnlessReallyEqual(data["results"]["healthy"], True)
         d.addCallback(_check2)
+
+        d.addCallback(lambda ign: c0.upload(upload.Data("literal", convergence="")))
+        def _stash_lit_uri(n):
+            self.lit_uri = n.get_uri()
+        d.addCallback(_stash_lit_uri)
+
+        d.addCallback(lambda ign: self.do_cli("check", self.lit_uri))
+        def _check_lit((rc, out, err)):
+            self.failUnlessReallyEqual(err, "")
+            self.failUnlessReallyEqual(rc, 0)
+            lines = out.splitlines()
+            self.failUnless("Summary: Healthy (LIT)" in lines, out)
+        d.addCallback(_check_lit)
+
+        d.addCallback(lambda ign: self.do_cli("check", "--raw", self.lit_uri))
+        def _check_lit_raw((rc, out, err)):
+            self.failUnlessReallyEqual(err, "")
+            self.failUnlessReallyEqual(rc, 0)
+            data = simplejson.loads(out)
+            self.failUnlessReallyEqual(data["results"]["healthy"], True)
+        d.addCallback(_check_lit_raw)
+
+        d.addCallback(lambda ign: c0.create_immutable_dirnode({}, convergence=""))
+        def _stash_lit_dir_uri(n):
+            self.lit_dir_uri = n.get_uri()
+        d.addCallback(_stash_lit_dir_uri)
+
+        d.addCallback(lambda ign: self.do_cli("check", self.lit_dir_uri))
+        d.addCallback(_check_lit)
+
+        d.addCallback(lambda ign: self.do_cli("check", "--raw", self.lit_uri))
+        d.addCallback(_check_lit_raw)
 
         def _clobber_shares(ignored):
             # delete one, corrupt a second
@@ -2926,6 +3002,18 @@ class Check(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.failUnless(" corrupt shares:" in lines, out)
             self.failUnless(self._corrupt_share_line in lines, out)
         d.addCallback(_check3)
+
+        d.addCallback(lambda ign: self.do_cli("check", "--verify", "--raw", self.uri))
+        def _check3_raw((rc, out, err)):
+            self.failUnlessReallyEqual(err, "")
+            self.failUnlessReallyEqual(rc, 0)
+            data = simplejson.loads(out)
+            self.failUnlessReallyEqual(data["results"]["healthy"], False)
+            self.failUnlessIn("Unhealthy: 8 shares (enc 3-of-10)", data["summary"])
+            self.failUnlessReallyEqual(data["results"]["count-shares-good"], 8)
+            self.failUnlessReallyEqual(data["results"]["count-corrupt-shares"], 1)
+            self.failUnlessIn("list-corrupt-shares", data["results"])
+        d.addCallback(_check3_raw)
 
         d.addCallback(lambda ign:
                       self.do_cli("check", "--verify", "--repair", self.uri))
@@ -3202,8 +3290,8 @@ class Errors(GridTestMixin, CLITestMixin, unittest.TestCase):
         DATA = "data" * 100
         d = c0.upload(upload.Data(DATA, convergence=""))
         def _stash_bad(ur):
-            self.uri_1share = ur.uri
-            self.delete_shares_numbered(ur.uri, range(1,10))
+            self.uri_1share = ur.get_uri()
+            self.delete_shares_numbered(ur.get_uri(), range(1,10))
         d.addCallback(_stash_bad)
 
         # the download is abandoned as soon as it's clear that we won't get
@@ -3232,6 +3320,25 @@ class Errors(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.failIf(os.path.exists(targetf))
         d.addCallback(_check2)
 
+        return d
+
+    def test_broken_socket(self):
+        # When the http connection breaks (such as when node.url is overwritten
+        # by a confused user), a user friendly error message should be printed.
+        self.basedir = "cli/Errors/test_broken_socket"
+        self.set_up_grid()
+
+        # Simulate a connection error
+        def _socket_error(*args, **kwargs):
+            raise socket_error('test error')
+        self.patch(allmydata.scripts.common_http.httplib.HTTPConnection,
+                   "endheaders", _socket_error)
+
+        d = self.do_cli("mkdir")
+        def _check_invalid((rc,stdout,stderr)):
+            self.failIfEqual(rc, 0)
+            self.failUnlessIn("Error trying to connect to http://127.0.0.1", stderr)
+        d.addCallback(_check_invalid)
         return d
 
 
@@ -3583,3 +3690,112 @@ class Webopen(GridTestMixin, CLITestMixin, unittest.TestCase):
             _cleanup(None)
             raise
         return d
+
+class Options(unittest.TestCase):
+    # this test case only looks at argument-processing and simple stuff.
+
+    def parse(self, args, stdout=None):
+        o = runner.Options()
+        if stdout is not None:
+            o.stdout = stdout
+        o.parseOptions(args)
+        while hasattr(o, "subOptions"):
+            o = o.subOptions
+        return o
+
+    def test_list(self):
+        fileutil.rm_dir("cli/test_options")
+        fileutil.make_dirs("cli/test_options")
+        fileutil.make_dirs("cli/test_options/private")
+        fileutil.write("cli/test_options/node.url", "http://localhost:8080/\n")
+        filenode_uri = uri.WriteableSSKFileURI(writekey="\x00"*16,
+                                               fingerprint="\x00"*32)
+        private_uri = uri.DirectoryURI(filenode_uri).to_string()
+        fileutil.write("cli/test_options/private/root_dir.cap", private_uri + "\n")
+        def parse2(args): return parse_options("cli/test_options", "ls", args)
+        o = parse2([])
+        self.failUnlessEqual(o['node-url'], "http://localhost:8080/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], private_uri)
+        self.failUnlessEqual(o.where, u"")
+
+        o = parse2(["--node-url", "http://example.org:8111/"])
+        self.failUnlessEqual(o['node-url'], "http://example.org:8111/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], private_uri)
+        self.failUnlessEqual(o.where, u"")
+
+        o = parse2(["--dir-cap", "root"])
+        self.failUnlessEqual(o['node-url'], "http://localhost:8080/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], "root")
+        self.failUnlessEqual(o.where, u"")
+
+        other_filenode_uri = uri.WriteableSSKFileURI(writekey="\x11"*16,
+                                                     fingerprint="\x11"*32)
+        other_uri = uri.DirectoryURI(other_filenode_uri).to_string()
+        o = parse2(["--dir-cap", other_uri])
+        self.failUnlessEqual(o['node-url'], "http://localhost:8080/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], other_uri)
+        self.failUnlessEqual(o.where, u"")
+
+        o = parse2(["--dir-cap", other_uri, "subdir"])
+        self.failUnlessEqual(o['node-url'], "http://localhost:8080/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], other_uri)
+        self.failUnlessEqual(o.where, u"subdir")
+
+        self.failUnlessRaises(usage.UsageError, parse2,
+                              ["--node-url", "NOT-A-URL"])
+
+        o = parse2(["--node-url", "http://localhost:8080"])
+        self.failUnlessEqual(o["node-url"], "http://localhost:8080/")
+
+        o = parse2(["--node-url", "https://localhost/"])
+        self.failUnlessEqual(o["node-url"], "https://localhost/")
+
+    def test_version(self):
+        # "tahoe --version" dumps text to stdout and exits
+        stdout = StringIO()
+        self.failUnlessRaises(SystemExit, self.parse, ["--version"], stdout)
+        self.failUnlessIn("allmydata-tahoe", stdout.getvalue())
+        # but "tahoe SUBCOMMAND --version" should be rejected
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["start", "--version"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["start", "--version-and-path"])
+
+    def test_quiet(self):
+        # accepted as an overall option, but not on subcommands
+        o = self.parse(["--quiet", "start"])
+        self.failUnless(o.parent["quiet"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["start", "--quiet"])
+
+    def test_basedir(self):
+        # accept a --node-directory option before the verb, or a --basedir
+        # option after, or a basedir argument after, but none in the wrong
+        # place, and not more than one of the three.
+        o = self.parse(["start"])
+        self.failUnlessEqual(o["basedir"], os.path.join(os.path.expanduser("~"),
+                                                        ".tahoe"))
+        o = self.parse(["start", "here"])
+        self.failUnlessEqual(o["basedir"], os.path.abspath("here"))
+        o = self.parse(["start", "--basedir", "there"])
+        self.failUnlessEqual(o["basedir"], os.path.abspath("there"))
+        o = self.parse(["--node-directory", "there", "start"])
+        self.failUnlessEqual(o["basedir"], os.path.abspath("there"))
+
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["--basedir", "there", "start"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["start", "--node-directory", "there"])
+
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["--node-directory=there",
+                               "start", "--basedir=here"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["start", "--basedir=here", "anywhere"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["--node-directory=there",
+                               "start", "anywhere"])
+        self.failUnlessRaises(usage.UsageError, self.parse,
+                              ["--node-directory=there",
+                               "start", "--basedir=here", "anywhere"])
+

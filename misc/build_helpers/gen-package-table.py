@@ -66,6 +66,9 @@ platform_independent_pkgs = pkgs - platform_dependent_pkgs
 
 width = 100 / (len(platform_independent_pkgs) + 1)
 
+greybgstyle = '; background-color: #E0E0E0'
+nobgstyle = ''
+
 print '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">'
 print '<html>'
 print '<head>'
@@ -73,9 +76,12 @@ print '  <meta http-equiv="Content-Type" content="text/html;charset=us-ascii">'
 print '  <title>Software packages that Tahoe-LAFS depends on</title>'
 print '</head>'
 print '<body>'
+print '<h2>What is this?</h2>'
+print '<p>See <a href="https://tahoe-lafs.org/trac/tahoe-lafs/browser/docs/quickstart.rst">quickstart.rst</a>, <a href="https://tahoe-lafs.org/trac/tahoe-lafs/wiki/Installation">wiki:Installation</a>, and <a href="https://tahoe-lafs.org/trac/tahoe-lafs/wiki/CompileError">wiki:CompileError</a>.'
 print '<h2>Software packages that Tahoe-LAFS depends on</h2>'
 print
 for pyver in reversed(sorted(python_versions)):
+    greybackground = False
     if pyver:
         print '<p>Packages for Python %s that have compiled C/C++ code:</p>' % (pyver,)
         print '<table border="1">'
@@ -87,9 +93,16 @@ for pyver in reversed(sorted(python_versions)):
 
         first = True
         for platform in sorted(matrix[pyver]):
+            if greybackground:
+                bgstyle = greybgstyle
+            else:
+                bgstyle = nobgstyle
+            greybackground = not greybackground
             row_files = sorted(matrix[pyver][platform])
-            style1 = first and 'border-top: 2px solid #000000; background-color: #FFFFF0' or 'background-color: #FFFFF0'
+            style1 = first and 'border-top: 2px solid #000000' or ''
+            style1 += bgstyle
             style2 = first and 'border-top: 2px solid #000000' or ''
+            style2 += bgstyle
             print '  <tr>'
             print '    <td style="%s">&nbsp;%s&nbsp;</td>' % (style1, platform,)
             for pkg in sorted(platform_dependent_pkgs):

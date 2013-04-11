@@ -1,20 +1,18 @@
-import time
+import time, os
 
 from twisted.internet import address
 from twisted.web import http
-from nevow import rend, url, loaders, tags as T
+from nevow import rend, url, tags as T
 from nevow.inevow import IRequest
 from nevow.static import File as nevow_File # TODO: merge with static.File?
 from nevow.util import resource_filename
-from formless import webform
 
 import allmydata # to display import path
 from allmydata import get_package_versions_string
-from allmydata import provisioning
 from allmydata.util import idlib, log
 from allmydata.interfaces import IFileNode
 from allmydata.web import filenode, directory, unlinked, status, operations
-from allmydata.web import reliability, storage
+from allmydata.web import storage
 from allmydata.web.common import abbreviate_size, getxmlfile, WebError, \
      get_arg, RenderMixin, get_format, get_mutable_type
 
@@ -127,21 +125,6 @@ class IncidentReporter(RenderMixin, rend.Page):
         req.setHeader("content-type", "text/plain")
         return "Thank you for your report!"
 
-class NoReliability(rend.Page):
-    docFactory = loaders.xmlstr('''\
-<html xmlns:n="http://nevow.com/ns/nevow/0.1">
-  <head>
-    <title>AllMyData - Tahoe</title>
-    <link href="/webform_css" rel="stylesheet" type="text/css"/>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-  </head>
-  <body>
-  <h2>"Reliability" page not available</h2>
-  <p>Please install the python "NumPy" module to enable this page.</p>
-  </body>
-</html>
-''')
-
 SPACE = u"\u00A0"*2
 
 class Root(rend.Page):
@@ -159,7 +142,7 @@ class Root(rend.Page):
             s = client.getServiceNamed("storage")
         except KeyError:
             s = None
-        self.child_storage = storage.StorageStatus(s)
+        self.child_storage = storage.StorageStatus(s, self.client.nickname)
 
         self.child_uri = URIHandler(client)
         self.child_cap = URIHandler(client)
@@ -168,26 +151,14 @@ class Root(rend.Page):
         self.child_named = FileHandler(client)
         self.child_status = status.Status(client.get_history())
         self.child_statistics = status.Statistics(client.stats_provider)
-        def f(name):
-            return nevow_File(resource_filename('allmydata.web', name))
-        self.putChild("download_status_timeline.js", f("download_status_timeline.js"))
-        self.putChild("jquery-1.6.1.min.js", f("jquery-1.6.1.min.js"))
-        self.putChild("d3-2.4.6.min.js", f("d3-2.4.6.min.js"))
-        self.putChild("d3-2.4.6.time.min.js", f("d3-2.4.6.time.min.js"))
+        static_dir = resource_filename("allmydata.web", "static")
+        for filen in os.listdir(static_dir):
+            self.putChild(filen, nevow_File(os.path.join(static_dir, filen)))
 
     def child_helper_status(self, ctx):
         # the Helper isn't attached until after the Tub starts, so this child
         # needs to created on each request
         return status.HelperStatus(self.client.helper)
-
-    child_webform_css = webform.defaultCSS
-    child_tahoe_css = nevow_File(resource_filename('allmydata.web', 'tahoe.css'))
-
-    child_provisioning = provisioning.ProvisioningTool()
-    if reliability.is_available():
-        child_reliability = reliability.ReliabilityTool()
-    else:
-        child_reliability = NoReliability()
 
     child_report_incident = IncidentReporter()
     #child_server # let's reserve this for storage-server-over-HTTP
@@ -227,26 +198,53 @@ class Root(rend.Page):
 
         return ctx.tag[ul]
 
-    def data_introducer_furl(self, ctx, data):
-        return self.client.introducer_furl
+    def data_introducer_furl_prefix(self, ctx, data):
+        ifurl = self.client.introducer_furl
+        # trim off the secret swissnum
+        (prefix, _, swissnum) = ifurl.rpartition("/")
+        if not ifurl:
+            return None
+        if swissnum == "introducer":
+            return ifurl
+        else:
+            return "%s/[censored]" % (prefix,)
+
+    def data_introducer_description(self, ctx, data):
+        if self.data_connected_to_introducer(ctx, data) == "no":
+            return "Introducer not connected"
+        return "Introducer"
+
     def data_connected_to_introducer(self, ctx, data):
         if self.client.connected_to_introducer():
             return "yes"
         return "no"
 
-    def data_helper_furl(self, ctx, data):
+    def data_helper_furl_prefix(self, ctx, data):
         try:
             uploader = self.client.getServiceNamed("uploader")
         except KeyError:
             return None
         furl, connected = uploader.get_helper_info()
-        return furl
+        if not furl:
+            return None
+        # trim off the secret swissnum
+        (prefix, _, swissnum) = furl.rpartition("/")
+        return "%s/[censored]" % (prefix,)
+
+    def data_helper_description(self, ctx, data):
+        if self.data_connected_to_helper(ctx, data) == "no":
+            return "Helper not connected"
+        return "Helper"
+
     def data_connected_to_helper(self, ctx, data):
         try:
             uploader = self.client.getServiceNamed("uploader")
         except KeyError:
             return "no" # we don't even have an Uploader
         furl, connected = uploader.get_helper_info()
+
+        if furl is None:
+            return "not-configured"
         if connected:
             return "yes"
         return "no"
@@ -276,10 +274,12 @@ class Root(rend.Page):
                 rhost_s = "%s:%d" % (rhost.host, rhost.port)
             else:
                 rhost_s = str(rhost)
-            connected = "Yes: to " + rhost_s
+            addr = rhost_s
+            connected = "yes"
             since = server.get_last_connect_time()
         else:
-            connected = "No"
+            addr = "N/A"
+            connected = "no"
             since = server.get_last_loss_time()
         announced = server.get_announcement_time()
         announcement = server.get_announcement()
@@ -288,6 +288,7 @@ class Root(rend.Page):
         available_space = abbreviate_size(server.get_available_space())
 
         TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
+        ctx.fillSlots("address", addr)
         ctx.fillSlots("connected", connected)
         ctx.fillSlots("connected-bool", bool(rhost))
         ctx.fillSlots("since", time.strftime(TIME_FORMAT,
@@ -380,10 +381,9 @@ class Root(rend.Page):
         form = T.form(action="report_incident", method="post",
                       enctype="multipart/form-data")[
             T.fieldset[
-            T.legend(class_="freeform-form-label")["Report an Incident"],
             T.input(type="hidden", name="t", value="report-incident"),
-            "What went wrong?:"+SPACE,
+            "What went wrong?"+SPACE,
             T.input(type="text", name="details"), SPACE,
-            T.input(type="submit", value="Report!"),
+            T.input(type="submit", value=u"Report \u00BB"),
             ]]
         return T.div[form]

@@ -1,6 +1,8 @@
+
 from base64 import b32encode
-import os, sys, time, simplejson
+import os, re, sys, time, simplejson
 from cStringIO import StringIO
+
 from twisted.trial import unittest
 from twisted.internet import defer
 from twisted.internet import threads # CLI tests use deferToThread
@@ -14,6 +16,7 @@ from allmydata.immutable.literal import LiteralFileNode
 from allmydata.immutable.filenode import ImmutableFileNode
 from allmydata.util import idlib, mathutil
 from allmydata.util import log, base32
+from allmydata.util.verlib import NormalizedVersion
 from allmydata.util.encodingutil import quote_output, unicode_to_argv, get_filesystem_encoding
 from allmydata.util.fileutil import abspath_expanduser_unicode
 from allmydata.util.consumer import MemoryConsumer, download_to_data
@@ -24,7 +27,9 @@ from allmydata.monitor import Monitor
 from allmydata.mutable.common import NotWriteableError
 from allmydata.mutable import layout as mutable_layout
 from allmydata.mutable.publish import MutableData
-from foolscap.api import DeadReferenceError
+
+import foolscap
+from foolscap.api import DeadReferenceError, fireEventually
 from twisted.python.failure import Failure
 from twisted.web.client import getPage
 from twisted.web.error import Error
@@ -122,7 +127,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             return d1
         d.addCallback(_do_upload)
         def _upload_done(results):
-            theuri = results.uri
+            theuri = results.get_uri()
             log.msg("upload finished: uri is %s" % (theuri,))
             self.uri = theuri
             assert isinstance(self.uri, str), self.uri
@@ -194,7 +199,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                     facility="tahoe.tests")
             d1 = download_to_data(badnode)
             def _baduri_should_fail(res):
-                log.msg("finished downloading non-existend URI",
+                log.msg("finished downloading non-existent URI",
                         level=log.UNUSUAL, facility="tahoe.tests")
                 self.failUnless(isinstance(res, Failure))
                 self.failUnless(res.check(NoSharesError),
@@ -213,12 +218,18 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             self.extra_node.DEFAULT_ENCODING_PARAMETERS['happy'] = 5
         d.addCallback(_added)
 
+        def _has_helper():
+            uploader = self.extra_node.getServiceNamed("uploader")
+            furl, connected = uploader.get_helper_info()
+            return connected
+        d.addCallback(lambda ign: self.poll(_has_helper))
+
         HELPER_DATA = "Data that needs help to upload" * 1000
         def _upload_with_helper(res):
             u = upload.Data(HELPER_DATA, convergence=convergence)
             d = self.extra_node.upload(u)
             def _uploaded(results):
-                n = self.clients[1].create_node_from_uri(results.uri)
+                n = self.clients[1].create_node_from_uri(results.get_uri())
                 return download_to_data(n)
             d.addCallback(_uploaded)
             def _check(newdata):
@@ -232,7 +243,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             u.debug_stash_RemoteEncryptedUploadable = True
             d = self.extra_node.upload(u)
             def _uploaded(results):
-                n = self.clients[1].create_node_from_uri(results.uri)
+                n = self.clients[1].create_node_from_uri(results.get_uri())
                 return download_to_data(n)
             d.addCallback(_uploaded)
             def _check(newdata):
@@ -244,17 +255,22 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         if convergence is not None:
             d.addCallback(_upload_duplicate_with_helper)
 
+        d.addCallback(fireEventually)
+
         def _upload_resumable(res):
             DATA = "Data that needs help to upload and gets interrupted" * 1000
             u1 = CountingDataUploadable(DATA, convergence=convergence)
             u2 = CountingDataUploadable(DATA, convergence=convergence)
 
             # we interrupt the connection after about 5kB by shutting down
-            # the helper, then restartingit.
+            # the helper, then restarting it.
             u1.interrupt_after = 5000
             u1.interrupt_after_d = defer.Deferred()
-            u1.interrupt_after_d.addCallback(lambda res:
-                                             self.bounce_client(0))
+            bounced_d = defer.Deferred()
+            def _do_bounce(res):
+                d = self.bounce_client(0)
+                d.addBoth(bounced_d.callback)
+            u1.interrupt_after_d.addCallback(_do_bounce)
 
             # sneak into the helper and reduce its chunk size, so that our
             # debug_interrupt will sever the connection on about the fifth
@@ -265,34 +281,27 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             # this same test run, but I'm not currently worried about it.
             offloaded.CHKCiphertextFetcher.CHUNK_SIZE = 1000
 
-            d = self.extra_node.upload(u1)
-
-            def _should_not_finish(res):
-                self.fail("interrupted upload should have failed, not finished"
-                          " with result %s" % (res,))
-            def _interrupted(f):
-                f.trap(DeadReferenceError)
-
-                # make sure we actually interrupted it before finishing the
-                # file
-                self.failUnless(u1.bytes_read < len(DATA),
-                                "read %d out of %d total" % (u1.bytes_read,
-                                                             len(DATA)))
-
-                log.msg("waiting for reconnect", level=log.NOISY,
-                        facility="tahoe.test.test_system")
-                # now, we need to give the nodes a chance to notice that this
-                # connection has gone away. When this happens, the storage
-                # servers will be told to abort their uploads, removing the
-                # partial shares. Unfortunately this involves TCP messages
-                # going through the loopback interface, and we can't easily
-                # predict how long that will take. If it were all local, we
-                # could use fireEventually() to stall. Since we don't have
-                # the right introduction hooks, the best we can do is use a
-                # fixed delay. TODO: this is fragile.
-                u1.interrupt_after_d.addCallback(self.stall, 2.0)
-                return u1.interrupt_after_d
-            d.addCallbacks(_should_not_finish, _interrupted)
+            upload_d = self.extra_node.upload(u1)
+            # The upload will start, and bounce_client() will be called after
+            # about 5kB. bounced_d will fire after bounce_client() finishes
+            # shutting down and restarting the node.
+            d = bounced_d
+            def _bounced(ign):
+                # By this point, the upload should have failed because of the
+                # interruption. upload_d will fire in a moment
+                def _should_not_finish(res):
+                    self.fail("interrupted upload should have failed, not"
+                              " finished with result %s" % (res,))
+                def _interrupted(f):
+                    f.trap(DeadReferenceError)
+                    # make sure we actually interrupted it before finishing
+                    # the file
+                    self.failUnless(u1.bytes_read < len(DATA),
+                                    "read %d out of %d total" %
+                                    (u1.bytes_read, len(DATA)))
+                upload_d.addCallbacks(_should_not_finish, _interrupted)
+                return upload_d
+            d.addCallback(_bounced)
 
             def _disconnected(res):
                 # check to make sure the storage servers aren't still hanging
@@ -306,13 +315,12 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                     self.failIf(os.path.exists(incdir) and os.listdir(incdir))
             d.addCallback(_disconnected)
 
-            # then we need to give the reconnector a chance to
-            # reestablish the connection to the helper.
             d.addCallback(lambda res:
-                          log.msg("wait_for_connections", level=log.NOISY,
+                          log.msg("wait_for_helper", level=log.NOISY,
                                   facility="tahoe.test.test_system"))
-            d.addCallback(lambda res: self.wait_for_connections())
-
+            # then we need to wait for the extra node to reestablish its
+            # connection to the helper.
+            d.addCallback(lambda ign: self.poll(_has_helper))
 
             d.addCallback(lambda res:
                           log.msg("uploading again", level=log.NOISY,
@@ -320,13 +328,13 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             d.addCallback(lambda res: self.extra_node.upload(u2))
 
             def _uploaded(results):
-                cap = results.uri
+                cap = results.get_uri()
                 log.msg("Second upload complete", level=log.NOISY,
                         facility="tahoe.test.test_system")
 
                 # this is really bytes received rather than sent, but it's
                 # convenient and basically measures the same thing
-                bytes_sent = results.ciphertext_fetched
+                bytes_sent = results.get_ciphertext_fetched()
                 self.failUnless(isinstance(bytes_sent, (int, long)), bytes_sent)
 
                 # We currently don't support resumption of upload if the data is
@@ -783,14 +791,18 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                 newappverstr = "%s: %s" % (allmydata.__appname__, altverstr)
 
                 self.failUnless((appverstr in res) or (newappverstr in res), (appverstr, newappverstr, res))
-                self.failUnless("Announcement Summary: storage: 5, stub_client: 5" in res)
+                self.failUnless("Announcement Summary: storage: 5" in res)
                 self.failUnless("Subscription Summary: storage: 5" in res)
+                self.failUnless("tahoe.css" in res)
             except unittest.FailTest:
                 print
                 print "GET %s output was:" % self.introweb_url
                 print res
                 raise
         d.addCallback(_check)
+        # make sure it serves the CSS too
+        d.addCallback(lambda res:
+                      getPage(self.introweb_url+"tahoe.css", method="GET"))
         d.addCallback(lambda res:
                       getPage(self.introweb_url + "?t=json",
                               method="GET", followRedirect=True))
@@ -800,9 +812,9 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                 self.failUnlessEqual(data["subscription_summary"],
                                      {"storage": 5})
                 self.failUnlessEqual(data["announcement_summary"],
-                                     {"storage": 5, "stub_client": 5})
+                                     {"storage": 5})
                 self.failUnlessEqual(data["announcement_distinct_hosts"],
-                                     {"storage": 1, "stub_client": 1})
+                                     {"storage": 1})
             except unittest.FailTest:
                 print
                 print "GET %s?t=json output was:" % self.introweb_url
@@ -1086,16 +1098,13 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         public = "uri/" + self._root_directory_uri
         d = getPage(base)
         def _got_welcome(page):
-            # XXX This test is oversensitive to formatting
-            expected = "Connected to <span>%d</span>\n     of <span>%d</span> known storage servers:" % (self.numclients, self.numclients)
-            self.failUnless(expected in page,
-                            "I didn't see the right 'connected storage servers'"
-                            " message in: %s" % page
-                            )
-            expected = "<th>My nodeid:</th> <td class=\"nodeid mine data-chars\">%s</td>" % (b32encode(self.clients[0].nodeid).lower(),)
-            self.failUnless(expected in page,
-                            "I didn't see the right 'My nodeid' message "
-                            "in: %s" % page)
+            html = page.replace('\n', ' ')
+            connected_re = "Connected to <span>%d</span>[ ]*of <span>%d</span> known storage servers" % (self.numclients, self.numclients)
+            self.failUnless(re.search(connected_re, html),
+                            "I didn't see the right '%s' message in:\n%s" % (connected_re, page))
+            nodeid_re = "<th>Node ID:</th>[ ]*<td>%s</td>" % (re.escape(b32encode(self.clients[0].nodeid).lower()),)
+            self.failUnless(re.search(nodeid_re, html),
+                            "I didn't see the right '%s' message in:\n%s" % (nodeid_re, page))
             self.failUnless("Helper: 0 active uploads" in page)
         d.addCallback(_got_welcome)
         d.addCallback(self.log, "done with _got_welcome")
@@ -1103,9 +1112,9 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         # get the welcome page from the node that uses the helper too
         d.addCallback(lambda res: getPage(self.helper_webish_url))
         def _got_welcome_helper(page):
-            self.failUnless("Connected to helper?: <span>yes</span>" in page,
-                            page)
-            self.failUnless("Not running helper" in page)
+            html = page.replace('\n', ' ')
+            self.failUnless(re.search('<div class="status-indicator connected-yes"></div>[ ]*<div>Helper</div>', html), page)
+            self.failUnlessIn("Not running helper", page)
         d.addCallback(_got_welcome_helper)
 
         d.addCallback(lambda res: getPage(base + public))
@@ -1214,8 +1223,12 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             return self.GET("status/publish-%d" % self._publish_status)
         d.addCallback(_got_update)
         def _got_publish(res):
+            self.failUnlessIn("Publish Results", res)
             return self.GET("status/retrieve-%d" % self._retrieve_status)
         d.addCallback(_got_publish)
+        def _got_retrieve(res):
+            self.failUnlessIn("Retrieve Results", res)
+        d.addCallback(_got_retrieve)
 
         # check that the helper status page exists
         d.addCallback(lambda res:
@@ -1259,7 +1272,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         # itself) doesn't explode when you ask for its status
         d.addCallback(lambda res: getPage(self.helper_webish_url + "status/"))
         def _got_non_helper_status(res):
-            self.failUnless("Upload and Download Status" in res)
+            self.failUnlessIn("Recent and Active Operations", res)
         d.addCallback(_got_non_helper_status)
 
         # or for helper status with t=json
@@ -1273,8 +1286,8 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         # see if the statistics page exists
         d.addCallback(lambda res: self.GET("statistics"))
         def _got_stats(res):
-            self.failUnless("Node Statistics" in res)
-            self.failUnless("  'downloader.files_downloaded': 5," in res, res)
+            self.failUnlessIn("Operational Statistics", res)
+            self.failUnlessIn("  'downloader.files_downloaded': 5,", res)
         d.addCallback(_got_stats)
         d.addCallback(lambda res: self.GET("statistics?t=json"))
         def _got_stats_json(res):
@@ -1427,7 +1440,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
 
         def run(ignored, verb, *args, **kwargs):
             stdin = kwargs.get("stdin", "")
-            newargs = [verb] + nodeargs + list(args)
+            newargs = nodeargs + [verb] + list(args)
             return self._run_cli(newargs, stdin=stdin)
 
         def _check_ls((out,err), expected_children, unexpected_children=[]):
@@ -1732,7 +1745,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         # tahoe_ls doesn't currently handle the error correctly: it tries to
         # JSON-parse a traceback.
 ##         def _ls_missing(res):
-##             argv = ["ls"] + nodeargs + ["bogus"]
+##             argv = nodeargs + ["ls", "bogus"]
 ##             return self._run_cli(argv)
 ##         d.addCallback(_ls_missing)
 ##         def _check_ls_missing((out,err)):
@@ -1756,7 +1769,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         def _run_in_subprocess(ignored, verb, *args, **kwargs):
             stdin = kwargs.get("stdin")
             env = kwargs.get("env")
-            newargs = [verb, "--node-directory", self.getdir("client0")] + list(args)
+            newargs = ["--node-directory", self.getdir("client0"), verb] + list(args)
             return self.run_bintahoe(newargs, stdin=stdin, env=env)
 
         def _check_succeeded(res, check_stderr=True):
@@ -1871,4 +1884,40 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
             d.addCallback(_check_lit_filenode_results)
             return d
         d.addCallback(_got_lit_filenode)
+        return d
+
+
+class Connections(SystemTestMixin, unittest.TestCase):
+    def test_rref(self):
+        if NormalizedVersion(foolscap.__version__) < NormalizedVersion('0.6.4'):
+            raise unittest.SkipTest("skipped due to http://foolscap.lothar.com/trac/ticket/196 "
+                                    "(which does not affect normal usage of Tahoe-LAFS)")
+
+        self.basedir = "system/Connections/rref"
+        d = self.set_up_nodes(2)
+        def _start(ign):
+            self.c0 = self.clients[0]
+            nonclients = [s for s in self.c0.storage_broker.get_connected_servers()
+                          if s.get_serverid() != self.c0.nodeid]
+            self.failUnlessEqual(len(nonclients), 1)
+
+            self.s1 = nonclients[0]  # s1 is the server, not c0
+            self.s1_rref = self.s1.get_rref()
+            self.failIfEqual(self.s1_rref, None)
+            self.failUnless(self.s1.is_connected())
+        d.addCallback(_start)
+
+        # now shut down the server
+        d.addCallback(lambda ign: self.clients[1].disownServiceParent())
+        # and wait for the client to notice
+        def _poll():
+            return len(self.c0.storage_broker.get_connected_servers()) < 2
+        d.addCallback(lambda ign: self.poll(_poll))
+
+        def _down(ign):
+            self.failIf(self.s1.is_connected())
+            rref = self.s1.get_rref()
+            self.failUnless(rref)
+            self.failUnlessIdentical(rref, self.s1_rref)
+        d.addCallback(_down)
         return d

@@ -247,8 +247,16 @@ def move_into_place(source, dest):
         remove_if_possible(dest)
     os.rename(source, dest)
 
-def write(path, data):
-    wf = open(path, "wb")
+def write_atomically(target, contents, mode="b"):
+    f = open(target+".tmp", "w"+mode)
+    try:
+        f.write(contents)
+    finally:
+        f.close()
+    move_into_place(target+".tmp", target)
+
+def write(path, data, mode="wb"):
+    wf = open(path, mode)
     try:
         wf.write(data)
     finally:

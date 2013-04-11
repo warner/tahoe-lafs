@@ -88,6 +88,10 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
         if os.path.basename(root_from_cwd) == 'src':
             root_from_cwd = os.path.dirname(root_from_cwd)
 
+        # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
+        if os.path.basename(root_from_cwd).startswith('tmp'):
+            root_from_cwd = os.path.dirname(root_from_cwd)
+
         same = (root_from_cwd == root_to_check)
         if not same:
             try:
@@ -103,6 +107,10 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
 
             root_from_cwdu = os.path.dirname(os.path.normcase(os.path.normpath(os.getcwdu())))
             if os.path.basename(root_from_cwdu) == u'src':
+                root_from_cwdu = os.path.dirname(root_from_cwdu)
+
+            # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
+            if os.path.basename(root_from_cwdu).startswith(u'tmp'):
                 root_from_cwdu = os.path.dirname(root_from_cwdu)
 
             if not isinstance(root_from_cwd, unicode) and root_from_cwd.decode(get_filesystem_encoding(), 'replace') != root_from_cwdu:
@@ -128,8 +136,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
             self._check_right_code(lines[1])
         d.addCallback(_cb)
         return d
-    # The timeout was exceeded on FreeStorm's CentOS:
-    # http://tahoe-lafs.org/buildbot/builders/FreeStorm%20CentOS5-i386/builds/503/steps/test/logs/stdio
+    # The timeout was exceeded on FreeStorm's CentOS5-i386.
     test_import_in_repl.timeout = 480
 
     def test_path(self):
@@ -147,7 +154,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
 
             self.failIfEqual(required_verstr, "unknown",
                              "We don't know our version, because this distribution didn't come "
-                             "with a _version.py and 'setup.py darcsver' hasn't been run.")
+                             "with a _version.py and 'setup.py update_version' hasn't been run.")
 
             srcdir = os.path.dirname(os.path.dirname(os.path.normcase(os.path.realpath(srcfile))))
             info = repr((res, allmydata.__appname__, required_verstr, srcdir))
@@ -194,12 +201,6 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
 
     def test_version_no_noise(self):
         self.skip_if_cannot_run_bintahoe()
-
-        from allmydata import get_package_versions, normalized_version
-        twisted_ver = get_package_versions()['Twisted']
-
-        if not normalized_version(twisted_ver) >= normalized_version('9.0.0'):
-            raise unittest.SkipTest("We pass this test only with Twisted >= v9.0.0")
 
         d = self.run_bintahoe(["--version"])
         def _cb(res):
@@ -283,7 +284,7 @@ class CreateNode(unittest.TestCase):
 
         # test the --node-directory form
         n3 = os.path.join(basedir, command + "-n3")
-        argv = ["--quiet", command, "--node-directory", n3]
+        argv = ["--quiet", "--node-directory", n3, command]
         rc, out, err = self.run_tahoe(argv)
         self.failUnlessEqual(err, "")
         self.failUnlessEqual(out, "")
@@ -354,7 +355,7 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
         c1 = os.path.join(basedir, "c1")
         HOTLINE_FILE = os.path.join(c1, "suicide_prevention_hotline")
         TWISTD_PID_FILE = os.path.join(c1, "twistd.pid")
-        INTRODUCER_FURL_FILE = os.path.join(c1, "introducer.furl")
+        INTRODUCER_FURL_FILE = os.path.join(c1, "private", "introducer.furl")
         PORTNUM_FILE = os.path.join(c1, "introducer.port")
         NODE_URL_FILE = os.path.join(c1, "node.url")
         CONFIG_FILE = os.path.join(c1, "tahoe.cfg")
@@ -405,8 +406,8 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
         d.addCallback(lambda res: self.poll(_node_has_started))
 
         def _started(res):
-            # read the introducer.furl and introducer.port files so we can check that their
-            # contents don't change on restart
+            # read the introducer.furl and introducer.port files so we can
+            # check that their contents don't change on restart
             self.furl = fileutil.read(INTRODUCER_FURL_FILE)
             self.failUnless(os.path.exists(PORTNUM_FILE))
             self.portnum = fileutil.read(PORTNUM_FILE)
@@ -467,19 +468,12 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
         d.addCallback(_after_stopping)
         d.addBoth(self._remove, HOTLINE_FILE)
         return d
+    # This test has hit a 240-second timeout on our feisty2.5 buildslave, and a 480-second timeout
+    # on Francois's Lenny-armv5tel buildslave.
     test_introducer.timeout = 960
-
-    # This test hit the 120-second timeout on "Francois Lenny-armv5tel", then it hit a 240-second timeout on our feisty2.5 buildslave: http://allmydata.org/buildbot/builders/feisty2.5/builds/2381/steps/test/logs/test.log
-    # Then it hit the 480 second timeout on Francois's machine: http://tahoe-lafs.org/buildbot/builders/FranXois%20lenny-armv5tel/builds/449/steps/test/logs/stdio
 
     def test_client_no_noise(self):
         self.skip_if_cannot_daemonize()
-
-        from allmydata import get_package_versions, normalized_version
-        twisted_ver = get_package_versions()['Twisted']
-
-        if not normalized_version(twisted_ver) >= normalized_version('9.0.0'):
-            raise unittest.SkipTest("We pass this test only with Twisted >= v9.0.0")
 
         basedir = self.workdir("test_client_no_noise")
         c1 = os.path.join(basedir, "c1")
@@ -590,6 +584,7 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
         d.addCallback(_cb2)
 
         def _node_has_started():
+            # this depends upon both files being created atomically
             return os.path.exists(NODE_URL_FILE) and os.path.exists(PORTNUM_FILE)
         d.addCallback(lambda res: self.poll(_node_has_started))
 
@@ -629,7 +624,9 @@ class RunNode(common_util.SignalMixin, unittest.TestCase, pollmixin.PollMixin,
         # 'tahoe stop' command takes a while.
         def _stop(res):
             fileutil.write(HOTLINE_FILE, "")
-            self.failUnless(os.path.exists(TWISTD_PID_FILE), (TWISTD_PID_FILE, os.listdir(os.path.dirname(TWISTD_PID_FILE))))
+            self.failUnless(os.path.exists(TWISTD_PID_FILE),
+                            (TWISTD_PID_FILE,
+                             os.listdir(os.path.dirname(TWISTD_PID_FILE))))
             return self.run_bintahoe(["--quiet", "stop", c1])
         d.addCallback(_stop)
 

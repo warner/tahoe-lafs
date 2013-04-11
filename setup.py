@@ -1,15 +1,16 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
+import sys; assert sys.version_info < (3,), ur"Tahoe-LAFS does not run under Python 3. Please use a version of Python between 2.6 and 2.7.x inclusive."
 
 # Tahoe-LAFS -- secure, distributed storage grid
 #
-# Copyright © 2008-2011 Allmydata, Inc.
+# Copyright © 2006-2012 The Tahoe-LAFS Software Foundation
 #
 # This file is part of Tahoe-LAFS.
 #
 # See the docs/about.rst file for licensing information.
 
-import glob, os, stat, subprocess, sys, re
+import glob, os, stat, subprocess, re
 
 ##### sys.path management
 
@@ -48,7 +49,7 @@ except EnvironmentError:
     open(APPNAMEFILE, "w").write(APPNAMEFILESTR)
 else:
     if curappnamefilestr.strip() != APPNAMEFILESTR:
-        print "Error -- this setup.py file is configured with the 'application name' to be '%s', but there is already a file in place in '%s' which contains the contents '%s'.  If the file is wrong, please remove it and setup.py will regenerate it and write '%s' into it." % (APPNAME, APPNAMEFILE, curappnamefilestr, APPNAMEFILESTR)
+        print("Error -- this setup.py file is configured with the 'application name' to be '%s', but there is already a file in place in '%s' which contains the contents '%s'.  If the file is wrong, please remove it and setup.py will regenerate it and write '%s' into it." % (APPNAME, APPNAMEFILE, curappnamefilestr, APPNAMEFILESTR))
         sys.exit(-1)
 
 # setuptools/zetuptoolz looks in __main__.__requires__ for a list of
@@ -71,13 +72,9 @@ __requires__ = install_requires[:]
 
 egg = os.path.realpath(glob.glob('setuptools-*.egg')[0])
 sys.path.insert(0, egg)
-egg = os.path.realpath(glob.glob('darcsver-*.egg')[0])
-sys.path.insert(0, egg)
-egg = os.path.realpath(glob.glob('setuptools_darcs-*.egg')[0])
-sys.path.insert(0, egg)
 import setuptools; setuptools.bootstrap_install_from = egg
 
-from setuptools import find_packages, setup
+from setuptools import setup
 from setuptools.command import sdist
 from setuptools import Command
 
@@ -121,20 +118,6 @@ trove_classifiers=[
 
 setup_requires = []
 
-# The darcsver command from the darcsver plugin is needed to initialize the
-# distribution's .version attribute correctly. (It does this either by
-# examining darcs history, or if that fails by reading the
-# src/allmydata/_version.py file). darcsver will also write a new version
-# stamp in src/allmydata/_version.py, with a version number derived from
-# darcs history. Note that the setup.cfg file has an "[aliases]" section
-# which enumerates commands that you might run and specifies that it will run
-# darcsver before each one. If you add different commands (or if I forgot
-# some that are already in use), you may need to add it to setup.cfg and
-# configure it to run darcsver before your command, if you want the version
-# number to be correct when that command runs.
-# http://pypi.python.org/pypi/darcsver
-setup_requires.append('darcsver >= 1.7.2')
-
 # Nevow imports itself when building, which causes Twisted and zope.interface
 # to be imported. We need to make sure that the versions of Twisted and
 # zope.interface used at build time satisfy Nevow's requirements. If not
@@ -149,25 +132,6 @@ setup_requires.append('darcsver >= 1.7.2')
 # are not already installed. Retire this hack when
 # https://bugs.launchpad.net/nevow/+bug/812537 has been fixed.
 setup_requires += [req for req in install_requires if req.startswith('Twisted') or req.startswith('zope.interface')]
-
-# setuptools_darcs is required to produce complete distributions (such
-# as with "sdist" or "bdist_egg"), unless there is a
-# src/allmydata_tahoe.egg-info/SOURCE.txt file present which contains
-# a complete list of files that should be included.
-
-# http://pypi.python.org/pypi/setuptools_darcs
-
-# However, requiring it runs afoul of a bug in Distribute, which was
-# shipped in Ubuntu Lucid, so for now you have to manually install it
-# before building sdists or eggs:
-# http://bitbucket.org/tarek/distribute/issue/55/revision-control-plugin-automatically-installed-as-a-build-dependency-is-not-present-when-another-build-dependency-is-being
-
-# Note that we explicitly inject setuptools_darcs at the beginning of
-# this setup.py file, so it is still in effect when building dists
-# using this setup.py file even when the following requirement is
-# disabled.
-if False:
-    setup_requires.append('setuptools_darcs >= 1.1.0')
 
 # trialcoverage is required if you want the "trial" unit test runner to have a
 # "--reporter=bwverbose-coverage" option which produces code-coverage results.
@@ -187,7 +151,9 @@ tests_require=[]
 class Trial(Command):
     description = "run trial (use 'bin%stahoe debug trial' for the full set of trial options)" % (os.sep,)
     # This is just a subset of the most useful options, for compatibility.
-    user_options = [ ("rterrors", "e", "Print out tracebacks as soon as they occur."),
+    user_options = [ ("no-rterrors", None, "Don't print out tracebacks as they occur."),
+                     ("rterrors", "e", "Print out tracebacks as they occur (default, so ignored)."),
+                     ("until-failure", "u", "Repeat a test (specified by -s) until it fails."),
                      ("reporter=", None, "The reporter to use for this test run."),
                      ("suite=", "s", "Specify the test suite."),
                      ("quiet", None, "Don't display version numbers and paths of Tahoe dependencies."),
@@ -195,6 +161,8 @@ class Trial(Command):
 
     def initialize_options(self):
         self.rterrors = False
+        self.no_rterrors = False
+        self.until_failure = False
         self.reporter = None
         self.suite = "allmydata"
         self.quiet = False
@@ -207,8 +175,12 @@ class Trial(Command):
         if not self.quiet:
             args.append('--version-and-path')
         args += ['debug', 'trial']
-        if self.rterrors:
+        if self.rterrors and self.no_rterrors:
+            raise AssertionError("--rterrors and --no-rterrors conflict.")
+        if not self.no_rterrors:
             args.append('--rterrors')
+        if self.until_failure:
+            args.append('--until-failure')
         if self.reporter:
             args.append('--reporter=' + self.reporter)
         if self.suite:
@@ -266,6 +238,122 @@ class MakeExecutable(Command):
         except Exception:
             if os.path.exists(old_tahoe_exe):
                 raise
+
+
+GIT_VERSION_BODY = '''
+# This _version.py is generated from git metadata by the tahoe setup.py.
+
+__pkgname__ = "%(pkgname)s"
+real_version = "%(version)s"
+full_version = "%(full)s"
+verstr = "%(normalized)s"
+__version__ = verstr
+'''
+
+def run_command(args, cwd=None, verbose=False):
+    try:
+        # remember shell=False, so use git.cmd on windows, not just git
+        p = subprocess.Popen(args, stdout=subprocess.PIPE, cwd=cwd)
+    except EnvironmentError as e:  # if this gives a SyntaxError, note that Tahoe-LAFS requires Python 2.6+
+        if verbose:
+            print("unable to run %s" % args[0])
+            print(e)
+        return None
+    stdout = p.communicate()[0].strip()
+    if p.returncode != 0:
+        if verbose:
+            print("unable to run %s (error)" % args[0])
+        return None
+    return stdout
+
+
+def versions_from_git(tag_prefix, verbose=False):
+    # this runs 'git' from the directory that contains this file. That either
+    # means someone ran a setup.py command (and this code is in
+    # versioneer.py, thus the containing directory is the root of the source
+    # tree), or someone ran a project-specific entry point (and this code is
+    # in _version.py, thus the containing directory is somewhere deeper in
+    # the source tree). This only gets called if the git-archive 'subst'
+    # variables were *not* expanded, and _version.py hasn't already been
+    # rewritten with a short version string, meaning we're inside a checked
+    # out source tree.
+
+    # versions_from_git (as copied from python-versioneer) returns strings
+    # like "1.9.0-25-gb73aba9-dirty", which means we're in a tree with
+    # uncommited changes (-dirty), the latest checkin is revision b73aba9,
+    # the most recent tag was 1.9.0, and b73aba9 has 25 commits that weren't
+    # in 1.9.0 . The narrow-minded NormalizedVersion parser that takes our
+    # output (meant to enable sorting of version strings) refuses most of
+    # that. Tahoe uses a function named suggest_normalized_version() that can
+    # handle "1.9.0.post25", so dumb down our output to match.
+
+    try:
+        source_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        # some py2exe/bbfreeze/non-CPython implementations don't do __file__
+        return {} # not always correct
+    GIT = "git"
+    if sys.platform == "win32":
+        GIT = "git.cmd"
+    stdout = run_command([GIT, "describe", "--tags", "--dirty", "--always"],
+                         cwd=source_dir)
+    if stdout is None:
+        return {}
+    if not stdout.startswith(tag_prefix):
+        if verbose:
+            print("tag '%s' doesn't start with prefix '%s'" % (stdout, tag_prefix))
+        return {}
+    version = stdout[len(tag_prefix):]
+    pieces = version.split("-")
+    if len(pieces) == 1:
+        normalized_version = pieces[0]
+    else:
+        normalized_version = "%s.post%s" % (pieces[0], pieces[1])
+    stdout = run_command([GIT, "rev-parse", "HEAD"], cwd=source_dir)
+    if stdout is None:
+        return {}
+    full = stdout.strip()
+    if version.endswith("-dirty"):
+        full += "-dirty"
+        normalized_version += ".dev0"
+    return {"version": version, "normalized": normalized_version, "full": full}
+
+# setup.cfg has an [aliases] section which runs "update_version" before many
+# commands (like "build" and "sdist") that need to know our package version
+# ahead of time. If you add different commands (or if we forgot some), you
+# may need to add it to setup.cfg and configure it to run update_version
+# before your command.
+
+class UpdateVersion(Command):
+    description = "update _version.py from revision-control metadata"
+    user_options = []
+
+    def initialize_options(self):
+        pass
+    def finalize_options(self):
+        pass
+    def run(self):
+        if os.path.isdir(os.path.join(basedir, ".git")):
+            verstr = self.try_from_git()
+        else:
+            print("no version-control data found, leaving _version.py alone")
+            return
+        if verstr:
+            self.distribution.metadata.version = verstr
+
+    def try_from_git(self):
+        versions = versions_from_git("allmydata-tahoe-", verbose=True)
+        if versions:
+            fn = 'src/allmydata/_version.py'
+            f = open(fn, "wb")
+            f.write(GIT_VERSION_BODY %
+                    { "pkgname": self.distribution.get_name(),
+                      "version": versions["version"],
+                      "normalized": versions["normalized"],
+                      "full": versions["full"] })
+            f.close()
+            print("git-version: wrote '%s' into '%s'" % (versions["version"], fn))
+        return versions.get("normalized", None)
 
 
 class MySdist(sdist.sdist):
@@ -331,18 +419,35 @@ setup(name=APPNAME,
       license='GNU GPL', # see README.txt -- there is an alternative licence
       cmdclass={"trial": Trial,
                 "make_executable": MakeExecutable,
+                "update_version": UpdateVersion,
                 "sdist": MySdist,
                 },
       package_dir = {'':'src'},
-      packages=find_packages("src"),
+      packages=['allmydata',
+                'allmydata.frontends',
+                'allmydata.immutable',
+                'allmydata.immutable.downloader',
+                'allmydata.introducer',
+                'allmydata.mutable',
+                'allmydata.scripts',
+                'allmydata.storage',
+                'allmydata.test',
+                'allmydata.util',
+                'allmydata.web',
+                'allmydata.web.static',
+                'allmydata.web.static.css',
+                'allmydata.windows',
+                'buildtest'],
       classifiers=trove_classifiers,
       test_suite="allmydata.test",
       install_requires=install_requires,
       tests_require=tests_require,
-      include_package_data=True,
+      package_data={"allmydata.web": ["*.xhtml"],
+                    "allmydata.web.static": ["*.js", "*.png", "*.css"],
+                    "allmydata.web.static.css": ["*.css"],
+                    },
       setup_requires=setup_requires,
       entry_points = { 'console_scripts': [ 'tahoe = allmydata.scripts.runner:run' ] },
       zip_safe=False, # We prefer unzipped for easier access.
-      versionfiles=['src/allmydata/_version.py',],
       **setup_args
       )

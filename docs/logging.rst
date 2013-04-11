@@ -23,12 +23,20 @@ record information about what is happening inside the Tahoe node. This is
 primarily for use by programmers and grid operators who want to find out what
 went wrong.
 
-The foolscap logging system is documented at
-`<http://foolscap.lothar.com/docs/logging.html>`_.
+The Foolscap logging system is documented at
+`<http://foolscap.lothar.com/docs/logging.html>`__.
 
-The foolscap distribution includes a utility named "``flogtool``" (usually at
-``/usr/bin/flogtool`` on Unix) which is used to get access to many foolscap
-logging features.
+The Foolscap distribution includes a utility named "``flogtool``" that is
+used to get access to many Foolscap logging features. This command only
+works when foolscap and its dependencies are installed correctly.
+Tahoe-LAFS v1.10.0 and later include a ``tahoe debug flogtool`` command
+that can be used even when foolscap is not installed; to use this, prefix
+all of the example commands below with ``tahoe debug``.
+
+For earlier versions since Tahoe-LAFS v1.8.2, installing Foolscap v0.6.1
+or later and then running ``bin/tahoe @flogtool`` from the root of a
+Tahoe-LAFS source distribution may work (but only on Unix, not Windows).
+
 
 Realtime Logging
 ================
@@ -176,7 +184,7 @@ Create the Log Gatherer with the "``flogtool create-gatherer WORKDIR``"
 command, and start it with "``tahoe start``". Then copy the contents of the
 ``log_gatherer.furl`` file it creates into the ``BASEDIR/tahoe.cfg`` file
 (under the key ``log_gatherer.furl`` of the section ``[node]``) of all nodes
-that should be sending it log events. (See `<configuration.rst>`_.)
+that should be sending it log events. (See `<configuration.rst>`__.)
 
 The "``flogtool filter``" command, described above, is useful to cut down the
 potentially large flogfiles into a more focussed form.
@@ -260,13 +268,17 @@ If a test is failing and you aren't sure why, start by enabling
 
 With ``FLOGTOTWISTED=1``, sufficiently-important log events will be written
 into ``_trial_temp/test.log``, which may give you more ideas about why the
-test is failing. Note, however, that ``_trial_temp/log.out`` will not receive
-messages below the ``level=OPERATIONAL`` threshold, due to this issue:
-`<http://foolscap.lothar.com/trac/ticket/154>`_
+test is failing.
 
+By default, ``_trial_temp/test.log`` will not receive messages below the
+``level=OPERATIONAL`` threshold. You can change the threshold via the ``FLOGLEVEL``
+variable, e.g.::
 
-If that isn't enough, look at the detailed foolscap logging messages instead,
-by running the tests like this::
+  make test FLOGLEVEL=10 FLOGTOTWISTED=1
+
+(The level numbers are listed in src/allmydata/util/log.py.)
+
+To look at the detailed foolscap logging messages, run the tests like this::
 
   make test FLOGFILE=flog.out.bz2 FLOGLEVEL=1 FLOGTOTWISTED=1
 

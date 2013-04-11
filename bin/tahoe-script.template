@@ -1,7 +1,7 @@
 #!/bin/false # You must specify a python interpreter.
-u"Tahoe-LAFS does not run under Python 3. Please use a version of Python between 2.4.4 and 2.7.x inclusive."
+import sys; assert sys.version_info < (3,), ur"Tahoe-LAFS does not run under Python 3. Please use a version of Python between 2.6 and 2.7.x inclusive."
 
-import sys, os, subprocess
+import os, subprocess
 
 where = os.path.realpath(sys.argv[0])
 base = os.path.dirname(os.path.dirname(where))
@@ -12,8 +12,8 @@ else:
     perhaps_installed_tahoe = "/usr/bin/tahoe"
 
 whoami = '''\
-I am a "bin%stahoe" executable who is only for the convenience of running
-Tahoe from its source distribution -- I work only when invoked as the "tahoe"
+I am a "bin%stahoe" executable for the convenience of running Tahoe-LAFS
+from its source distribution -- I work only when invoked as the "tahoe"
 script that lives in the "bin" subdirectory of a Tahoe source code
 distribution, and only if you have already run "python setup.py build".
 ''' % (os.path.sep,)
@@ -21,13 +21,13 @@ distribution, and only if you have already run "python setup.py build".
 # look for Tahoe.home .
 homemarker = os.path.join(base, "Tahoe.home")
 if not os.path.exists(homemarker):
-    print whoami
-    print '''\
+    print(whoami)
+    print('''\
 I just tried to run and found that I am not living in such a directory, so I
 am stopping now. To run Tahoe after it has been is installed, please execute
 my brother, who gets installed into the appropriate place for executables
 when you run "make install" (perhaps as "%s").
-''' % (perhaps_installed_tahoe,)
+''' % (perhaps_installed_tahoe,))
     sys.exit(1)
 
 # we've found our home. Put the tahoe support/lib etc. in our PYTHONPATH.
@@ -63,7 +63,7 @@ if sys.platform == "win32":
     # Note that this doesn't escape \x7F. If it did, test_unicode_arguments_and_output
     # in test_runner.py wouldn't work.
     def mangle(s):
-        return str(re.sub(ur'[^\x20-\x7F]', lambda m: u'\x7F%x;' % (ord(m.group(0)),), s))
+        return str(re.sub(u'[^\\x20-\\x7F]', lambda m: u'\x7F%x;' % (ord(m.group(0)),), s))
 
     argv = [mangle(argv_unicode[i]) for i in xrange(0, argc.value)]
 
@@ -85,16 +85,6 @@ else:
     script = os.path.join(base, "support", "bin", "tahoe")
     args = sys.argv[1:]
 
-if not os.path.exists(script):
-    print whoami
-    print '''\
-I just tried to run and could not find my brother at
-"%s". To run Tahoe when it is installed, please execute my
-brother, who gets installed into the appropriate place for executables
-when you run "python setup.py install" (perhaps as "%s").
-''' % (script, perhaps_installed_tahoe)
-    sys.exit(1)
-
 # Support indirection via another "runner" script (e.g. coverage).
 # For example: bin/tahoe @RUNNER RUNNER_ARGS @tahoe TAHOE_ARGS
 
@@ -110,16 +100,29 @@ if len(args) >= 1 and args[0].startswith('@'):
         return a
     command = prefix + [runner] + map(_subst, args[1:])
 else:
+    runner = script
     command = prefix + [script] + args
+
+    if not os.path.exists(script):
+        print(whoami)
+        print('''\
+I could not find the support script
+"%s".
+
+To run an installed version of Tahoe-LAFS, please execute the "tahoe"
+script that is installed into the appropriate place for executables
+when you run "python setup.py install" (perhaps as "%s").
+''' % (script, perhaps_installed_tahoe))
+        sys.exit(1)
 
 try:
     res = subprocess.call(command, env=os.environ)
-except Exception, le:
-    print whoami
-    print '''\
-I just tried to invoke my brother at "%s"
+except Exception as le:
+    print(whoami)
+    print('''\
+I just tried to invoke "%s"
 and got an exception.
-''' % (script,)
+''' % (runner,))
     raise
 else:
     sys.exit(res)

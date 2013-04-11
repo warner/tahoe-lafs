@@ -1,4 +1,8 @@
 ﻿
+See also cautions.rst_.
+
+.. _cautions.rst: file:cautions.rst
+
 ============
 Known Issues
 ============
@@ -14,11 +18,11 @@ want to read `the "historical known issues" document`_.
 .. _the "historical known issues" document: historical/historical_known_issues.txt
 
 
-Known Issues in Tahoe-LAFS v1.9.0, released 31-Oct-2011
-=======================================================
+Known Issues in Tahoe-LAFS v1.9.2, released 3-Jul-2012
+======================================================
 
-  *  `Potential unauthorized access by JavaScript in unrelated files`_
-  *  `Potential disclosure of file through embedded hyperlinks or JavaScript in that file`_
+  *  `Unauthorized access by JavaScript in unrelated files`_
+  *  `Disclosure of file through embedded hyperlinks or JavaScript in that file`_
   *  `Command-line arguments are leaked to other local users`_
   *  `Capabilities may be leaked to web browser phishing filter / "safe browsing" servers`_
   *  `Known issues in the FTP and SFTP frontends`_
@@ -26,16 +30,22 @@ Known Issues in Tahoe-LAFS v1.9.0, released 31-Oct-2011
 
 ----
 
-Potential unauthorized access by JavaScript in unrelated files
---------------------------------------------------------------
+Unauthorized access by JavaScript in unrelated files
+----------------------------------------------------
 
 If you view a file stored in Tahoe-LAFS through a web user interface,
-JavaScript embedded in that file might be able to access other files or
-directories stored in Tahoe-LAFS which you view through the same web
-user interface.  Such a script would be able to send the contents of
+JavaScript embedded in that file can, in some circumstances, access other
+files or directories stored in Tahoe-LAFS that you view through the same
+web user interface.  Such a script would be able to send the contents of
 those other files or directories to the author of the script, and if you
 have the ability to modify the contents of those files or directories,
 then that script could modify or delete those files or directories.
+
+This attack is known to be possible when an attacking tab or window could
+reach a tab or window containing a Tahoe URI by navigating back or forward
+in the history, either from itself or from any frame with a known name (as
+specified by the "target" attribute of an HTML link). It might be possible
+in other cases depending on the browser.
 
 *how to manage it*
 
@@ -53,8 +63,8 @@ malicious JavaScript.
 
 ----
 
-Potential disclosure of file through embedded hyperlinks or JavaScript in that file
------------------------------------------------------------------------------------
+Disclosure of file through embedded hyperlinks or JavaScript in that file
+-------------------------------------------------------------------------
 
 If there is a file stored on a Tahoe-LAFS storage grid, and that file
 gets downloaded and displayed in a web browser, then JavaScript or
@@ -147,9 +157,9 @@ Opera also has a similar facility that is disabled by default. A previous
 version of this file stated that Firefox had abandoned their phishing
 filter; this was incorrect.
 
-.. _a brief description of their filter's operation: http://blogs.msdn.com/ie/archive/2005/09/09/463204.aspx
-.. _"safe browsing API": http://code.google.com/apis/safebrowsing/
-.. _specification: http://code.google.com/p/google-safe-browsing/wiki/Protocolv2Spec
+.. _a brief description of their filter's operation: https://blogs.msdn.com/ie/archive/2005/09/09/463204.aspx
+.. _"safe browsing API": https://code.google.com/apis/safebrowsing/
+.. _specification: https://code.google.com/p/google-safe-browsing/wiki/Protocolv2Spec
 .. _Firefox bugzilla ticket #368255: https://bugzilla.mozilla.org/show_bug.cgi?id=368255
 
 
@@ -244,6 +254,50 @@ structure. Also, users that access the same files may be related to each other.
 
 ----
 
+Known Issues in Tahoe-LAFS v1.9.0, released 31-Oct-2011
+=======================================================
+
+
+Integrity Failure during Mutable Downloads
+------------------------------------------
+
+Under certain circumstances, the integrity-verification code of the mutable
+downloader could be bypassed. Clients who receive carefully crafted shares
+(from attackers) will emit incorrect file contents, and the usual
+share-corruption errors would not be raised. This only affects mutable files
+(not immutable), and only affects downloads that use doctored shares. It is
+not persistent: the threat is resolved once you upgrade your client to a
+version without the bug. However, read-modify-write operations (such as
+directory manipulations) performed by vulnerable clients could cause the
+attacker's modifications to be written back out to the mutable file, making
+the corruption permanent.
+
+The attacker's ability to manipulate the file contents is limited. They can
+modify FEC-encoded ciphertext in all but one share. This gives them the
+ability to blindly flip bits in roughly 2/3rds of the file (for the default
+k=3 encoding parameter). Confidentiality remains intact, unless the attacker
+can deduce the file's contents by observing your reactions to corrupted
+downloads.
+
+This bug was introduced in 1.9.0, as part of the MDMF-capable downloader, and
+affects both SDMF and MDMF files. It was not present in 1.8.3.
+
+*how to manage it*
+
+There are three options:
+
+* Upgrade to 1.9.1, which fixes the bug
+* Downgrade to 1.8.3, which does not contain the bug
+* If using 1.9.0, do not trust the contents of mutable files (whether SDMF or
+  MDMF) that the 1.9.0 client emits, and do not modify directories (which
+  could write the corrupted data back into place, making the damage
+  persistent)
+
+
+.. _#1654: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1654
+
+----
+
 Known Issues in Tahoe-LAFS v1.8.2, released 30-Jan-2011
 =======================================================
 
@@ -264,7 +318,7 @@ authorization (confidentiality), nor to change the contents of a file
 
 A person could learn the storage index of a file in several ways:
 
-1. By being granted the authority to read the immutable file—i.e. by being
+1. By being granted the authority to read the immutable file: i.e. by being
    granted a read capability to the file. They can determine the file's
    storage index from its read capability.
 
@@ -293,17 +347,17 @@ if you upgrade a storage server to a fixed release then that server is no
 longer vulnerable to this problem.
 
 Note that the issue is local to each storage server independently of other
-storage servers—when you upgrade a storage server then that particular
+storage servers: when you upgrade a storage server then that particular
 storage server can no longer be tricked into deleting its shares of the
 target file.
 
 If you can't immediately upgrade your storage server to a version of
 Tahoe-LAFS that eliminates this vulnerability, then you could temporarily
 shut down your storage server. This would of course negatively impact
-availability—clients would not be able to upload or download shares to that
-particular storage server while it was shut down—but it would protect the
-shares already stored on that server from being deleted as long as the server
-is shut down.
+availability -- clients would not be able to upload or download shares to
+that particular storage server while it was shut down -- but it would protect
+the shares already stored on that server from being deleted as long as the
+server is shut down.
 
 If the servers that store shares of your file are running a version of
 Tahoe-LAFS with this vulnerability, then you should think about whether

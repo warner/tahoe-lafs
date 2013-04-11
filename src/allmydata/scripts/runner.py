@@ -1,11 +1,11 @@
 
-import sys
+import os, sys
 from cStringIO import StringIO
 
 from twisted.python import usage
 
-from allmydata.scripts.common import BaseOptions
-from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer
+from allmydata.scripts.common import get_default_nodedir
+from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer, admin
 from allmydata.util.encodingutil import quote_output, get_io_encoding
 
 def GROUP(s):
@@ -15,12 +15,30 @@ def GROUP(s):
     return [("\n" + s, None, None, None)]
 
 
-class Options(BaseOptions, usage.Options):
+_default_nodedir = get_default_nodedir()
+
+NODEDIR_HELP = ("Specify which Tahoe node directory should be used. The "
+                "directory should either contain a full Tahoe node, or a "
+                "file named node.url that points to some other Tahoe node. "
+                "It should also contain a file named '"
+                + os.path.join('private', 'aliases') +
+                "' which contains the mapping from alias name to root "
+                "dirnode URI.")
+if _default_nodedir:
+    NODEDIR_HELP += " [default for most commands: " + quote_output(_default_nodedir) + "]"
+
+class Options(usage.Options):
+    # unit tests can override these to point at StringIO instances
+    stdin = sys.stdin
+    stdout = sys.stdout
+    stderr = sys.stderr
+
     synopsis = "\nUsage:  tahoe <command> [command options]"
     subCommands = ( GROUP("Administration")
                     +   create_node.subCommands
                     +   keygen.subCommands
                     +   stats_gatherer.subCommands
+                    +   admin.subCommands
                     + GROUP("Controlling a node")
                     +   startstop_node.subCommands
                     + GROUP("Debugging")
@@ -28,6 +46,28 @@ class Options(BaseOptions, usage.Options):
                     + GROUP("Using the filesystem")
                     +   cli.subCommands
                     )
+
+    optFlags = [
+        ["quiet", "q", "Operate silently."],
+        ["version", "V", "Display version numbers."],
+        ["version-and-path", None, "Display version numbers and paths to their locations."],
+    ]
+    optParameters = [
+        ["node-directory", "d", None, NODEDIR_HELP],
+    ]
+
+    def opt_version(self):
+        import allmydata
+        print >>self.stdout, allmydata.get_package_versions_string(debug=True)
+        self.no_command_needed = True
+
+    def opt_version_and_path(self):
+        import allmydata
+        print >>self.stdout, allmydata.get_package_versions_string(show_paths=True, debug=True)
+        self.no_command_needed = True
+
+    def getSynopsis(self):
+        return "\nUsage: tahoe [global-opts] <command> [command-options]"
 
     def getUsage(self, **kwargs):
         t = usage.Options.getUsage(self, **kwargs)
@@ -95,6 +135,8 @@ def runner(argv,
         rc = startstop_node.dispatch[command](so, stdout, stderr)
     elif command in debug.dispatch:
         rc = debug.dispatch[command](so)
+    elif command in admin.dispatch:
+        rc = admin.dispatch[command](so)
     elif command in cli.dispatch:
         rc = cli.dispatch[command](so)
     elif command in ac_dispatch:
@@ -106,9 +148,15 @@ def runner(argv,
 
 
 def run(install_node_control=True):
-    if sys.platform == "win32":
-        from allmydata.windows.fixups import initialize
-        initialize()
+    try:
+        if sys.platform == "win32":
+            from allmydata.windows.fixups import initialize
+            initialize()
 
-    rc = runner(sys.argv[1:], install_node_control=install_node_control)
+        rc = runner(sys.argv[1:], install_node_control=install_node_control)
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        rc = 1
+
     sys.exit(rc)

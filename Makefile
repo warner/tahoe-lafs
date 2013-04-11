@@ -14,11 +14,10 @@ SOURCES=src/allmydata src/buildtest static misc bin/tahoe-script.template twiste
 
 .PHONY: make-version build
 
-# The 'darcsver' setup.py command comes in the 'darcsver' package:
-# http://pypi.python.org/pypi/darcsver It is necessary only if you want to
-# automatically produce a new _version.py file from the current darcs history.
+# This is necessary only if you want to automatically produce a new
+# _version.py file from the current git/darcs history.
 make-version:
-	$(PYTHON) ./setup.py darcsver --count-all-patches
+	$(PYTHON) ./setup.py update_version
 
 .built:
 	$(MAKE) build
@@ -75,6 +74,18 @@ test-coverage: build
 
 quicktest:
 	$(TAHOE) debug trial $(TRIALARGS) $(TEST)
+
+# "make tmpfstest" may be a faster way of running tests on Linux. It works best when you have
+# at least 330 MiB of free physical memory (to run the whole test suite). Since it uses sudo
+# to mount/unmount the tmpfs filesystem, it might prompt for your password.
+tmpfstest:
+	time make _tmpfstest 'TMPDIR=$(shell mktemp -d --tmpdir=.)'
+
+_tmpfstest:
+	sudo mount -t tmpfs -o size=400m tmpfs '$(TMPDIR)'
+	-$(TAHOE) debug trial --rterrors '--temp-directory=$(TMPDIR)/_trial_temp' $(TRIALARGS) $(TEST)
+	sudo umount '$(TMPDIR)'
+	rmdir '$(TMPDIR)'
 
 # code-coverage: install the "coverage" package from PyPI, do "make
 # quicktest-coverage" to do a unit test run with coverage-gathering enabled,
@@ -135,15 +146,21 @@ check-miscaptures:
 	@echo
 
 pyflakes:
-	$(PYTHON) -OOu `which pyflakes` $(SOURCES) |sort |uniq
+	@$(PYTHON) -OOu `which pyflakes` $(SOURCES) |sort |uniq
 	@echo
 
 check-umids:
-	$(PYTHON) misc/coding_tools/check-umids.py `find $(SOURCES) -name '*.py'`
+	$(PYTHON) misc/coding_tools/check-umids.py `find $(SOURCES) -name '*.py' -not -name 'old.py'`
 	@echo
 
 -check-umids:
-	-$(PYTHON) misc/coding_tools/check-umids.py `find $(SOURCES) -name '*.py'`
+	-$(PYTHON) misc/coding_tools/check-umids.py `find $(SOURCES) -name '*.py' -not -name 'old.py'`
+	@echo
+
+doc-checks: check-rst
+
+check-rst:
+	@for x in `find *.rst docs -name "*.rst"`; do rst2html -v $${x} >/dev/null; done 2>&1 |grep -v 'Duplicate implicit target name:'
 	@echo
 
 count-lines:
@@ -200,6 +217,10 @@ check-grid: .built
 bench-dirnode: .built
 	$(TAHOE) @src/allmydata/test/bench_dirnode.py
 
+# the provisioning tool runs as a stand-alone webapp server
+run-provisioning-tool: .built
+	$(TAHOE) @misc/operations_helpers/provisioning/run.py
+
 # 'make repl' is a simple-to-type command to get a Python interpreter loop
 # from which you can type 'import allmydata'
 repl:
@@ -208,6 +229,10 @@ repl:
 test-darcs-boringfile:
 	$(MAKE)
 	$(PYTHON) misc/build_helpers/test-darcs-boringfile.py
+
+test-git-ignore:
+	$(MAKE)
+	$(PYTHON) misc/build_helpers/test-git-ignore.py
 
 test-clean:
 	find . |grep -vEe "_darcs|allfiles.tmp|src/allmydata/_(version|appname).py" |sort >allfiles.tmp.old
@@ -263,4 +288,4 @@ tarballs:
 	$(PYTHON) setup.py sdist --sumo --formats=bztar,gztar,zip
 
 upload-tarballs:
-	@if [ "X${BB_BRANCH}" = "Xtrunk" ] || [ "X${BB_BRANCH}" = "X" ]; then for f in dist/allmydata-tahoe-*; do flappclient --furlfile ~/.tahoe-tarball-upload.furl upload-file $$f; done ; else echo not uploading tarballs because this is not trunk but is branch \"${BB_BRANCH}\" ; fi
+	@if [ "X${BB_BRANCH}" = "Xmaster" ] || [ "X${BB_BRANCH}" = "X" ]; then for f in dist/allmydata-tahoe-*; do flappclient --furlfile ~/.tahoe-tarball-upload.furl upload-file $$f; done ; else echo not uploading tarballs because this is not trunk but is branch \"${BB_BRANCH}\" ; fi
