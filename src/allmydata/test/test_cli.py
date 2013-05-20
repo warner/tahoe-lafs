@@ -397,26 +397,31 @@ class CLI(CLITestMixin, unittest.TestCase):
                         "didn't see 'mqfblse6m5a6dh45isu2cg7oji' in '%s'" % err)
 
     def test_alias(self):
-        aliases = {"tahoe": "TA",
-                   "work": "WA",
-                   "c": "CA"}
+        def s128(c): return base32.b2a(c*(128/8))
+        def s256(c): return base32.b2a(c*(256/8))
+        TA = "URI:DIR2:%s:%s" % (s128("T"), s256("T"))
+        WA = "URI:DIR2:%s:%s" % (s128("W"), s256("W"))
+        CA = "URI:DIR2:%s:%s" % (s128("C"), s256("C"))
+        aliases = {"tahoe": TA,
+                   "work": WA,
+                   "c": CA}
         def ga1(path):
             return get_alias(aliases, path, u"tahoe")
         uses_lettercolon = common.platform_uses_lettercolon_drivename()
-        self.failUnlessReallyEqual(ga1(u"bare"), ("TA", "bare"))
-        self.failUnlessReallyEqual(ga1(u"baredir/file"), ("TA", "baredir/file"))
-        self.failUnlessReallyEqual(ga1(u"baredir/file:7"), ("TA", "baredir/file:7"))
-        self.failUnlessReallyEqual(ga1(u"tahoe:"), ("TA", ""))
-        self.failUnlessReallyEqual(ga1(u"tahoe:file"), ("TA", "file"))
-        self.failUnlessReallyEqual(ga1(u"tahoe:dir/file"), ("TA", "dir/file"))
-        self.failUnlessReallyEqual(ga1(u"work:"), ("WA", ""))
-        self.failUnlessReallyEqual(ga1(u"work:file"), ("WA", "file"))
-        self.failUnlessReallyEqual(ga1(u"work:dir/file"), ("WA", "dir/file"))
+        self.failUnlessReallyEqual(ga1(u"bare"), (TA, "bare"))
+        self.failUnlessReallyEqual(ga1(u"baredir/file"), (TA, "baredir/file"))
+        self.failUnlessReallyEqual(ga1(u"baredir/file:7"), (TA, "baredir/file:7"))
+        self.failUnlessReallyEqual(ga1(u"tahoe:"), (TA, ""))
+        self.failUnlessReallyEqual(ga1(u"tahoe:file"), (TA, "file"))
+        self.failUnlessReallyEqual(ga1(u"tahoe:dir/file"), (TA, "dir/file"))
+        self.failUnlessReallyEqual(ga1(u"work:"), (WA, ""))
+        self.failUnlessReallyEqual(ga1(u"work:file"), (WA, "file"))
+        self.failUnlessReallyEqual(ga1(u"work:dir/file"), (WA, "dir/file"))
         # default != None means we really expect a tahoe path, regardless of
         # whether we're on windows or not. This is what 'tahoe get' uses.
-        self.failUnlessReallyEqual(ga1(u"c:"), ("CA", ""))
-        self.failUnlessReallyEqual(ga1(u"c:file"), ("CA", "file"))
-        self.failUnlessReallyEqual(ga1(u"c:dir/file"), ("CA", "dir/file"))
+        self.failUnlessReallyEqual(ga1(u"c:"), (CA, ""))
+        self.failUnlessReallyEqual(ga1(u"c:file"), (CA, "file"))
+        self.failUnlessReallyEqual(ga1(u"c:dir/file"), (CA, "dir/file"))
         self.failUnlessReallyEqual(ga1(u"URI:stuff"), ("URI:stuff", ""))
         self.failUnlessReallyEqual(ga1(u"URI:stuff/file"), ("URI:stuff", "file"))
         self.failUnlessReallyEqual(ga1(u"URI:stuff:./file"), ("URI:stuff", "file"))
@@ -435,9 +440,9 @@ class CLI(CLITestMixin, unittest.TestCase):
                              (DefaultAliasMarker, "baredir/file:7"))
         self.failUnlessReallyEqual(ga2(u"baredir/sub:1/file:7"),
                              (DefaultAliasMarker, "baredir/sub:1/file:7"))
-        self.failUnlessReallyEqual(ga2(u"tahoe:"), ("TA", ""))
-        self.failUnlessReallyEqual(ga2(u"tahoe:file"), ("TA", "file"))
-        self.failUnlessReallyEqual(ga2(u"tahoe:dir/file"), ("TA", "dir/file"))
+        self.failUnlessReallyEqual(ga2(u"tahoe:"), (TA, ""))
+        self.failUnlessReallyEqual(ga2(u"tahoe:file"), (TA, "file"))
+        self.failUnlessReallyEqual(ga2(u"tahoe:dir/file"), (TA, "dir/file"))
         # on windows, we really want c:foo to indicate a local file.
         # default==None is what 'tahoe cp' uses.
         if uses_lettercolon:
@@ -446,12 +451,12 @@ class CLI(CLITestMixin, unittest.TestCase):
             self.failUnlessReallyEqual(ga2(u"c:dir/file"),
                                  (DefaultAliasMarker, "c:dir/file"))
         else:
-            self.failUnlessReallyEqual(ga2(u"c:"), ("CA", ""))
-            self.failUnlessReallyEqual(ga2(u"c:file"), ("CA", "file"))
-            self.failUnlessReallyEqual(ga2(u"c:dir/file"), ("CA", "dir/file"))
-        self.failUnlessReallyEqual(ga2(u"work:"), ("WA", ""))
-        self.failUnlessReallyEqual(ga2(u"work:file"), ("WA", "file"))
-        self.failUnlessReallyEqual(ga2(u"work:dir/file"), ("WA", "dir/file"))
+            self.failUnlessReallyEqual(ga2(u"c:"), (CA, ""))
+            self.failUnlessReallyEqual(ga2(u"c:file"), (CA, "file"))
+            self.failUnlessReallyEqual(ga2(u"c:dir/file"), (CA, "dir/file"))
+        self.failUnlessReallyEqual(ga2(u"work:"), (WA, ""))
+        self.failUnlessReallyEqual(ga2(u"work:file"), (WA, "file"))
+        self.failUnlessReallyEqual(ga2(u"work:dir/file"), (WA, "dir/file"))
         self.failUnlessReallyEqual(ga2(u"URI:stuff"), ("URI:stuff", ""))
         self.failUnlessReallyEqual(ga2(u"URI:stuff/file"), ("URI:stuff", "file"))
         self.failUnlessReallyEqual(ga2(u"URI:stuff:./file"), ("URI:stuff", "file"))
@@ -476,16 +481,16 @@ class CLI(CLITestMixin, unittest.TestCase):
                              (DefaultAliasMarker, "baredir/file:7"))
         self.failUnlessReallyEqual(ga3(u"baredir/sub:1/file:7"),
                              (DefaultAliasMarker, "baredir/sub:1/file:7"))
-        self.failUnlessReallyEqual(ga3(u"tahoe:"), ("TA", ""))
-        self.failUnlessReallyEqual(ga3(u"tahoe:file"), ("TA", "file"))
-        self.failUnlessReallyEqual(ga3(u"tahoe:dir/file"), ("TA", "dir/file"))
+        self.failUnlessReallyEqual(ga3(u"tahoe:"), (TA, ""))
+        self.failUnlessReallyEqual(ga3(u"tahoe:file"), (TA, "file"))
+        self.failUnlessReallyEqual(ga3(u"tahoe:dir/file"), (TA, "dir/file"))
         self.failUnlessReallyEqual(ga3(u"c:"), (DefaultAliasMarker, "c:"))
         self.failUnlessReallyEqual(ga3(u"c:file"), (DefaultAliasMarker, "c:file"))
         self.failUnlessReallyEqual(ga3(u"c:dir/file"),
                              (DefaultAliasMarker, "c:dir/file"))
-        self.failUnlessReallyEqual(ga3(u"work:"), ("WA", ""))
-        self.failUnlessReallyEqual(ga3(u"work:file"), ("WA", "file"))
-        self.failUnlessReallyEqual(ga3(u"work:dir/file"), ("WA", "dir/file"))
+        self.failUnlessReallyEqual(ga3(u"work:"), (WA, ""))
+        self.failUnlessReallyEqual(ga3(u"work:file"), (WA, "file"))
+        self.failUnlessReallyEqual(ga3(u"work:dir/file"), (WA, "dir/file"))
         self.failUnlessReallyEqual(ga3(u"URI:stuff"), ("URI:stuff", ""))
         self.failUnlessReallyEqual(ga3(u"URI:stuff:./file"), ("URI:stuff", "file"))
         self.failUnlessReallyEqual(ga3(u"URI:stuff:./dir/file"), ("URI:stuff", "dir/file"))
@@ -509,6 +514,19 @@ class CLI(CLITestMixin, unittest.TestCase):
                 common.pretend_platform_uses_lettercolon = old
             return retval
         self.failUnlessRaises(common.UnknownAliasError, ga5, u"C:\\Windows")
+
+    def test_alias_tolerance(self):
+        def s128(c): return base32.b2a(c*(128/8))
+        def s256(c): return base32.b2a(c*(256/8))
+        TA = "URI:DIR2:%s:%s" % (s128("T"), s256("T"))
+        aliases = {"present": TA,
+                   "future": "URI-FROM-FUTURE:ooh:aah"}
+        def ga1(path):
+            return get_alias(aliases, path, u"tahoe")
+        self.failUnlessReallyEqual(ga1(u"present:file"), (TA, "file"))
+        # this throws, via assert IDirnodeURI.providedBy(), since get_alias()
+        # wants a dirnode, and the future cap gives us UnknownURI instead.
+        self.failUnlessRaises(AssertionError, ga1, u"future:stuff")
 
     def test_listdir_unicode_good(self):
         filenames = [u'L\u00F4zane', u'Bern', u'Gen\u00E8ve']  # must be NFC
@@ -550,124 +568,124 @@ class CLI(CLITestMixin, unittest.TestCase):
 class Help(unittest.TestCase):
     def test_get(self):
         help = str(cli.GetOptions())
-        self.failUnlessIn(" get [options] REMOTE_FILE LOCAL_FILE", help)
+        self.failUnlessIn(" [global-opts] get [options] REMOTE_FILE LOCAL_FILE", help)
         self.failUnlessIn("% tahoe get FOO |less", help)
 
     def test_put(self):
         help = str(cli.PutOptions())
-        self.failUnlessIn(" put [options] LOCAL_FILE REMOTE_FILE", help)
+        self.failUnlessIn(" [global-opts] put [options] LOCAL_FILE REMOTE_FILE", help)
         self.failUnlessIn("% cat FILE | tahoe put", help)
 
     def test_ls(self):
         help = str(cli.ListOptions())
-        self.failUnlessIn(" ls [options] [PATH]", help)
+        self.failUnlessIn(" [global-opts] ls [options] [PATH]", help)
 
     def test_unlink(self):
         help = str(cli.UnlinkOptions())
-        self.failUnlessIn(" unlink [options] REMOTE_FILE", help)
+        self.failUnlessIn(" [global-opts] unlink [options] REMOTE_FILE", help)
 
     def test_rm(self):
         help = str(cli.RmOptions())
-        self.failUnlessIn(" rm [options] REMOTE_FILE", help)
+        self.failUnlessIn(" [global-opts] rm [options] REMOTE_FILE", help)
 
     def test_mv(self):
         help = str(cli.MvOptions())
-        self.failUnlessIn(" mv [options] FROM TO", help)
+        self.failUnlessIn(" [global-opts] mv [options] FROM TO", help)
         self.failUnlessIn("Use 'tahoe mv' to move files", help)
 
     def test_cp(self):
         help = str(cli.CpOptions())
-        self.failUnlessIn(" cp [options] FROM.. TO", help)
+        self.failUnlessIn(" [global-opts] cp [options] FROM.. TO", help)
         self.failUnlessIn("Use 'tahoe cp' to copy files", help)
 
     def test_ln(self):
         help = str(cli.LnOptions())
-        self.failUnlessIn(" ln [options] FROM_LINK TO_LINK", help)
+        self.failUnlessIn(" [global-opts] ln [options] FROM_LINK TO_LINK", help)
         self.failUnlessIn("Use 'tahoe ln' to duplicate a link", help)
 
     def test_mkdir(self):
         help = str(cli.MakeDirectoryOptions())
-        self.failUnlessIn(" mkdir [options] [REMOTE_DIR]", help)
+        self.failUnlessIn(" [global-opts] mkdir [options] [REMOTE_DIR]", help)
         self.failUnlessIn("Create a new directory", help)
 
     def test_backup(self):
         help = str(cli.BackupOptions())
-        self.failUnlessIn(" backup [options] FROM ALIAS:TO", help)
+        self.failUnlessIn(" [global-opts] backup [options] FROM ALIAS:TO", help)
 
     def test_webopen(self):
         help = str(cli.WebopenOptions())
-        self.failUnlessIn(" webopen [options] [ALIAS:PATH]", help)
+        self.failUnlessIn(" [global-opts] webopen [options] [ALIAS:PATH]", help)
 
     def test_manifest(self):
         help = str(cli.ManifestOptions())
-        self.failUnlessIn(" manifest [options] [ALIAS:PATH]", help)
+        self.failUnlessIn(" [global-opts] manifest [options] [ALIAS:PATH]", help)
 
     def test_stats(self):
         help = str(cli.StatsOptions())
-        self.failUnlessIn(" stats [options] [ALIAS:PATH]", help)
+        self.failUnlessIn(" [global-opts] stats [options] [ALIAS:PATH]", help)
 
     def test_check(self):
         help = str(cli.CheckOptions())
-        self.failUnlessIn(" check [options] [ALIAS:PATH]", help)
+        self.failUnlessIn(" [global-opts] check [options] [ALIAS:PATH]", help)
 
     def test_deep_check(self):
         help = str(cli.DeepCheckOptions())
-        self.failUnlessIn(" deep-check [options] [ALIAS:PATH]", help)
+        self.failUnlessIn(" [global-opts] deep-check [options] [ALIAS:PATH]", help)
 
     def test_create_alias(self):
         help = str(cli.CreateAliasOptions())
-        self.failUnlessIn(" create-alias [options] ALIAS[:]", help)
+        self.failUnlessIn(" [global-opts] create-alias [options] ALIAS[:]", help)
 
     def test_add_alias(self):
         help = str(cli.AddAliasOptions())
-        self.failUnlessIn(" add-alias [options] ALIAS[:] DIRCAP", help)
+        self.failUnlessIn(" [global-opts] add-alias [options] ALIAS[:] DIRCAP", help)
 
     def test_list_aliases(self):
         help = str(cli.ListAliasesOptions())
-        self.failUnlessIn(" list-aliases [options]", help)
+        self.failUnlessIn(" [global-opts] list-aliases [options]", help)
 
     def test_start(self):
         help = str(startstop_node.StartOptions())
-        self.failUnlessIn(" start [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] start [options] [NODEDIR]", help)
 
     def test_stop(self):
         help = str(startstop_node.StopOptions())
-        self.failUnlessIn(" stop [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] stop [options] [NODEDIR]", help)
 
     def test_restart(self):
         help = str(startstop_node.RestartOptions())
-        self.failUnlessIn(" restart [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] restart [options] [NODEDIR]", help)
 
     def test_run(self):
         help = str(startstop_node.RunOptions())
-        self.failUnlessIn(" run [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] run [options] [NODEDIR]", help)
 
     def test_create_client(self):
         help = str(create_node.CreateClientOptions())
-        self.failUnlessIn(" create-client [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] create-client [options] [NODEDIR]", help)
 
     def test_create_node(self):
         help = str(create_node.CreateNodeOptions())
-        self.failUnlessIn(" create-node [options] [NODEDIR]", help)
+        self.failUnlessIn(" [global-opts] create-node [options] [NODEDIR]", help)
 
     def test_create_introducer(self):
         help = str(create_node.CreateIntroducerOptions())
-        self.failUnlessIn(" create-introducer [options] NODEDIR", help)
+        self.failUnlessIn(" [global-opts] create-introducer [options] NODEDIR", help)
 
     def test_debug_trial(self):
         help = str(debug.TrialOptions())
-        self.failUnlessIn(" debug trial [options] [[file|package|module|TestCase|testmethod]...]", help)
+        self.failUnlessIn(" [global-opts] debug trial [options] [[file|package|module|TestCase|testmethod]...]", help)
         self.failUnlessIn("The 'tahoe debug trial' command uses the correct imports", help)
 
     def test_debug_flogtool(self):
         options = debug.FlogtoolOptions()
         help = str(options)
-        self.failUnlessIn(" debug flogtool ", help)
+        self.failUnlessIn(" [global-opts] debug flogtool ", help)
         self.failUnlessIn("The 'tahoe debug flogtool' command uses the correct imports", help)
 
         for (option, shortcut, oClass, desc) in options.subCommands:
             subhelp = str(oClass())
-            self.failUnlessIn(" debug flogtool %s " % (option,), subhelp)
+            self.failUnlessIn(" [global-opts] debug flogtool %s " % (option,), subhelp)
 
 
 class CreateAlias(GridTestMixin, CLITestMixin, unittest.TestCase):

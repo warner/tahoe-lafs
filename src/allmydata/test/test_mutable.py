@@ -1330,6 +1330,24 @@ class Roundtrip(unittest.TestCase, testutil.ShouldFailMixin, PublishMixin):
         d.addCallback(_remove_shares)
         return d
 
+    def test_all_but_two_shares_vanished_updated_servermap(self):
+        # tests error reporting for ticket #1742
+        d = self.make_servermap()
+        def _remove_shares(servermap):
+            self._version = servermap.best_recoverable_version()
+            for shares in self._storage._peers.values()[2:]:
+                shares.clear()
+            return self.make_servermap(servermap)
+        d.addCallback(_remove_shares)
+        def _check(updated_servermap):
+            d1 = self.shouldFail(NotEnoughSharesError,
+                                 "test_all_but_two_shares_vanished_updated_servermap",
+                                 "ran out of servers",
+                                 self.do_download, updated_servermap, version=self._version)
+            return d1
+        d.addCallback(_check)
+        return d
+
     def test_no_servers(self):
         sb2 = make_storagebroker(num_peers=0)
         # if there are no servers, then a MODE_READ servermap should come

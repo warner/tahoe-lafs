@@ -14,7 +14,7 @@ from allmydata.immutable.upload import Uploader
 from allmydata.immutable.offloaded import Helper
 from allmydata.control import ControlServer
 from allmydata.introducer.client import IntroducerClient
-from allmydata.util import hashutil, base32, pollmixin, log, keyutil
+from allmydata.util import hashutil, base32, pollmixin, log, keyutil, idlib
 from allmydata.util.encodingutil import get_filesystem_encoding
 from allmydata.util.abbreviate import parse_abbreviated_size
 from allmydata.util.time_format import parse_duration, parse_date
@@ -134,6 +134,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.init_introducer_client()
         self.init_stats_provider()
         self.init_secrets()
+        self.init_node_key()
         self.init_storage()
         self.init_control()
         self.helper = None
@@ -209,21 +210,24 @@ class Client(node.Node, pollmixin.PollMixin):
         self.convergence = base32.a2b(convergence_s)
         self._secret_holder = SecretHolder(lease_secret, self.convergence)
 
-    def _maybe_create_node_key(self):
+    def init_node_key(self):
         # we only create the key once. On all subsequent runs, we re-use the
         # existing key
         def _make_key():
             sk_vs,vk_vs = keyutil.make_keypair()
             return sk_vs+"\n"
-        # for a while (between releases, before 1.10) this was known as
-        # server.privkey, but now it lives in node.privkey. This fallback can
-        # be removed after 1.10 is released.
-        sk_vs = self.get_private_config("server.privkey", None)
-        if not sk_vs:
-            sk_vs = self.get_or_create_private_config("node.privkey", _make_key)
+        sk_vs = self.get_or_create_private_config("node.privkey", _make_key)
         sk,vk_vs = keyutil.parse_privkey(sk_vs.strip())
         self.write_config("node.pubkey", vk_vs+"\n")
-        self._server_key = sk
+        self._node_key = sk
+
+    def get_long_nodeid(self):
+        # this matches what IServer.get_longname() says about us elsewhere
+        vk_bytes = self._node_key.get_verifying_key_bytes()
+        return "v0-"+base32.b2a(vk_bytes)
+
+    def get_long_tubid(self):
+        return idlib.nodeid_b2a(self.nodeid)
 
     def _init_permutation_seed(self, ss):
         seed = self.get_config_from_file("permutation-seed")
@@ -241,7 +245,7 @@ class Client(node.Node, pollmixin.PollMixin):
             else:
                 # otherwise, we're free to use the more natural seed of our
                 # pubkey-based serverid
-                vk_bytes = self._server_key.get_verifying_key_bytes()
+                vk_bytes = self._node_key.get_verifying_key_bytes()
                 seed = base32.b2a(vk_bytes)
             self.write_config("permutation-seed", seed+"\n")
         return seed.strip()
@@ -251,8 +255,6 @@ class Client(node.Node, pollmixin.PollMixin):
         if not self.get_config("storage", "enabled", True, boolean=True):
             return
         readonly = self.get_config("storage", "readonly", False, boolean=True)
-
-        self._maybe_create_node_key()
 
         storedir = os.path.join(self.basedir, self.STOREDIR)
 
@@ -310,7 +312,7 @@ class Client(node.Node, pollmixin.PollMixin):
             ann = {"anonymous-storage-FURL": furl,
                    "permutation-seed-base32": self._init_permutation_seed(ss),
                    }
-            self.introducer_client.publish("storage", ann, self._server_key)
+            self.introducer_client.publish("storage", ann, self._node_key)
         d.addCallback(_publish)
         d.addErrback(log.err, facility="tahoe.init",
                      level=log.BAD, umid="aLGBKw")

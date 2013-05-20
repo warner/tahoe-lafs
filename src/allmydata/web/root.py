@@ -9,12 +9,12 @@ from nevow.util import resource_filename
 
 import allmydata # to display import path
 from allmydata import get_package_versions_string
-from allmydata.util import idlib, log
+from allmydata.util import log
 from allmydata.interfaces import IFileNode
 from allmydata.web import filenode, directory, unlinked, status, operations
 from allmydata.web import storage
 from allmydata.web.common import abbreviate_size, getxmlfile, WebError, \
-     get_arg, RenderMixin, get_format, get_mutable_type
+     get_arg, RenderMixin, get_format, get_mutable_type, TIME_FORMAT
 
 
 class URIHandler(RenderMixin, rend.Page):
@@ -123,7 +123,7 @@ class IncidentReporter(RenderMixin, rend.Page):
                 details=get_arg(req, "details", ""),
                 level=log.WEIRD, umid="LkD9Pw")
         req.setHeader("content-type", "text/plain")
-        return "Thank you for your report!"
+        return "An incident report has been saved to logs/incidents/ in the node directory."
 
 SPACE = u"\u00A0"*2
 
@@ -164,12 +164,15 @@ class Root(rend.Page):
     #child_server # let's reserve this for storage-server-over-HTTP
 
     # FIXME: This code is duplicated in root.py and introweb.py.
+    def data_rendered_at(self, ctx, data):
+        return time.strftime(TIME_FORMAT, time.localtime())
     def data_version(self, ctx, data):
         return get_package_versions_string()
     def data_import_path(self, ctx, data):
         return str(allmydata)
-    def data_my_nodeid(self, ctx, data):
-        return idlib.nodeid_b2a(self.client.nodeid)
+    def render_my_nodeid(self, ctx, data):
+        tubid_s = "TubID: "+self.client.get_long_tubid()
+        return T.td(title=tubid_s)[self.client.get_long_nodeid()]
     def data_my_nickname(self, ctx, data):
         return self.client.nickname
 
@@ -287,7 +290,6 @@ class Root(rend.Page):
         service_name = announcement["service-name"]
         available_space = abbreviate_size(server.get_available_space())
 
-        TIME_FORMAT = "%H:%M:%S %d-%b-%Y"
         ctx.fillSlots("address", addr)
         ctx.fillSlots("connected", connected)
         ctx.fillSlots("connected-bool", bool(rhost))
@@ -384,6 +386,6 @@ class Root(rend.Page):
             T.input(type="hidden", name="t", value="report-incident"),
             "What went wrong?"+SPACE,
             T.input(type="text", name="details"), SPACE,
-            T.input(type="submit", value=u"Report \u00BB"),
+            T.input(type="submit", value=u"Save \u00BB"),
             ]]
         return T.div[form]

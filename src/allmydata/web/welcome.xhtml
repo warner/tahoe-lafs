@@ -28,7 +28,7 @@
             </tr>
             <tr>
               <th>Node ID:</th>
-              <td n:render="string" n:data="my_nodeid" />
+              <td n:render="my_nodeid" />
             </tr>
           </table>
         </div>
@@ -121,7 +121,7 @@
             <hr/>
             <div class="nav-header">
               <ul class="nav nav-list">
-                <li class="nav-header">Report an Incident</li>
+                <li class="nav-header">Save incident report</li>
                 <li><div n:render="incident_button" /></li>
               </ul>
             </div>
@@ -197,6 +197,7 @@
 
       <footer>
         <p>&#169; <a href="https://tahoe-lafs.org/">Tahoe-LAFS Software Foundation 2013</a></p>
+        <p class="minutia">Page rendered at <span n:render="data" n:data="rendered_at" /></p>
         <p class="minutia" n:render="string" n:data="version"></p>
         <p class="minutia">Tahoe-LAFS code imported from: <span n:render="data" n:data="import_path" /></p>
       </footer>
