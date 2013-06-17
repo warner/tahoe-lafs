@@ -441,7 +441,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
 
     def _get_next_allocation(self):
         """
-        Return teh next share allocation that we need to make.
+        Return the next share allocation that we need to make.
 
         Specifically, I return a tuple (tracker, shares_to_ask), where
         tracker is a ServerTracker instance and shares_to_ask is a set of
