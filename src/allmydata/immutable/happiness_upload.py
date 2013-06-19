@@ -137,7 +137,7 @@ class Happiness_Upload:
         #Distribute the shares to peers with the lowest priority
         for share in to_distribute:
             peer = pQueue.get()
-            mappings[share] = peer[1]
+            mappings[share] = set([peer[1]])
             pQueue.put((peer[0]+1, peer[1]))
 
 
@@ -153,7 +153,7 @@ class Happiness_Upload:
             if peer == None:
                 converted_mappings.setdefault(share_to_index[share], None)
             else:
-                converted_mappings.setdefault(share_to_index[share], peer_to_index[peer])
+                converted_mappings.setdefault(share_to_index[share], set([peer_to_index[peer]]))
         return converted_mappings
 
 
