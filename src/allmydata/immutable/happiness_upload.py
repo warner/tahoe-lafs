@@ -1,12 +1,16 @@
+from Queue import PriorityQueue
+
 class Happiness_Upload:
     """
     I handle the calculations involved with generating the maximum
     spanning graph for a file when given a set of peerids, shareids, and
-    a servermap of 'peerid' -> [shareids].
+    a servermap of 'peerid' -> [shareids]. Mappings are returned in a
+    dictionary of 'shareid' -> 'peerid'
     """
 
     def __init__(self, peerids, shareids, servermap={}):
         self.happy = 0
+        self.homeless_shares = set()
         self.peerids = peerids
         self.shareids = shareids
         self.servermap = servermap
@@ -27,7 +31,10 @@ class Happiness_Upload:
             graph = self._flow_network(peerids, shareids)
             maximum_graph = self._compute_maximum_graph(graph, shareids)
             mappings = self._convert_mappings(peer_to_index, share_to_index, maximum_graph)
+            
             self._calculate_happiness(mappings)
+            if len(self.homeless_shares) != 0:
+                self._distribute_homeless_shares(mappings)
             return mappings
 
         else:
@@ -71,16 +78,71 @@ class Happiness_Upload:
             
             mappings = dict(existing_mappings.items() + new_mappings.items())
             self._calculate_happiness(mappings)
+            if len(self.homeless_shares) != 0:
+                self._distribute_homeless_shares(mappings)
+
             return mappings
 
 
     def _calculate_happiness(self, mappings):
-        self.happy = len([v for v in mappings.values() if v is not None])
+        self.happy = 0
+        self.homeless_shares = set()
+        for share in mappings:
+            if mappings[share] is not None:
+                self.happy += 1
+            else:
+                self.homeless_shares.add(share)
 
 
     def happiness(self):
         return self.happy
     
+
+    def _distribute_homeless_shares(self, mappings):
+        """
+        Shares which are not mapped to a peer in the maximum spanning graph
+        still need to be placed on a server. This function attempts to
+        distribute those homeless shares as evenly as possible over the available
+        peers. If possible a share will be placed on the server it was originally
+        on, signifying the lease should be renewed instead.
+
+        Note: I'm assuming Tahoe supports Python 2.6 and using a PriorityQueue.
+        If Tahoe supports 2.5 this will need to be rewritten.
+        """
+        
+        #First check to see if the leases can be renewed
+        to_distribute = set()
+
+        for share in self.homeless_shares:
+            if share in self.servermap_shareids:
+                for peerid in self.servermap:
+                    if share in self.servermap[peerid]:
+                        mappings[share] = peerid
+                        break
+            else:
+                to_distribute.add(share)
+
+        #Distribute remaining shares as evenly as possible
+
+        #Build priority queue of peers with the number of shares
+        #each peer holds as the priority
+        
+        priority = {}
+        pQueue = PriorityQueue()
+        for peerid in self.peerids:
+            priority.setdefault(peerid, 0)
+        for share in mappings:
+            if mappings[share] is not None:
+                priority[mappings[share]] += 1
+        for peerid in priority:
+            pQueue.put((priority[peerid], peerid))
+
+        #Distribute the shares to peers with the lowest priority
+        for share in to_distribute:
+            peer = pQueue.get()
+            mappings[share] = peer[1]
+            pQueue.put((peer[0]+1, peer[1]))
+
 
     def _convert_mappings(self, peer_to_index, share_to_index, maximum_graph):
         """
