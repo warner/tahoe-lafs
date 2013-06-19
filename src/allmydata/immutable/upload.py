@@ -213,9 +213,9 @@ class PeerSelector():
 
     def add_peer_with_shares(self, peerid, shnum):
         if peerid in self.existing_shares.keys():
-            self.existing_shares[peerid].append(shnum)
+            self.existing_shares[peerid].add(shnum)
         else:
-            self.existing_shares[peerid] = [shnum]
+            self.existing_shares[peerid] = set([shnum])
 
     def confirm_share_allocation(peerid, shnum):
         pass
