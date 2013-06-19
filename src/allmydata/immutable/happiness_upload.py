@@ -26,7 +26,9 @@ class Happiness_Upload:
             shareids = [share_to_index[share] for share in self.shareids]
             graph = self._flow_network(peerids, shareids)
             maximum_graph = self._compute_maximum_graph(graph, shareids)
-            return self._convert_mappings(peer_to_index, share_to_index, maximum_graph)
+            mappings = self._convert_mappings(peer_to_index, share_to_index, maximum_graph)
+            self._calculate_happiness(mappings)
+            return mappings
 
         else:
             #Generate a flow network of peerids to existing shareids and find
