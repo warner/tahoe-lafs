@@ -6,6 +6,7 @@ class Happiness_Upload:
     """
 
     def __init__(self, peerids, shareids, servermap={}):
+        self.happy = 0
         self.peerids = peerids
         self.shareids = shareids
         self.servermap = servermap
@@ -65,8 +66,19 @@ class Happiness_Upload:
             graph = self._flow_network(peerids, shareids)
             max_graph = self._compute_maximum_graph(graph, shareids)
             new_mappings = self._convert_mappings(p_index, s_index, max_graph)
-            return dict(existing_mappings.items() + new_mappings.items())
+            
+            mappings = dict(existing_mappings.items() + new_mappings.items())
+            self._calculate_happiness(mappings)
+            return mappings
 
+
+    def _calculate_happiness(self, mappings):
+        self.happy = len([v for v in mappings.values() if v is not None])
+
+
+    def happiness(self):
+        return self.happy
+    
 
     def _convert_mappings(self, peer_to_index, share_to_index, maximum_graph):
         """
