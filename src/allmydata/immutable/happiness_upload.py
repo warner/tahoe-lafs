@@ -56,9 +56,6 @@ class Happiness_Upload:
                     pass
                 else:
                     existing_shares.add(share)
-                if existing_mappings[share] == None:
-                    pass
-                else:
                     existing_peers.add(existing_mappings[share])
 
             #Remove the extracted ids from their respective sets
