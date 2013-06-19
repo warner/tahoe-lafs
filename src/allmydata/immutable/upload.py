@@ -26,6 +26,7 @@ from allmydata.immutable import layout
 from pycryptopp.cipher.aes import AES
 
 from cStringIO import StringIO
+from happiness_upload import Happiness_Upload
 
 
 # this wants to live in storage, not here
@@ -204,12 +205,16 @@ def str_shareloc(shnum, bucketwriter):
 class PeerSelector():
     implements(IPeerSelector)
 
-    def __init__(self):
+    def __init__(self, num_segments, total_shares, needed_shares, servers_of_happiness):
+        self.num_segments = num_segments
+        self.total_shares = total_shares
+        self.needed_shares = needed_shares
+        self.min_happiness = servers_of_happiness
+
         self.existing_shares = {}
         self.peers = set()
         self.full_peers = set()
         self.bad_peers = set()
-        self.allocations = {}
 
     def add_peer_with_shares(self, peerid, shnum):
         if peerid in self.existing_shares.keys():
@@ -235,11 +240,13 @@ class PeerSelector():
             self.full_peers.remove(peerid)
             self.bad_peers.add(peerid)
 
-    def get_tasks():
-        pass
+    def get_tasks(self):
+        shares = set(range(self.total_shares))
+        self.h = Happiness_Upload(self.peers, shares, self.existing_shares)
+        return self.h.generate_mappings()
 
-    def is_healthy():
-        pass
+    def is_healthy(self):
+        return self.min_happiness <= self.h.happiness()
 
 
 class Tahoe2ServerSelector(log.PrefixingLogMixin):
@@ -258,7 +265,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         log.PrefixingLogMixin.__init__(self, 'tahoe.immutable.upload', logparent, prefix=upload_id)
         self.log("starting", level=log.OPERATIONAL)
 
-        self.peer_selector = self.peer_selector_class()
 
     def __repr__(self):
         return "<Tahoe2ServerSelector for upload %s>" % self.upload_id
@@ -278,6 +284,9 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
 
         if self._status:
             self._status.set_status("Contacting Servers..")
+
+        self.peer_selector = self.peer_selector_class(num_segments, total_shares, 
+                                needed_shares, servers_of_happiness)
 
         self.total_shares = total_shares
         self.servers_of_happiness = servers_of_happiness
