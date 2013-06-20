@@ -89,9 +89,6 @@ class Happiness_Upload:
         distribute those homeless shares as evenly as possible over the available
         peers. If possible a share will be placed on the server it was originally
         on, signifying the lease should be renewed instead.
-
-        Note: I'm assuming Tahoe supports Python 2.6 and using a PriorityQueue.
-        If Tahoe supports 2.5 this will need to be rewritten.
         """
         
         #First check to see if the leases can be renewed
