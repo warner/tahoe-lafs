@@ -8,79 +8,64 @@ class Happiness_Upload:
     dictionary of 'shareid' -> 'peerid'
     """
 
-    def __init__(self, peerids, shareids, servermap={}):
+    def __init__(self, peerids, full_peers, shareids, servermap={}):
         self.happy = 0
         self.homeless_shares = set()
         self.peerids = peerids
+        self.full_peers = full_peers
         self.shareids = shareids
         self.servermap = servermap
-        self.servermap_peerids = set([key for key in servermap])
+        self.servermap_peerids = set([key for key in servermap]).union(full_peers)
         self.servermap_shareids = set()
         for key in servermap:
             for share in servermap[key]:
                 self.servermap_shareids.add(share)
 
     def generate_mappings(self):
-        if self.servermap == {}:
-            #If there are no existing share allocations, generate a flow network
-            #of peerids to shareids and find the maximum spanning graph.
-            peer_to_index = self._reindex_ids(self.peerids, 1)
-            share_to_index, index_to_share = self._reindex_shares(self.shareids, len(self.peerids) + 1)
-            peerids = [peer_to_index[peer] for peer in self.peerids]
-            shareids = [share_to_index[share] for share in self.shareids]
-            graph = self._flow_network(peerids, shareids)
-            maximum_graph = self._compute_maximum_graph(graph, shareids)
-            mappings = self._convert_mappings(peer_to_index, index_to_share, maximum_graph)
-            
-            self._calculate_happiness(mappings)
-            if len(self.homeless_shares) != 0:
-                self._distribute_homeless_shares(mappings)
-            return mappings
+    
+        #Generate a flow network of peerids to existing shareids and find
+        #its maximum spanning graph. The leases of these shares should be renewed
+        #by the client.
+        p_index = self._reindex_ids(self.servermap_peerids, 1)
+        share_to_index, index_to_share = self._reindex_shares(self.servermap_shareids, 
+                                            len(self.servermap_peerids) + 1)
+        graph = self._servermap_flow_graph(self.servermap)
+        shareids = [share_to_index[s] for s in self.servermap_shareids]
+        max_server_graph = self._compute_maximum_graph(graph, shareids)
+        existing_mappings = self._convert_mappings(p_index, index_to_share, max_server_graph)
 
-        else:
-            #Generate a flow network of peerids to existing shareids and find
-            #its maximum spanning graph. The leases of these shares should be renewed
-            #by the client.
-            p_index = self._reindex_ids(self.servermap_peerids, 1)
-            share_to_index, index_to_share = self._reindex_shares(self.servermap_shareids, 
-                                                len(self.servermap_peerids) + 1)
-            graph = self._servermap_flow_graph(self.servermap)
-            shareids = [share_to_index[s] for s in self.servermap_shareids]
-            max_server_graph = self._compute_maximum_graph(graph, shareids)
-            existing_mappings = self._convert_mappings(p_index, index_to_share, max_server_graph)
+        #Extract successful shareids and peerids that can be reused
+        existing_shares = set()
+        existing_peers = set()
+        for share in existing_mappings:
+            if existing_mappings[share] == None:
+                pass
+            else:
+                existing_shares.add(share)
+                for item in existing_mappings[share]:
+                    existing_peers.add(item)
 
-            #Extract successful shareids and peerids that can be reused
-            existing_shares = set()
-            existing_peers = set()
-            for share in existing_mappings:
-                if existing_mappings[share] == None:
-                    pass
-                else:
-                    existing_shares.add(share)
-                    for item in existing_mappings[share]:
-                        existing_peers.add(item)
+        #Remove the extracted ids from their respective sets
+        peerids = self.peerids - existing_peers
+        shareids = self.shareids - existing_shares
 
-            #Remove the extracted ids from their respective sets
-            peerids = self.peerids - existing_peers
-            shareids = self.shareids - existing_shares
+        #Generate a flow network of peerids to shareids of all peers
+        #and shares which cannot be reused from previous file allocations.
+        #These mappings represent new allocations the uploader must make.
+        p_index = self._reindex_ids(peerids, 1)
+        share_to_index, index_to_share = self._reindex_shares(shareids, len(peerids) + 1)
+        peerids = [p_index[peer] for peer in peerids]
+        shareids = [share_to_index[share] for share in shareids]
+        graph = self._flow_network(peerids, shareids)
+        max_graph = self._compute_maximum_graph(graph, shareids)
+        new_mappings = self._convert_mappings(p_index, index_to_share, max_graph)
+        
+        mappings = dict(existing_mappings.items() + new_mappings.items())
+        self._calculate_happiness(mappings)
+        if len(self.homeless_shares) != 0:
+            self._distribute_homeless_shares(mappings)
 
-            #Generate a flow network of peerids to shareids of all peers
-            #and shares which cannot be reused from previous file allocations.
-            #These mappings represent new allocations the uploader must make.
-            p_index = self._reindex_ids(peerids, 1)
-            share_to_index, index_to_share = self._reindex_shares(shareids, len(peerids) + 1)
-            peerids = [p_index[peer] for peer in peerids]
-            shareids = [share_to_index[share] for share in shareids]
-            graph = self._flow_network(peerids, shareids)
-            max_graph = self._compute_maximum_graph(graph, shareids)
-            new_mappings = self._convert_mappings(p_index, index_to_share, max_graph)
-            
-            mappings = dict(existing_mappings.items() + new_mappings.items())
-            self._calculate_happiness(mappings)
-            if len(self.homeless_shares) != 0:
-                self._distribute_homeless_shares(mappings)
-
-            return mappings
+        return mappings
 
 
     def _calculate_happiness(self, mappings):

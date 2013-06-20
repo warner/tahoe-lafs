@@ -242,7 +242,7 @@ class PeerSelector():
 
     def get_tasks(self):
         shares = set(range(self.total_shares))
-        self.h = Happiness_Upload(self.peers, shares, self.existing_shares)
+        self.h = Happiness_Upload(self.peers, self.full_peers, shares, self.existing_shares)
         return self.h.generate_mappings()
 
     def is_healthy(self):
