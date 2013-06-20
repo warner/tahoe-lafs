@@ -151,6 +151,9 @@ class Happiness_Upload:
         Generate a flow network of peerids to shareids from a server map
         of 'peerids' -> ['shareids']
         """
+        if servermap == {}:
+            return []
+
         peerids = self.servermap_peerids
         shareids = self.servermap_shareids
         peer_to_index = self._reindex_ids(peerids, 1)
@@ -201,6 +204,9 @@ class Happiness_Upload:
         The implementation here is an adapation of an algorithm described in
         "Introduction to Algorithms", Cormen et al, 2nd ed., pp 658-662.
         """
+
+        if graph == []:
+            return {}
 
         dim = len(graph)
         flow_function = [[0 for sh in xrange(dim)] for s in xrange(dim)]
