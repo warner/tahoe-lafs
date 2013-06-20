@@ -117,8 +117,9 @@ class Happiness_Upload:
             priority.setdefault(peerid, 0)
         for share in mappings:
             if mappings[share] is not None:
-                for item in mappings[share]:
-                    priority[item] += 1
+                for peer in mappings[share]:
+                    if peer in self.peerids:
+                        priority[peer] += 1
         for peerid in priority:
             pQueue.put((priority[peerid], peerid))
 
