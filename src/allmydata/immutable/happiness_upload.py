@@ -117,6 +117,10 @@ class Happiness_Upload:
                 for peer in mappings[share]:
                     if peer in self.peerids:
                         priority[peer] += 1
+        
+        if priority == {}:
+            return
+
         for peerid in priority:
             pQueue.put((priority[peerid], peerid))
 
