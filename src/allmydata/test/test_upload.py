@@ -1200,7 +1200,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         d.addCallback(lambda ign:
             self.failUnless(self._has_happy_share_distribution()))
         return d
-    test_problem_layout_ticket_1124.todo = "Fix this after 1.7.1 release."
+    #test_problem_layout_ticket_1124.todo = "Fix this after 1.7.1 release."
 
     def test_happiness_with_some_readonly_servers(self):
         # Try the following layout
@@ -1865,7 +1865,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         d.addCallback(lambda ign:
             self.failUnless(self._has_happy_share_distribution()))
         return d
-    test_problem_layout_comment_187.todo = "this isn't fixed yet"
+    #test_problem_layout_comment_187.todo = "this isn't fixed yet"
 
     def test_problem_layout_ticket_1118(self):
         # #1118 includes a report from a user who hit an assertion in
@@ -1941,7 +1941,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         d.addCallback(lambda ign:
             self.failUnless(self._has_happy_share_distribution()))
         return d
-    test_problem_layout_ticket_1128.todo = "Invent a smarter uploader that uploads successfully in this case."
+    #test_problem_layout_ticket_1128.todo = "Invent a smarter uploader that uploads successfully in this case."
 
     def test_upload_succeeds_with_some_homeless_shares(self):
         # If the upload is forced to stop trying to place shares before
