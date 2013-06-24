@@ -240,6 +240,13 @@ class PeerSelector():
             self.full_peers.remove(peerid)
             self.bad_peers.add(peerid)
 
+    def get_preexisting(self):
+        preexisting = {}
+        for server in self.existing_shares:
+            for share in self.existing_shares[server]:
+                preexisting.setdefault(share, set()).add(server)
+        return preexisting
+
     def get_tasks(self):
         shares = set(range(self.total_shares))
         self.h = Happiness_Upload(self.peers, self.full_peers, shares, self.existing_shares)
@@ -397,10 +404,21 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             self.query_count += 1
             self.log("asking server %s for any existing shares" %
                      (tracker.get_name(),), level=log.NOISY)
+        
+        for tracker in self.first_pass_trackers:
+            assert isinstance(tracker, ServerTracker)
+            d = tracker.query(set())
+            d.addBoth(self._got_response_2, tracker, set())
+            ds.append(d)
+
         dl = defer.DeferredList(ds)
+        dl.addCallback(lambda ign: self._calculate_tasks())
         dl.addCallback(lambda ign: self._loop())
         return dl
 
+
+    def _calculate_tasks(self):
+        self.tasks = self.peer_selector.get_tasks()
 
     def _handle_existing_response(self, res, tracker):
         """
@@ -459,7 +477,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         """
 
         if not self.homeless_shares:
-            merged = merge_servers(self.preexisting_shares, self.use_trackers)
+            merged = merge_servers(self.peer_selector.get_preexisting(), self.use_trackers)
             effective_happiness = servers_of_happiness(merged)
             if self.servers_of_happiness <= effective_happiness:
                 return None
@@ -472,7 +490,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         assert isinstance(tracker, ServerTracker)
 
         shares_to_ask = set()
-        servermap = self.peer_selector.get_tasks()
+        servermap = self.tasks
         for shnum, tracker_id in servermap.items():
             if tracker.get_serverid() in tracker_id:
                 self.use_trackers.add(tracker)
@@ -488,7 +506,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                                        len(self.homeless_shares)))
         return (tracker, shares_to_ask)
 
-        
 
     def _loop(self):
         allocation = self._get_next_allocation()
@@ -498,11 +515,11 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             d.addBoth(self._got_response, tracker, shares_to_ask)
             return d
         
-        else:   
+        else: 
             # no more servers. If we haven't placed enough shares, we fail.
-            merged = merge_servers(self.preexisting_shares, self.use_trackers)
+            merged = merge_servers(self.peer_selector.get_preexisting(), self.use_trackers)
             effective_happiness = servers_of_happiness(merged)
-            if effective_happiness < self.servers_of_happiness:
+            if not self.peer_selector.is_healthy():
                 msg = failure_message(len(self.serverids_with_shares),
                                       self.needed_shares,
                                       self.servers_of_happiness,
@@ -527,7 +544,22 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                            for st in self.use_trackers],
                           pretty_print_shnum_to_servers(self.preexisting_shares))
                 self.log(msg, level=log.OPERATIONAL)
-                return (self.use_trackers, self.preexisting_shares)
+                return (self.use_trackers, self.peer_selector.get_preexisting())
+
+
+    def _got_response_2(self, res, tracker, shares_to_ask):
+        """
+        Function handles the response from the write servers
+        when inquiring about what shares each server already has.
+        """
+
+        if isinstance(res, failure.Failure):
+            self.peer_selector.mark_bad_peer(tracker.get_serverid())
+        else:
+            (alreadygot, allocated) = res
+            for share in alreadygot:
+                self.peer_selector.add_peer_with_shares(tracker.get_serverid(), share)
+
 
     def _got_response(self, res, tracker, shares_to_ask):
         if isinstance(res, failure.Failure):
