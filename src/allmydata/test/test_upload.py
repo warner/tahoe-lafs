@@ -513,7 +513,7 @@ class ServerSelection(unittest.TestCase):
             for s in self.node.last_servers:
                 allocated = s.allocated
                 self.failUnlessEqual(len(allocated), 1)
-                self.failUnlessEqual(s.queries, 1)
+                self.failUnlessEqual(s.queries, 2)
         d.addCallback(_check)
         return d
 
@@ -553,7 +553,7 @@ class ServerSelection(unittest.TestCase):
                 allocated = s.allocated
                 self.failUnless(len(allocated) in (1,2), len(allocated))
                 if len(allocated) == 1:
-                    self.failUnlessEqual(s.queries, 1)
+                    self.failUnlessEqual(s.queries, 2)
                     got_one.append(s)
                 else:
                     self.failUnlessEqual(s.queries, 2)
