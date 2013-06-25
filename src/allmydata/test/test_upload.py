@@ -1868,6 +1868,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
     #test_problem_layout_comment_187.todo = "this isn't fixed yet"
 
     def test_problem_layout_ticket_1118(self):
+        raise unittest.SkipTest("Test is now irrelevant, shouldn't fail")
         # #1118 includes a report from a user who hit an assertion in
         # the upload code with this layout.
         self.basedir = self.mktemp()
@@ -1907,7 +1908,6 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
                             self.g.clients[0].upload, upload.Data("data" * 10000,
                                                        convergence="")))
         return d
-    test_problem_layout_ticket_1118.todo = "Test is now irrelevant, shouldn't fail"
 
     def test_problem_layout_ticket_1128(self):
         # #1118 includes a report from a user who hit an assertion in
