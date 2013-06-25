@@ -492,6 +492,8 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         shares_to_ask = set()
         servermap = self.tasks
         for shnum, tracker_id in servermap.items():
+            if tracker_id == None:
+                return None
             if tracker.get_serverid() in tracker_id:
                 self.use_trackers.add(tracker)
                 shares_to_ask.add(shnum)
