@@ -376,9 +376,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         # fourth, etc pass), until all shares are assigned, or we've run out
         # of potential servers.
         self.first_pass_trackers = _make_trackers(writeable_servers)
-        self.second_pass_trackers = [] # servers worth asking again
-        self.next_pass_trackers = [] # servers that we have asked again
-        self._started_second_pass = False
 
         # We don't try to allocate shares to these servers, since they've
         # said that they're incapable of storing shares of the size that we'd
@@ -476,12 +473,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         allocations to make, I return None.
         """
 
-        if not self.homeless_shares:
-            merged = merge_servers(self.peer_selector.get_preexisting(), self.use_trackers)
-            effective_happiness = servers_of_happiness(merged)
-            if self.servers_of_happiness <= effective_happiness:
-                return None
-                    
         if len(self.first_pass_trackers) == 0:
             return None
 
@@ -572,9 +563,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             self.error_count += 1
             self.bad_query_count += 1
             self.homeless_shares |= shares_to_ask
-            if (self.first_pass_trackers
-                or self.second_pass_trackers
-                or self.next_pass_trackers):
+            if (self.first_pass_trackers):
                 # there is still hope, so just loop
                 pass
             else:
