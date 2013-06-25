@@ -407,6 +407,10 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             d = tracker.query(set())
             d.addBoth(self._got_response_2, tracker, set())
             ds.append(d)
+            self.num_servers_contacted += 1
+            self.query_count += 1
+            self.log("asking server %s for any existing shares" %
+                     (tracker.get_name(),), level=log.NOISY)
 
         dl = defer.DeferredList(ds)
         dl.addCallback(lambda ign: self._calculate_tasks())
@@ -548,6 +552,11 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
 
         if isinstance(res, failure.Failure):
             self.peer_selector.mark_bad_peer(tracker.get_serverid())
+            self.log("%s got error during server selection: %s" % (tracker, res),
+                    level=log.UNUSUAL)
+            self.error_count += 1
+            self.bad_query_count += 1
+            self.homeless_shares |= shares_to_ask
         else:
             (alreadygot, allocated) = res
             for share in alreadygot:
