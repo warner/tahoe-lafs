@@ -1907,6 +1907,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
                             self.g.clients[0].upload, upload.Data("data" * 10000,
                                                        convergence="")))
         return d
+    test_problem_layout_ticket_1118.todo = "Test is now irrelevant, shouldn't fail"
 
     def test_problem_layout_ticket_1128(self):
         # #1118 includes a report from a user who hit an assertion in
