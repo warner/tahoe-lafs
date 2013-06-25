@@ -557,6 +557,9 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             self.error_count += 1
             self.bad_query_count += 1
             self.homeless_shares |= shares_to_ask
+
+            msg = ("last failure (from %s) was: %s" % (tracker, res))
+            self.last_failure_msg = msg
         else:
             (alreadygot, allocated) = res
             for share in alreadygot:
