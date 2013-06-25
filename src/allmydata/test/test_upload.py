@@ -449,7 +449,7 @@ class ServerErrors(unittest.TestCase, ShouldFailMixin, SetDEPMixin):
                             "server selection failed",
                             upload_data, self.u, DATA)
         def _check((f,)):
-            self.failUnlessIn("placed 10 shares out of 100 total", str(f.value))
+            self.failUnlessIn("placed 0 shares out of 100 total", str(f.value))
             # there should also be a 'last failure was' message
             self.failUnlessIn("ServerError", str(f.value))
         d.addCallback(_check)
@@ -1595,7 +1595,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         d.addCallback(_setup)
         d.addCallback(lambda c:
             self.shouldFail(UploadUnhappinessError, "test_query_counting",
-                            "10 queries placed some shares",
+                            "0 queries placed some shares",
                             c.upload, upload.Data("data" * 10000,
                                                   convergence="")))
         # Now try with some readonly servers. We want to make sure that
@@ -1648,7 +1648,7 @@ class EncodingParameters(GridTestMixin, unittest.TestCase, SetDEPMixin,
         d.addCallback(_next)
         d.addCallback(lambda c:
             self.shouldFail(UploadUnhappinessError, "test_query_counting",
-                            "1 queries placed some shares",
+                            "0 queries placed some shares",
                             c.upload, upload.Data("data" * 10000,
                                                   convergence="")))
         return d
