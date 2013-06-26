@@ -57,7 +57,7 @@ set of writable servers.
 If the servers-of-happiness criteria can be met, the upload strategy of
 happiness guarantees that N shares will be placed on the network. During file
 repair, if the set of servers is larger than N, the algorithm will only attempt
-to spread shares over N distinct servers. For both initial file upload and
+to spread shares over N distinct servers. For both initial file upload and file
 repair, N should be viewed as the maximum number of distinct servers shares
 can be placed on, and H as the minimum amount. The uploader will fail if
 the number of distinct servers is less than H, and it will never attempt to
