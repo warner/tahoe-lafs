@@ -494,7 +494,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 shares_to_ask.add(shnum)
                 if shnum in self.homeless_shares:
                     self.homeless_shares.remove(shnum)
-        self.num_servers_contacted += 1
         
         if self._status:
             self._status.set_status("Contacting Servers [%s] (first query),"
