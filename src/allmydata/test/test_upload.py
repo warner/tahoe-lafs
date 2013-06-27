@@ -424,6 +424,7 @@ class ServerErrors(unittest.TestCase, ShouldFailMixin, SetDEPMixin):
         return d
 
     def test_second_error(self):
+        raise unittest.SkipTest("Test is now irrelevant, 3rd pass does not apply")
         # we want to make sure we make it to a third pass. This means that
         # the first pass was insufficient to place all shares, and at least
         # one of second pass servers (other than the last one) accepted a
