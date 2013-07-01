@@ -934,13 +934,13 @@ class Corruption(_Base, unittest.TestCase):
         log.msg("corrupt %d" % which)
         def _corruptor(s, debug=False):
             return s[:which] + chr(ord(s[which])^0x01) + s[which+1:]
-        self.corrupt_shares_numbered(imm_uri, [0], _corruptor)
+        self.corrupt_shares_numbered(imm_uri, [2], _corruptor)
 
     def _corrupt_set(self, ign, imm_uri, which, newvalue):
         log.msg("corrupt %d" % which)
         def _corruptor(s, debug=False):
             return s[:which] + chr(newvalue) + s[which+1:]
-        self.corrupt_shares_numbered(imm_uri, [0], _corruptor)
+        self.corrupt_shares_numbered(imm_uri, [2], _corruptor)
 
     def test_each_byte(self):
         # Setting catalog_detection=True performs an exhaustive test of the
@@ -976,25 +976,25 @@ class Corruption(_Base, unittest.TestCase):
             def _got_data(data):
                 self.failUnlessEqual(data, plaintext)
                 shnums = sorted([s._shnum for s in n._cnode._node._shares])
-                no_sh0 = bool(0 not in shnums)
-                sh0 = [s for s in n._cnode._node._shares if s._shnum == 0]
-                sh0_had_corruption = False
-                if sh0 and sh0[0].had_corruption:
-                    sh0_had_corruption = True
+                no_sh2 = bool(2 not in shnums)
+                sh2 = [s for s in n._cnode._node._shares if s._shnum == 2]
+                sh2_had_corruption = False
+                if sh2 and sh2[0].had_corruption:
+                    sh2_had_corruption = True
                 num_needed = len(n._cnode._node._shares)
                 if self.catalog_detection:
-                    detected = no_sh0 or sh0_had_corruption or (num_needed!=3)
+                    detected = no_sh2 or sh2_had_corruption or (num_needed!=3)
                     if not detected:
                         undetected.add(which, 1)
-                if expected == "no-sh0":
-                    self.failIfIn(0, shnums)
-                elif expected == "0bad-need-3":
-                    self.failIf(no_sh0)
-                    self.failUnless(sh0[0].had_corruption)
+                if expected == "no-sh2":
+                    self.failIfIn(2, shnums)
+                elif expected == "2bad-need-3":
+                    self.failIf(no_sh2)
+                    self.failUnless(sh2[0].had_corruption)
                     self.failUnlessEqual(num_needed, 3)
                 elif expected == "need-4th":
-                    self.failIf(no_sh0)
-                    self.failUnless(sh0[0].had_corruption)
+                    self.failIf(no_sh2)
+                    self.failUnless(sh2[0].had_corruption)
                     self.failIfEqual(num_needed, 3)
             d.addCallback(_got_data)
             return d
@@ -1012,7 +1012,7 @@ class Corruption(_Base, unittest.TestCase):
             # data-block-offset, and offset=48 is the first byte of the first
             # data-block). Each one also specifies what sort of corruption
             # we're expecting to see.
-            no_sh0_victims = [0,1,2,3] # container version
+            no_sh2_victims = [0,1,2,3] # container version
             need3_victims =  [ ] # none currently in this category
             # when the offsets are corrupted, the Share will be unable to
             # retrieve the data it wants (because it thinks that data lives
@@ -1043,8 +1043,8 @@ class Corruption(_Base, unittest.TestCase):
             need_4th_victims.append(824) # share_hashes
             need_4th_victims.append(994) # UEB length
             need_4th_victims.append(998) # UEB
-            corrupt_me = ([(i,"no-sh0") for i in no_sh0_victims] +
-                          [(i, "0bad-need-3") for i in need3_victims] +
+            corrupt_me = ([(i,"no-sh2") for i in no_sh2_victims] +
+                          [(i, "2bad-need-3") for i in need3_victims] +
                           [(i, "need-4th") for i in need_4th_victims])
             if self.catalog_detection:
                 corrupt_me = [(i, "") for i in range(len(self.sh0_orig))]
@@ -1055,7 +1055,7 @@ class Corruption(_Base, unittest.TestCase):
                 d.addCallback(_download, imm_uri, i, expected)
                 d.addCallback(lambda ign: self.restore_all_shares(self.shares))
                 d.addCallback(fireEventually)
-            corrupt_values = [(3, 2, "no-sh0"),
+            corrupt_values = [(3, 2, "no-sh2"),
                               (15, 2, "need-4th"), # share looks v2
                               ]
             for i,newvalue,expected in corrupt_values:
