@@ -15,7 +15,7 @@ class Happiness_Upload:
         self.readonly_peers = readonly_peers
         self.shareids = shareids
         self.servermap = servermap
-        self.servermap_peerids = set([key for key in servermap]).union(readonly_peers)
+        self.servermap_peerids = set([key for key in servermap])
         self.servermap_shareids = set()
         for key in servermap:
             for share in servermap[key]:
