@@ -217,7 +217,7 @@ class PeerSelector():
         self.full_peers = set()
         self.bad_peers = set()
 
-    def add_peer_with_shares(self, peerid, shnum):
+    def add_peer_with_share(self, peerid, shnum):
         if peerid in self.existing_shares.keys():
             self.existing_shares[peerid].add(shnum)
         else:
@@ -229,8 +229,8 @@ class PeerSelector():
     def get_allocations(self):
         return self.confirmed_allocations
 
-    def add_peers(self, peerids=set):
-        self.peers = peerids.copy()
+    def add_peer(self, peerid):
+        self.peers.add(peerid)
 
     def mark_full_peer(self, peerid):
         self.full_peers.add(peerid)
@@ -337,7 +337,8 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             v1 = v0["http://allmydata.org/tahoe/protocols/storage/v1"]
             return v1["maximum-immutable-share-size"]
 
-        self.peer_selector.add_peers(set(server.get_serverid() for server in all_servers))
+        for server in all_servers:
+            self.peer_selector.add_peer(server.get_serverid())
 
         writeable_servers = [server for server in all_servers
                             if _get_maxsize(server) >= allocated_size]
@@ -409,7 +410,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         for tracker in write_trackers:
             assert isinstance(tracker, ServerTracker)
             d = tracker.query(set())
-            d.addBoth(self._got_response_2, tracker, set())
+            d.addBoth(self._handle_existing_write_response, tracker, set())
             ds.append(d)
             self.num_servers_contacted += 1
             self.query_count += 1
@@ -447,9 +448,27 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                     % (tracker.get_name(), tuple(sorted(buckets))),
                     level=log.NOISY)
             for bucket in buckets:
-                self.peer_selector.add_peer_with_shares(serverid, bucket)
+                self.peer_selector.add_peer_with_share(serverid, bucket)
                 self.preexisting_shares.setdefault(bucket, set()).add(serverid)
                 self.homeless_shares.discard(bucket)
+
+    def _handle_existing_write_response(self, res, tracker, shares_to_ask):
+        """
+        Function handles the response from the write servers
+        when inquiring about what shares each server already has.
+        """
+        if isinstance(res, failure.Failure):
+            self.peer_selector.mark_bad_peer(tracker.get_serverid())
+            self.log("%s got error during server selection: %s" % (tracker, res),
+                    level=log.UNUSUAL)
+            self.homeless_shares |= shares_to_ask
+
+            msg = ("last failure (from %s) was: %s" % (tracker, res))
+            self.last_failure_msg = msg
+        else:
+            (alreadygot, allocated) = res
+            for share in alreadygot:
+                self.peer_selector.add_peer_with_share(tracker.get_serverid(), share)
 
 
     def _get_progress_message(self):
@@ -544,26 +563,6 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                           pretty_print_shnum_to_servers(self.preexisting_shares))
                 self.log(msg, level=log.OPERATIONAL)
                 return (self.use_trackers, self.peer_selector.get_preexisting())
-
-
-    def _got_response_2(self, res, tracker, shares_to_ask):
-        """
-        Function handles the response from the write servers
-        when inquiring about what shares each server already has.
-        """
-
-        if isinstance(res, failure.Failure):
-            self.peer_selector.mark_bad_peer(tracker.get_serverid())
-            self.log("%s got error during server selection: %s" % (tracker, res),
-                    level=log.UNUSUAL)
-            self.homeless_shares |= shares_to_ask
-
-            msg = ("last failure (from %s) was: %s" % (tracker, res))
-            self.last_failure_msg = msg
-        else:
-            (alreadygot, allocated) = res
-            for share in alreadygot:
-                self.peer_selector.add_peer_with_shares(tracker.get_serverid(), share)
 
 
     def _got_response(self, res, tracker, shares_to_ask):
