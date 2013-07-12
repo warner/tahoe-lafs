@@ -296,7 +296,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         if self._status:
             self._status.set_status("Contacting Servers..")
 
-        self.peer_selector = self.peer_selector_class(num_segments, total_shares, 
+        self.peer_selector = self.peer_selector_class(num_segments, total_shares,
                                 needed_shares, servers_of_happiness)
 
         self.total_shares = total_shares
@@ -337,13 +337,12 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             v1 = v0["http://allmydata.org/tahoe/protocols/storage/v1"]
             return v1["maximum-immutable-share-size"]
 
-        for server in all_servers:
+        candidate_servers = all_servers[:2*total_shares]
+        for server in candidate_servers:
             self.peer_selector.add_peer(server.get_serverid())
-
-        writeable_servers = [server for server in all_servers
+        writeable_servers = [server for server in candidate_servers
                             if _get_maxsize(server) >= allocated_size]
-        readonly_servers = set(all_servers[:2*total_shares]) - set(writeable_servers)
-
+        readonly_servers = set(candidate_servers) - set(writeable_servers)
         for server in readonly_servers:
             self.peer_selector.mark_full_peer(server.get_serverid())
 
@@ -406,7 +405,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             self.query_count += 1
             self.log("asking server %s for any existing shares" %
                      (tracker.get_name(),), level=log.NOISY)
-        
+
         for tracker in write_trackers:
             assert isinstance(tracker, ServerTracker)
             d = tracker.query(set())
@@ -516,7 +515,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
                 shares_to_ask.add(shnum)
                 if shnum in self.homeless_shares:
                     self.homeless_shares.remove(shnum)
-        
+
         if self._status:
             self._status.set_status("Contacting Servers [%s] (first query),"
                                     " %d shares left.."
@@ -532,8 +531,8 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
             d = tracker.query(shares_to_ask)
             d.addBoth(self._got_response, tracker, shares_to_ask)
             return d
-        
-        else: 
+
+        else:
             # no more servers. If we haven't placed enough shares, we fail.
             merged = merge_servers(self.peer_selector.get_preexisting(), self.use_trackers)
             effective_happiness = servers_of_happiness(self.peer_selector.get_allocations())
