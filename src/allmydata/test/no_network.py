@@ -390,6 +390,7 @@ class GridTestMixin:
         return shares
 
     def restore_all_shares(self, shares):
+        print "restore_all_shares"
         for sharefile, data in shares.items():
             open(sharefile, "wb").write(data)
 

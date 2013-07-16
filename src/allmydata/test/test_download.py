@@ -929,8 +929,9 @@ class StallingConsumer(MemoryConsumer):
         return MemoryConsumer.write(self, data)
 
 class Corruption(_Base, unittest.TestCase):
-
+    timeout = 2400
     def _corrupt_flip(self, ign, imm_uri, which):
+        print "corrupt", which
         log.msg("corrupt %d" % which)
         def _corruptor(s, debug=False):
             return s[:which] + chr(ord(s[which])^0x01) + s[which+1:]
@@ -951,7 +952,7 @@ class Corruption(_Base, unittest.TestCase):
         # (since we don't need every byte of the share). That takes 50s to
         # run on my laptop and doesn't have any actual asserts, so we don't
         # normally do that.
-        self.catalog_detection = False
+        self.catalog_detection = True
 
         self.basedir = "download/Corruption/each_byte"
         self.set_up_grid()
@@ -967,13 +968,16 @@ class Corruption(_Base, unittest.TestCase):
             undetected = spans.Spans()
 
         def _download(ign, imm_uri, which, expected):
+            print "_download", which
             n = self.c0.create_node_from_uri(imm_uri)
             n._cnode._maybe_create_download_node()
             # for this test to work, we need to have a new Node each time.
             # Make sure the NodeMaker's weakcache hasn't interfered.
             assert not n._cnode._node._shares
             d = download_to_data(n)
+            print "started download_to_data"
             def _got_data(data):
+                print " _download _got_data", which
                 self.failUnlessEqual(data, plaintext)
                 shnums = sorted([s._shnum for s in n._cnode._node._shares])
                 no_sh2 = bool(2 not in shnums)
@@ -997,6 +1001,11 @@ class Corruption(_Base, unittest.TestCase):
                     self.failUnless(sh2[0].had_corruption)
                     self.failIfEqual(num_needed, 3)
             d.addCallback(_got_data)
+            def oops(f):
+                print "_got_data failed"
+                print f
+                return f
+            d.addErrback(oops)
             return d
 
 
@@ -1047,7 +1056,11 @@ class Corruption(_Base, unittest.TestCase):
                           [(i, "2bad-need-3") for i in need3_victims] +
                           [(i, "need-4th") for i in need_4th_victims])
             if self.catalog_detection:
-                corrupt_me = [(i, "") for i in range(len(self.sh0_orig))]
+                share_len = len(self.shares.values()[0])
+                print share_len
+                corrupt_me = [(i, "") for i in range(share_len)]
+                #corrupt_me = [(i, "") for i in range(2070)]
+                #corrupt_me = [(i, "") for i in range(len(self.sh0_orig))]
             for i,expected in corrupt_me:
                 # All these tests result in a successful download. What we're
                 # measuring is how many shares the downloader had to use.
