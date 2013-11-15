@@ -177,7 +177,7 @@ connected to the introducer, and we use that available space information to
 remove any servers that cannot hold an encoded share for our file. Then we ask
 some of the servers thus removed if they are already holding any encoded shares
 for our file; we use this information later. (We ask any servers which are in
-the first 2*``N`` elements of the permuted list.)
+the first 2* ``N`` elements of the permuted list.)
 
 Then, server selection is determined and shares are appropriately placed. For
 a detailed description of server selection, refer to
