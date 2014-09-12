@@ -87,6 +87,7 @@ package_imports = [
     ('zope.interface',   'zope.interface'),
     ('python',           None),
     ('platform',         None),
+    ('subprocess32',     'subprocess32'),
     ('pyOpenSSL',        'OpenSSL'),
     ('simplejson',       'simplejson'),
     ('pycrypto',         'Crypto'),
