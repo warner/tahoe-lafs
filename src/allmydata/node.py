@@ -6,7 +6,7 @@ from twisted.application import service
 from twisted.internet import defer, reactor
 from foolscap.api import Tub, eventually, app_versions
 import foolscap.logging.log
-from allmydata import get_package_versions, get_package_versions_string
+from allmydata.util.versionutil import get_package_versions, get_package_versions_string
 from allmydata.util import log
 from allmydata.util import fileutil, iputil, observer
 from allmydata.util.assertutil import precondition, _assert

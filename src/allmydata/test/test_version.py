@@ -3,7 +3,7 @@ from pkg_resources import Requirement
 
 from twisted.trial import unittest
 
-from allmydata import check_requirement, cross_check, PackagingError
+from allmydata.util.versionutil import check_requirement, cross_check, PackagingError
 from allmydata.util.verlib import NormalizedVersion as V, \
                                   IrrationalVersionError, \
                                   suggest_normalized_version as suggest

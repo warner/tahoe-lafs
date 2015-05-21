@@ -9,6 +9,7 @@ from allmydata import client
 from allmydata.storage_client import StorageFarmBroker
 from allmydata.manhole import AuthorizedKeysManhole
 from allmydata.util import base32, fileutil
+from allmydata.util.versionutil import get_package_versions_string
 from allmydata.interfaces import IFilesystemNode, IFileNode, \
      IImmutableFileNode, IMutableFileNode, IDirectoryNode
 from foolscap.api import flushEventualQueue
@@ -272,7 +273,7 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
         self.failIfEqual(str(allmydata.__version__), "unknown")
         self.failUnless("." in str(allmydata.__full_version__),
                         "non-numeric version in '%s'" % allmydata.__version__)
-        all_versions = allmydata.get_package_versions_string()
+        all_versions = get_package_versions_string()
         self.failUnless(allmydata.__appname__ in all_versions)
         # also test stats
         stats = c.get_stats()

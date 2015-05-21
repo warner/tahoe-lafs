@@ -7,6 +7,7 @@ from twisted.python import usage
 from allmydata.scripts.common import get_default_nodedir
 from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer, admin
 from allmydata.util.encodingutil import quote_output, quote_local_unicode_path, get_io_encoding
+from allmydata.util.versionutil import get_package_versions_string
 
 def GROUP(s):
     # Usage.parseOptions compares argv[1] against command[0], so it will
@@ -58,12 +59,12 @@ class Options(usage.Options):
 
     def opt_version(self):
         import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string(debug=True)
+        print >>self.stdout, get_package_versions_string(debug=True)
         self.no_command_needed = True
 
     def opt_version_and_path(self):
         import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string(show_paths=True, debug=True)
+        print >>self.stdout, get_package_versions_string(show_paths=True, debug=True)
         self.no_command_needed = True
 
     def getSynopsis(self):
