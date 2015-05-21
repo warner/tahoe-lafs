@@ -6,7 +6,7 @@ from twisted.application import service
 from twisted.internet import defer, reactor
 from foolscap.api import Tub, eventually, app_versions
 import foolscap.logging.log
-from allmydata import get_package_versions, get_package_versions_string
+import allmydata
 from allmydata.util import log
 from allmydata.util import fileutil, iputil, observer
 from allmydata.util.assertutil import precondition, _assert
@@ -15,8 +15,7 @@ from allmydata.util.encodingutil import get_filesystem_encoding, quote_output
 
 # Add our application versions to the data that Foolscap's LogPublisher
 # reports.
-for thing, things_version in get_package_versions().iteritems():
-    app_versions.add_version(thing, str(things_version))
+app_versions.add_version("tahoe", allmydata.__version__)
 
 # group 1 will be addr (dotted quad string), group 3 if any will be portnum (string)
 ADDR_RE=re.compile("^([1-9][0-9]*\.[1-9][0-9]*\.[1-9][0-9]*\.[1-9][0-9]*)(:([1-9][0-9]*))?$")
@@ -89,7 +88,7 @@ class Node(service.MultiService):
 
         self.setup_ssh()
         self.setup_logging()
-        self.log("Node constructed. " + get_package_versions_string())
+        self.log("Node constructed. " + allmydata.__version__)
         iputil.increase_rlimits()
 
     def init_tempdir(self):

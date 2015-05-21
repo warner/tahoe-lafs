@@ -8,7 +8,6 @@ from nevow.static import File as nevow_File # TODO: merge with static.File?
 from nevow.util import resource_filename
 
 import allmydata # to display import path
-from allmydata import get_package_versions_string
 from allmydata.util import log
 from allmydata.interfaces import IFileNode
 from allmydata.web import filenode, directory, unlinked, status, operations
@@ -173,7 +172,7 @@ class Root(rend.Page):
     def data_rendered_at(self, ctx, data):
         return time.strftime(TIME_FORMAT, time.localtime())
     def data_version(self, ctx, data):
-        return get_package_versions_string()
+        return "tahoe: %s" % allmydata.__version__
     def data_import_path(self, ctx, data):
         return str(allmydata)
     def render_my_nodeid(self, ctx, data):

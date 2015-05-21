@@ -5,7 +5,6 @@ from nevow.static import File as nevow_File
 from nevow.util import resource_filename
 import allmydata
 import simplejson
-from allmydata import get_package_versions_string
 from allmydata.util import idlib
 from allmydata.web.common import getxmlfile, get_arg, TIME_FORMAT
 
@@ -71,7 +70,7 @@ class IntroducerRoot(rend.Page):
     def data_rendered_at(self, ctx, data):
         return time.strftime(TIME_FORMAT, time.localtime())
     def data_version(self, ctx, data):
-        return get_package_versions_string()
+        return "tahoe: %s" % allmydata.__version__
     def data_import_path(self, ctx, data):
         return str(allmydata).replace("/", "/ ") # XXX kludge for wrapping
     def data_my_nodeid(self, ctx, data):

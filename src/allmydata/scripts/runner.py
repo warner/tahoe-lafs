@@ -58,12 +58,7 @@ class Options(usage.Options):
 
     def opt_version(self):
         import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string(debug=True)
-        self.no_command_needed = True
-
-    def opt_version_and_path(self):
-        import allmydata
-        print >>self.stdout, allmydata.get_package_versions_string(show_paths=True, debug=True)
+        print >>self.stdout, "tahoe:", allmydata.__version__
         self.no_command_needed = True
 
     def getSynopsis(self):
