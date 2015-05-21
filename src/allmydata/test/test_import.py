@@ -1,7 +1,7 @@
 
 from twisted.trial import unittest
 
-import allmydata
+from allmydata.util.versionutil import get_package_versions_and_locations
 import mock
 
 real_import_func = __import__
@@ -18,7 +18,7 @@ class T(unittest.TestCase):
 
         mockimport.side_effect = raiseIE_from_this_particular_func
 
-        vers_and_locs =  allmydata.get_package_versions_and_locations()
+        vers_and_locs = get_package_versions_and_locations()
         for (pkgname, stuff) in vers_and_locs:
             if pkgname == 'foolscap':
                 self.failUnless('wheeeyo' in str(stuff[2]), stuff)
