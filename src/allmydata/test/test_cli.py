@@ -1254,7 +1254,7 @@ class Options(ReallyEqualMixin, unittest.TestCase):
         # "tahoe --version" dumps text to stdout and exits
         stdout = StringIO()
         self.failUnlessRaises(SystemExit, self.parse, ["--version"], stdout)
-        self.failUnlessIn(allmydata.__appname__ + ":", stdout.getvalue())
+        self.failUnlessIn("allmydata-tahoe:", stdout.getvalue())
         # but "tahoe SUBCOMMAND --version" should be rejected
         self.failUnlessRaises(usage.UsageError, self.parse,
                               ["start", "--version"])

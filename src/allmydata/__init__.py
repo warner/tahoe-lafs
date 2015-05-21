@@ -30,17 +30,10 @@ except ImportError:
     # branch is. This should not happen very often.
     pass
 
-__appname__ = "unknown"
-try:
-    from allmydata._appname import __appname__
-except ImportError:
-    # We're running in a tree that hasn't run "./setup.py".  This shouldn't happen.
-    pass
-
-# __full_version__ is the one that you ought to use when identifying yourself in the
-# "application" part of the Tahoe versioning scheme:
+# __full_version__ is the one that you ought to use when identifying yourself
+# in the "application" part of the Tahoe versioning scheme:
 # https://tahoe-lafs.org/trac/tahoe-lafs/wiki/Versioning
-__full_version__ = __appname__ + '/' + str(__version__)
+__full_version__ = 'allmydata-tahoe/' + str(__version__)
 
 import os, platform, re, subprocess, sys, traceback
 _distributor_id_cmdline_re = re.compile("(?:Distributor ID:)\s*(.*)", re.I)
@@ -200,7 +193,7 @@ def get_package_versions_and_locations():
         else:
             return 'unknown'
 
-    for pkgname, modulename in [(__appname__, 'allmydata')] + package_imports:
+    for pkgname, modulename in [('allmydata-tahoe', 'allmydata')] + package_imports:
         if modulename:
             try:
                 __import__(modulename)
@@ -211,7 +204,7 @@ def get_package_versions_and_locations():
                 packages.append( (pkgname, (None, None, trace_info)) )
             else:
                 comment = None
-                if pkgname == __appname__:
+                if pkgname == "allmydata-tahoe":
                     comment = "%s: %s" % (branch, full_version)
                 elif pkgname == 'setuptools' and hasattr(module, '_distribute'):
                     # distribute does not report its version in any module variables
@@ -297,7 +290,7 @@ def cross_check(pkg_resources_vers_and_locs, imported_vers_and_locs_list):
     from _auto_deps import not_import_versionable, ignorable
 
     errors = []
-    not_pkg_resourceable = ['python', 'platform', __appname__.lower()]
+    not_pkg_resourceable = ['python', 'platform', "allmydata-tahoe"]
 
     for name, (imp_ver, imp_loc, imp_comment) in imported_vers_and_locs_list:
         name = name.lower()

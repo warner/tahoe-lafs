@@ -273,7 +273,7 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
         self.failUnless("." in str(allmydata.__full_version__),
                         "non-numeric version in '%s'" % allmydata.__version__)
         all_versions = allmydata.get_package_versions_string()
-        self.failUnless(allmydata.__appname__ in all_versions)
+        self.failUnless("allmydata-tahoe" in all_versions)
         # also test stats
         stats = c.get_stats()
         self.failUnless("node.uptime" in stats)

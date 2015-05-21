@@ -40,19 +40,6 @@ def read_version_py(infname):
 VERSION_PY_FILENAME = 'src/allmydata/_version.py'
 version = read_version_py(VERSION_PY_FILENAME)
 
-APPNAME='allmydata-tahoe'
-APPNAMEFILE = os.path.join('src', 'allmydata', '_appname.py')
-APPNAMEFILESTR = "__appname__ = '%s'" % (APPNAME,)
-try:
-    curappnamefilestr = open(APPNAMEFILE, 'rU').read()
-except EnvironmentError:
-    # No file, or unreadable or something, okay then let's try to write one.
-    open(APPNAMEFILE, "w").write(APPNAMEFILESTR)
-else:
-    if curappnamefilestr.strip() != APPNAMEFILESTR:
-        print("Error -- this setup.py file is configured with the 'application name' to be '%s', but there is already a file in place in '%s' which contains the contents '%s'.  If the file is wrong, please remove it and setup.py will regenerate it and write '%s' into it." % (APPNAME, APPNAMEFILE, curappnamefilestr, APPNAMEFILESTR))
-        sys.exit(-1)
-
 # setuptools/zetuptoolz looks in __main__.__requires__ for a list of
 # requirements. When running "python setup.py test", __main__ is
 # setup.py, so we put the list here so that the requirements will be
@@ -418,7 +405,7 @@ setup_args = {}
 if version:
     setup_args["version"] = version
 
-setup(name=APPNAME,
+setup(name="allmydata-tahoe",
       description='secure, decentralized, fault-tolerant filesystem',
       long_description=open('README.rst', 'rU').read(),
       author='the Tahoe-LAFS project',

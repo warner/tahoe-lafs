@@ -159,7 +159,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
                              "with a _version.py and 'setup.py update_version' hasn't been run.")
 
             srcdir = os.path.dirname(os.path.dirname(os.path.normcase(os.path.realpath(srcfile))))
-            info = repr((res, allmydata.__appname__, required_verstr, srcdir))
+            info = repr((res, "allmydata-tahoe", required_verstr, srcdir))
 
             appverpath = out.split(')')[0]
             (appverfull, path) = appverpath.split('] (')
@@ -167,7 +167,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
             (branch, full_version) = comment.split(': ')
             (app, ver) = appver.split(': ')
 
-            self.failUnlessEqual(app, allmydata.__appname__, info)
+            self.failUnlessEqual(app, "allmydata-tahoe", info)
             norm_ver = normalized_version(ver)
             norm_required = normalized_version(required_verstr)
             self.failUnlessEqual(norm_ver, norm_required, info)
@@ -201,7 +201,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
         def _cb(res):
             out, err, rc_or_sig = res
             self.failUnlessEqual(rc_or_sig, 0, str(res))
-            self.failUnless(out.startswith(allmydata.__appname__+':'), str(res))
+            self.failUnless(out.startswith('allmydata-tahoe:'), str(res))
         d.addCallback(_cb)
         return d
 
@@ -212,7 +212,7 @@ class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
         def _cb(res):
             out, err, rc_or_sig = res
             self.failUnlessEqual(rc_or_sig, 0, str(res))
-            self.failUnless(out.startswith(allmydata.__appname__+':'), str(res))
+            self.failUnless(out.startswith('allmydata-tahoe:'), str(res))
             self.failIfIn("DeprecationWarning", out, str(res))
             errlines = err.split("\n")
             self.failIf([True for line in errlines if (line != "" and "UserWarning: Unbuilt egg for setuptools" not in line

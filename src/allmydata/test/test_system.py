@@ -769,7 +769,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         d = getPage(self.introweb_url, method="GET", followRedirect=True)
         def _check(res):
             try:
-                self.failUnless("%s: %s" % (allmydata.__appname__, allmydata.__version__) in res)
+                self.failUnless("allmydata-tahoe: %s" % allmydata.__version__ in res)
                 verstr = str(allmydata.__version__)
 
                 # The Python "rational version numbering" convention
@@ -786,8 +786,8 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                     else:
                         altverstr = verstr
 
-                appverstr = "%s: %s" % (allmydata.__appname__, verstr)
-                newappverstr = "%s: %s" % (allmydata.__appname__, altverstr)
+                appverstr = "allmydata-tahoe: %s" % verstr
+                newappverstr = "allmydata-tahoe: %s" % altverstr
 
                 self.failUnless((appverstr in res) or (newappverstr in res), (appverstr, newappverstr, res))
                 self.failUnless("Announcement Summary: storage: 5" in res)
