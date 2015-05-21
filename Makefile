@@ -3,34 +3,16 @@
 
 default: build
 
+build:
+	@echo "please use something else"
+	exit 1
+
 PYTHON=python
 export PYTHON
-
-# setup.py will extend sys.path to include our support/lib/... directory
-# itself. It will also create it in the beginning of the 'develop' command.
 
 TAHOE=$(PYTHON) bin/tahoe
 SOURCES=src/allmydata src/buildtest static misc bin/tahoe-script.template setup.py
 APPNAME=allmydata-tahoe
-
-# This is necessary only if you want to automatically produce a new
-# _version.py file from the current git history (without doing a build).
-.PHONY: make-version
-make-version:
-	$(PYTHON) ./setup.py update_version
-
-.built:
-	$(MAKE) build
-
-src/allmydata/_version.py:
-	$(MAKE) make-version
-
-# It is unnecessary to have this depend on build or src/allmydata/_version.py,
-# since 'setup.py build' always updates the version.
-.PHONY: build
-build:
-	$(PYTHON) setup.py build
-	touch .built
 
 # Build OS X pkg packages.
 .PHONY: build-osx-pkg test-osx-pkg upload-osx-pkg
