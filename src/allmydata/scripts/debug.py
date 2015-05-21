@@ -1,11 +1,9 @@
 
 # do not import any allmydata modules at this level. Do that from inside
 # individual functions instead.
-import struct, time, os, sys
+import struct, time, os
 from twisted.python import usage, failure
 from twisted.internet import defer
-from twisted.scripts import trial as twisted_trial
-from foolscap.logging import cli as foolscap_cli
 from allmydata.scripts.common import BaseOptions
 
 
@@ -958,99 +956,6 @@ def corrupt_share(options):
         end = f._data_offset + offsets["plaintext_hash_tree"]
         flip_bit(start, end)
 
-
-
-class ReplOptions(BaseOptions):
-    def getSynopsis(self):
-        return "Usage: tahoe [global-opts] debug repl"
-
-def repl(options):
-    import code
-    return code.interact()
-
-
-DEFAULT_TESTSUITE = 'allmydata'
-
-class TrialOptions(twisted_trial.Options):
-    def getSynopsis(self):
-        return "Usage: tahoe [global-opts] debug trial [options] [[file|package|module|TestCase|testmethod]...]"
-
-    def parseOptions(self, all_subargs, *a, **kw):
-        self.trial_args = list(all_subargs)
-
-        # any output from the option parsing will be printed twice, but that's harmless
-        return twisted_trial.Options.parseOptions(self, all_subargs, *a, **kw)
-
-    def parseArgs(self, *nonoption_args):
-        if not nonoption_args:
-            self.trial_args.append(DEFAULT_TESTSUITE)
-
-    def getUsage(self, width=None):
-        t = twisted_trial.Options.getUsage(self, width)
-        t += """
-The 'tahoe debug trial' command uses the correct imports for this instance of
-Tahoe-LAFS. The default test suite is '%s'.
-""" % (DEFAULT_TESTSUITE,)
-        return t
-
-def trial(config):
-    sys.argv = ['trial'] + config.trial_args
-
-    from allmydata._version import full_version
-    if full_version.endswith("-dirty"):
-        print >>sys.stderr
-        print >>sys.stderr, "WARNING: the source tree has been modified since the last commit."
-        print >>sys.stderr, "(It is usually preferable to commit, then test, then amend the commit(s)"
-        print >>sys.stderr, "if the tests fail.)"
-        print >>sys.stderr
-
-    # This does not return.
-    twisted_trial.run()
-
-
-def fixOptionsClass( (subcmd, shortcut, OptionsClass, desc) ):
-    class FixedOptionsClass(OptionsClass):
-        def getSynopsis(self):
-            t = OptionsClass.getSynopsis(self)
-            i = t.find("Usage: flogtool ")
-            if i >= 0:
-                return "Usage: tahoe [global-opts] debug flogtool " + t[i+len("Usage: flogtool "):]
-            else:
-                return "Usage: tahoe [global-opts] debug flogtool %s [options]" % (subcmd,)
-    return (subcmd, shortcut, FixedOptionsClass, desc)
-
-class FlogtoolOptions(foolscap_cli.Options):
-    def __init__(self):
-        super(FlogtoolOptions, self).__init__()
-        self.subCommands = map(fixOptionsClass, self.subCommands)
-
-    def getSynopsis(self):
-        return "Usage: tahoe [global-opts] debug flogtool (%s) [command options]" % ("|".join([x[0] for x in self.subCommands]))
-
-    def parseOptions(self, all_subargs, *a, **kw):
-        self.flogtool_args = list(all_subargs)
-        return super(FlogtoolOptions, self).parseOptions(self.flogtool_args, *a, **kw)
-
-    def getUsage(self, width=None):
-        t = super(FlogtoolOptions, self).getUsage(width)
-        t += """
-The 'tahoe debug flogtool' command uses the correct imports for this instance
-of Tahoe-LAFS.
-
-Please run 'tahoe debug flogtool SUBCOMMAND --help' for more details on each
-subcommand.
-"""
-        return t
-
-    def opt_help(self):
-        print str(self)
-        sys.exit(0)
-
-def flogtool(config):
-    sys.argv = ['flogtool'] + config.flogtool_args
-    return foolscap_cli.run_flogtool()
-
-
 class DebugCommand(BaseOptions):
     subCommands = [
         ["dump-share", None, DumpOptions,
@@ -1059,9 +964,6 @@ class DebugCommand(BaseOptions):
         ["find-shares", None, FindSharesOptions, "Locate sharefiles in node dirs."],
         ["catalog-shares", None, CatalogSharesOptions, "Describe all shares in node dirs."],
         ["corrupt-share", None, CorruptShareOptions, "Corrupt a share by flipping a bit."],
-        ["repl", None, ReplOptions, "Open a Python interpreter."],
-        ["trial", None, TrialOptions, "Run tests using Twisted Trial with the right imports."],
-        ["flogtool", None, FlogtoolOptions, "Utilities to access log files."],
         ]
     def postOptions(self):
         if not hasattr(self, 'subOptions'):
@@ -1077,39 +979,10 @@ Subcommands:
     tahoe debug find-shares     Locate sharefiles in node directories.
     tahoe debug catalog-shares  Describe all shares in node dirs.
     tahoe debug corrupt-share   Corrupt a share by flipping a bit.
-    tahoe debug repl            Open a Python interpreter.
-    tahoe debug trial           Run tests using Twisted Trial with the right imports.
-    tahoe debug flogtool        Utilities to access log files.
 
 Please run e.g. 'tahoe debug dump-share --help' for more details on each
 subcommand.
 """
-        # See ticket #1441 for why we print different information when
-        # run via /usr/bin/tahoe. Note that argv[0] is the full path.
-        if sys.argv[0] == '/usr/bin/tahoe':
-            t += """
-To get branch coverage for the Tahoe test suite (on the installed copy of
-Tahoe), install the 'python-coverage' package and then use:
-
-    python-coverage run --branch /usr/bin/tahoe debug trial
-"""
-        else:
-            t += """
-Another debugging feature is that bin%stahoe allows executing an arbitrary
-"runner" command (typically an installed Python script, such as 'coverage'),
-with the Tahoe libraries on the PYTHONPATH. The runner command name is
-prefixed with '@', and any occurrences of '@tahoe' in its arguments are
-replaced by the full path to the tahoe script.
-
-For example, if 'coverage' is installed and on the PATH, you can use:
-
-    bin%stahoe @coverage run --branch @tahoe debug trial
-
-to get branch coverage for the Tahoe test suite. Or, to run python with
-the -3 option that warns about Python 3 incompatibilities:
-
-    bin%stahoe @python -3 @tahoe command [options]
-""" % (os.sep, os.sep, os.sep)
         return t
 
 subDispatch = {
@@ -1118,9 +991,6 @@ subDispatch = {
     "find-shares": find_shares,
     "catalog-shares": catalog_shares,
     "corrupt-share": corrupt_share,
-    "repl": repl,
-    "trial": trial,
-    "flogtool": flogtool,
     }
 
 
