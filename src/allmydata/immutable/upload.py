@@ -203,7 +203,8 @@ def str_shareloc(shnum, bucketwriter):
 class PeerSelector():
     implements(IPeerSelector)
 
-    def __init__(self, num_segments, total_shares, needed_shares, servers_of_happiness):
+    def __init__(self, num_segments, total_shares, needed_shares,
+                 servers_of_happiness):
         self.num_segments = num_segments
         self.total_shares = total_shares
         self.needed_shares = needed_shares
@@ -251,7 +252,8 @@ class PeerSelector():
 
     def get_tasks(self):
         shares = set(range(self.total_shares))
-        self.h = HappinessUpload(self.peers, self.full_peers, shares, self.existing_shares)
+        self.h = HappinessUpload(self.peers, self.full_peers, shares,
+                                 self.existing_shares)
         return self.h.generate_upload_plan()
 
     def is_healthy(self):
@@ -273,7 +275,8 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         self.num_existing_errors = 0
         self.last_failure_msg = None
         self._status = IUploadStatus(upload_status)
-        log.PrefixingLogMixin.__init__(self, 'tahoe.immutable.upload', logparent, prefix=upload_id)
+        log.PrefixingLogMixin.__init__(self, 'tahoe.immutable.upload',
+                                       logparent, prefix=upload_id)
         self.log("starting", level=log.OPERATIONAL)
 
 
@@ -296,9 +299,10 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         if self._status:
             self._status.set_status("Contacting Servers..")
 
-        self.peer_selector = self.peer_selector_class(num_segments, total_shares,
-                                needed_shares, servers_of_happiness)
-
+        self.peer_selector = self.peer_selector_class(num_segments,
+                                                      total_shares,
+                                                      needed_shares,
+                                                      servers_of_happiness)
         self.total_shares = total_shares
         self.servers_of_happiness = servers_of_happiness
         self.needed_shares = needed_shares
@@ -340,7 +344,7 @@ class Tahoe2ServerSelector(log.PrefixingLogMixin):
         for server in candidate_servers:
             self.peer_selector.add_peer(server.get_serverid())
         writeable_servers = [server for server in candidate_servers
-                            if _get_maxsize(server) >= allocated_size]
+                             if _get_maxsize(server) >= allocated_size]
         readonly_servers = set(candidate_servers) - set(writeable_servers)
         for server in readonly_servers:
             self.peer_selector.mark_full_peer(server.get_serverid())

@@ -7,9 +7,10 @@ class HappinessUpload:
     spanning graph for a file when given a set of peers, a set of shares,
     and a servermap of 'peer' -> [shares].
 
-    peers is a set of serverids for servers that we think will accept shares.
-    readonly_peers is a set of serverids for servers we know won't accept shares.
-    shares is a set of share numbers, each representing a share that we want to place.
+    'peers' is a set of serverids for servers that we think will accept
+    shares. 'readonly_peers' is a set of serverids for servers we know won't
+    accept shares. 'shares' is a set of share numbers, each representing a
+    share that we want to place.
 
     For more information on the algorithm this class implements, refer to
     docs/specifications/servers-of-happiness.rst
@@ -29,12 +30,13 @@ class HappinessUpload:
 
     def generate_upload_plan(self):
         """
-        I calculate which shares the client should upload to which servers based on
-        the information I was given in my constructor. I construct a dictionary of
-        share_num -> set(server_ids) and return it. Each share should be placed on each
-        server in the corresponding set. I include, in my return value, a mapping from
-        share_num to server_id when that share is already on that server (according to
-        the given information), because you should renew the lease on that share.
+        I calculate which shares the client should upload to which servers
+        based on the information I was given in my constructor. I construct a
+        dictionary of share_num -> set(server_ids) and return it. Each share
+        should be placed on each server in the corresponding set. I include,
+        in my return value, a mapping from share_num to server_id when that
+        share is already on that server (according to the given information),
+        because you should renew the lease on that share.
         """
 
         # First calculate share placement for the readonly servers.
@@ -47,13 +49,17 @@ class HappinessUpload:
                 for share in self.servermap[peer]:
                     readonly_shares.add(share)
 
-        readonly_mappings = self._calculate_mappings(readonly_peers, readonly_shares, readonly_map)
+        readonly_mappings = self._calculate_mappings(readonly_peers,
+                                                     readonly_shares,
+                                                     readonly_map)
         used_peers, used_shares = self._extract_ids(readonly_mappings)
 
         # Calculate share placement for the remaining existing allocations
         peers = set(self.servermap.keys()) - used_peers
         # Squash a list of sets into one set
-        shares = set(item for subset in self.servermap.values() for item in subset)
+        shares = set(item
+                     for subset in self.servermap.values()
+                     for item in subset)
         shares -= used_shares
         servermap = self.servermap.copy()
         for peer in self.servermap:
@@ -74,10 +80,13 @@ class HappinessUpload:
         shares = self.shares - existing_shares - used_shares
         new_mappings = self._calculate_mappings(peers, shares)
 
-        mappings = dict(readonly_mappings.items() + existing_mappings.items() + new_mappings.items())
+        mappings = dict(readonly_mappings.items() + existing_mappings.items()
+                        + new_mappings.items())
         self._calculate_happiness(mappings)
         if len(self.homeless_shares) != 0:
-            all_shares = set(item for subset in self.servermap.values() for item in subset)
+            all_shares = set(item
+                             for subset in self.servermap.values()
+                             for item in subset)
             self._distribute_homeless_shares(mappings, all_shares)
 
         for share in mappings:
@@ -92,8 +101,8 @@ class HappinessUpload:
         Given a set of peers, a set of shares, and a dictionary of server ->
         set(shares), determine how the uploader should allocate shares. If a
         servermap is supplied, determine which existing allocations should be
-        preserved. If servermap is None, calculate the maximum matching of the
-        bipartite graph (U, V, E) such that:
+        preserved. If servermap is None, calculate the maximum matching of
+        the bipartite graph (U, V, E) such that:
 
             U = peers
             V = shares
@@ -101,9 +110,9 @@ class HappinessUpload:
 
         Returns a dictionary {share -> set(peer)}, indicating that the share
         should be placed on each peer in the set. If a share's corresponding
-        value is None, the share can be placed on any server. Note that the set
-        of peers should only be one peer when returned, but it is possible to
-        duplicate shares by adding additional servers to the set.
+        value is None, the share can be placed on any server. Note that the
+        set of peers should only be one peer when returned, but it is
+        possible to duplicate shares by adding additional servers to the set.
         """
         peer_to_index, index_to_peer = self._reindex(peers, 1)
         share_to_index, index_to_share = self._reindex(shares, len(peers) + 1)
@@ -149,7 +158,8 @@ class HappinessUpload:
             for (u, v) in path:
                 flow_function[u][v] += delta
                 flow_function[v][u] -= delta
-            residual_graph, residual_function = residual_network(graph,flow_function)
+            residual_graph, residual_function = residual_network(graph,
+                                                                 flow_function)
 
         new_mappings = {}
         for shareIndex in shareIndices:
@@ -194,8 +204,8 @@ class HappinessUpload:
         Shares which are not mapped to a peer in the maximum spanning graph
         still need to be placed on a server. This function attempts to
         distribute those homeless shares as evenly as possible over the
-        available peers. If possible a share will be placed on the server it was
-        originally on, signifying the lease should be renewed instead.
+        available peers. If possible a share will be placed on the server it
+        was originally on, signifying the lease should be renewed instead.
         """
 
         # First check to see if the leases can be renewed.
@@ -249,18 +259,20 @@ class HappinessUpload:
             if peer == None:
                 converted_mappings.setdefault(index_to_share[share], None)
             else:
-                converted_mappings.setdefault(index_to_share[share], set([index_to_peer[peer]]))
+                converted_mappings.setdefault(index_to_share[share],
+                                              set([index_to_peer[peer]]))
         return converted_mappings
 
 
     def _servermap_flow_graph(self, peers, shares, servermap):
         """
-        Generates a flow network of peerIndices to shareIndices from a server map
-        of 'peer' -> ['shares']. According to Wikipedia, "a flow network is a
-        directed graph where each edge has a capacity and each edge receives a flow.
-        The amount of flow on an edge cannot exceed the capacity of the edge." This
-        is necessary because in order to find the maximum spanning, the Edmonds-Karp algorithm
-        converts the problem into a maximum flow problem.
+        Generates a flow network of peerIndices to shareIndices from a server
+        map of 'peer' -> ['shares']. According to Wikipedia, "a flow network
+        is a directed graph where each edge has a capacity and each edge
+        receives a flow. The amount of flow on an edge cannot exceed the
+        capacity of the edge." This is necessary because in order to find the
+        maximum spanning, the Edmonds-Karp algorithm converts the problem
+        into a maximum flow problem.
         """
         if servermap == {}:
             return []
@@ -281,9 +293,9 @@ class HappinessUpload:
 
     def _reindex(self, items, base):
         """
-        I take an iteratble of items and give each item an index to be used in
-        the construction of a flow network. Indices for these items start at base
-        and continue to base + len(items) - 1.
+        I take an iteratble of items and give each item an index to be used
+        in the construction of a flow network. Indices for these items start
+        at base and continue to base + len(items) - 1.
 
         I return two dictionaries: ({item: index}, {index: item})
         """
@@ -298,14 +310,15 @@ class HappinessUpload:
 
     def _flow_network(self, peerIndices, shareIndices):
         """
-        Given set of peerIndices and a set of shareIndices, I create a flow network
-        to be used by _compute_maximum_graph. The return value is a two
-        dimensional list in the form of a flow network, where each index represents
-        a node, and the corresponding list represents all of the nodes it is connected
-        to.
+        Given set of peerIndices and a set of shareIndices, I create a flow
+        network to be used by _compute_maximum_graph. The return value is a
+        two dimensional list in the form of a flow network, where each index
+        represents a node, and the corresponding list represents all of the
+        nodes it is connected to.
 
-        This function is similar to allmydata.util.happinessutil.flow_network_for, but
-        we connect every peer with all shares instead of reflecting a supplied servermap.
+        This function is similar to
+        allmydata.util.happinessutil.flow_network_for, but we connect every
+        peer with all shares instead of reflecting a supplied servermap.
         """
         graph = []
         # The first entry in our flow network is the source.
