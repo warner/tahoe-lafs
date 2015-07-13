@@ -789,9 +789,11 @@ class EncryptAnUploadable:
             bytes_processed += len(chunk)
             self._plaintext_hasher.update(chunk)
             self._update_segment_hash(chunk)
-            # We have to encrypt the data (even if hash_only==True)
+            # TODO: we have to encrypt the data (even if hash_only==True)
             # because pycryptopp's AES-CTR implementation doesn't offer a
-            # way to change the counter value.
+            # way to change the counter value. Once pycryptopp acquires
+            # this ability, change this to simply update the counter
+            # before each call to (hash_only==False) _encryptor.process()
             ciphertext = self._encryptor.process(chunk)
             if hash_only:
                 self.log("  skipping encryption", level=log.NOISY)
