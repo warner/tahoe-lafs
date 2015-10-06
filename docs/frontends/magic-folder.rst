@@ -31,7 +31,10 @@ Configuration
 =============
 
 The Magic Folder frontend runs as part of a gateway node. To set it up, you
-need to choose the local directory to monitor for file changes, and a mutable
+must use the tahoe magic-folder CLI. For detailed information see our
+:doc:`Magic-Folder CLI design
+documentation<../proposed/magic-folder/user-interface-design>`. need to
+choose the local directory to monitor for file changes, and a mutable
 directory on the grid to which files will be uploaded.
 
 These settings are configured in the ``[magic_folder]`` section of the
