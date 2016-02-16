@@ -72,8 +72,6 @@ if len(sys.argv) > 1 and sys.argv[1] == '--fakedependency':
 
 __requires__ = install_requires[:]
 
-import setuptools
-
 from setuptools import setup
 from setuptools.command import sdist
 from setuptools import Command
