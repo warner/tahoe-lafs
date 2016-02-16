@@ -131,7 +131,7 @@ if not hasattr(sys, 'frozen'):
     package_imports.append(('setuptools', 'setuptools'))
 
 if sys.platform == "win32":
-    import_requires.append('pypiwin32')
+    install_requires.append('pypiwin32')
     package_imports.append(('pypiwin32', 'win32api'))
 
 
