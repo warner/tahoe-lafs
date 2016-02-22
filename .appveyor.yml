@@ -6,7 +6,7 @@ environment:
 
     # For Python versions available on Appveyor, see
     # http://www.appveyor.com/docs/installed-software#python
-    - PYTHON: "C:\\Python27"
+    #- PYTHON: "C:\\Python27"
     - PYTHON: "C:\\Python27-x64"
 
 install:
@@ -31,6 +31,9 @@ after_test:
 artifacts:
   # bdist_wheel puts your built wheel in the dist directory
   - path: dist\*
+
+  # grab the tox logs to diagnose failures
+  - path: .tox\py27\log
 
 #on_success:
 #  You can use this step to upload your artifacts to a public website.
