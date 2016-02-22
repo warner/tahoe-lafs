@@ -44,3 +44,9 @@ artifacts:
 #  You can use this step to upload your artifacts to a public website.
 #  See Appveyor's documentation for more details. Or you can simply
 #  access your wheels from the Appveyor "artifacts" tab for your build.
+
+on_failure:
+  - appveyor AddMessage "hello from on_failure"
+  - appveyor PushArtifact .tox\py27\log\py27-0.log
+  - dir .
+  
