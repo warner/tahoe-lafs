@@ -49,16 +49,8 @@ artifacts:
   # bdist_wheel puts your built wheel in the dist directory
   - path: dist\*
 
-  # grab the tox logs to diagnose failures
-  - path: .\.tox\py27\log
-
 #on_success:
 #  You can use this step to upload your artifacts to a public website.
 #  See Appveyor's documentation for more details. Or you can simply
 #  access your wheels from the Appveyor "artifacts" tab for your build.
-
-on_failure:
-  - appveyor AddMessage "hello from on_failure"
-  - dir .
-  - appveyor PushArtifact .tox\py27\log\py27-0.log
   
