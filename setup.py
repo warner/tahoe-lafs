@@ -208,6 +208,7 @@ class MakeExecutable(Command):
 
         installed_tahoe = installed_tahoes[0]
         bin_tahoe = os.path.join("bin", "tahoe")
+        print "installing to %s" % bin_tahoe, os.path.abspath(bin_tahoe)
         with open(installed_tahoe, "rb") as inf:
             with open(bin_tahoe, "wb") as outf:
                 outf.write(inf.read())
