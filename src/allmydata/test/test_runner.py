@@ -7,7 +7,7 @@ from twisted.python import usage, runtime
 from twisted.internet import threads
 
 from allmydata.util import fileutil, pollmixin
-from allmydata.util.encodingutil import unicode_to_argv, unicode_to_output, get_filesystem_encoding
+from allmydata.util.encodingutil import unicode_to_argv, unicode_to_output
 from allmydata.scripts import runner
 from allmydata.client import Client
 from allmydata.test import common_util
@@ -16,52 +16,22 @@ import allmydata
 
 timeout = 240
 
-def get_root_from_file(src):
-    srcdir = os.path.dirname(os.path.dirname(os.path.normcase(os.path.realpath(src))))
-
-    root = os.path.dirname(srcdir)
-    if os.path.basename(srcdir) == 'site-packages':
-        if re.search(r'python.+\..+', os.path.basename(root)):
-            root = os.path.dirname(root)
-        root = os.path.dirname(root)
-    elif os.path.basename(root) == 'src':
-        root = os.path.dirname(root)
-
-    return root
-
-srcfile = allmydata.__file__
-rootdir = get_root_from_file(srcfile)
-
 if hasattr(sys, 'frozen'):
-    bintahoe = os.path.join(rootdir, 'tahoe')
+    raise unittest.SkipTest("'frozen' is probably broken right now")
+bintahoe_prefix = os.path.join(os.path.dirname(sys.executable), "tahoe")
+for suffix in ("", ".py", ".exe"):
+    if os.path.exists(bintahoe_prefix + suffix):
+        bintahoe = bintahoe_prefix + suffix
+        break
 else:
-    bintahoe = os.path.join(rootdir, 'bin', 'tahoe')
-print "-+251=51=51"
-print "want", bintahoe
-rootbindir = os.path.join(rootdir, "bin")
-if os.path.isdir(rootbindir):
-    print "rootdir has:", os.listdir(rootbindir)
-else:
-    print "rootdir doesn't exist", rootbindir
-print " trying", bintahoe
-if sys.platform == "win32" and not os.path.exists(bintahoe):
-    scriptsdir = os.path.join(rootdir, 'Scripts')
-    print " scriptsdir", scriptsdir
-    for alt_bintahoe in (bintahoe + '.pyscript',
-                         bintahoe + '-script.py',
-                         os.path.join(scriptsdir, 'tahoe.pyscript'),
-                         os.path.join(scriptsdir, 'tahoe-script.py'),):
-        print " trying", alt_bintahoe
-        if os.path.exists(alt_bintahoe):
-            print " found", alt_bintahoe
-            bintahoe = alt_bintahoe
-            break
+    print "Unable to find installed 'tahoe'. Please run 'pip install'."
+    bintahoe = None
 
 
 class RunBinTahoeMixin:
     def skip_if_cannot_run_bintahoe(self):
-        if not os.path.exists(bintahoe):
-            raise unittest.SkipTest("The bin/tahoe script isn't to be found in the expected location (%s), and I don't want to test a 'tahoe' executable that I find somewhere else, in case it isn't the right executable for this version of Tahoe. Perhaps running 'setup.py build' again will help." % (bintahoe,))
+        if not bintahoe:
+            raise unittest.SkipTest("No 'tahoe' in %s." % os.path.dirname(sys.executable))
 
     def skip_if_cannot_daemonize(self):
         self.skip_if_cannot_run_bintahoe()
@@ -92,103 +62,6 @@ class RunBinTahoeMixin:
 
 
 class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
-    def _check_right_code(self, file_to_check):
-        root_to_check = get_root_from_file(file_to_check)
-        if os.path.basename(root_to_check) == 'dist':
-            root_to_check = os.path.dirname(root_to_check)
-
-        cwd = os.path.normcase(os.path.realpath("."))
-        root_from_cwd = os.path.dirname(cwd)
-        if os.path.basename(root_from_cwd) == 'src':
-            root_from_cwd = os.path.dirname(root_from_cwd)
-
-        # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
-        if os.path.basename(root_from_cwd).startswith('tmp'):
-            root_from_cwd = os.path.dirname(root_from_cwd)
-
-        same = (root_from_cwd == root_to_check)
-        if not same:
-            try:
-                same = os.path.samefile(root_from_cwd, root_to_check)
-            except AttributeError, e:
-                e  # hush pyflakes
-
-        if not same:
-            msg = ("We seem to be testing the code at %r,\n"
-                   "(according to the source filename %r),\n"
-                   "but expected to be testing the code at %r.\n"
-                   % (root_to_check, file_to_check, root_from_cwd))
-
-            root_from_cwdu = os.path.dirname(os.path.normcase(os.path.normpath(os.getcwdu())))
-            if os.path.basename(root_from_cwdu) == u'src':
-                root_from_cwdu = os.path.dirname(root_from_cwdu)
-
-            # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
-            if os.path.basename(root_from_cwdu).startswith(u'tmp'):
-                root_from_cwdu = os.path.dirname(root_from_cwdu)
-
-            if not isinstance(root_from_cwd, unicode) and root_from_cwd.decode(get_filesystem_encoding(), 'replace') != root_from_cwdu:
-                msg += ("However, this may be a false alarm because the current directory path\n"
-                        "is not representable in the filesystem encoding. Please run the tests\n"
-                        "from the root of the Tahoe-LAFS distribution at a non-Unicode path.")
-                raise unittest.SkipTest(msg)
-            else:
-                msg += "Please run the tests from the root of the Tahoe-LAFS distribution."
-                self.fail(msg)
-
-    def test_the_right_code(self):
-        self._check_right_code(srcfile)
-
-    def test_import_in_repl(self):
-        d = self.run_bintahoe(["debug", "repl"],
-                              stdin="import allmydata; print; print allmydata.__file__")
-        def _cb(res):
-            out, err, rc_or_sig = res
-            self.failUnlessEqual(rc_or_sig, 0, str(res))
-            lines = out.splitlines()
-            self.failUnlessIn('>>>', lines[0], str(res))
-            self._check_right_code(lines[1])
-        d.addCallback(_cb)
-        return d
-    # The timeout was exceeded on FreeStorm's CentOS5-i386.
-    test_import_in_repl.timeout = 480
-
-    def test_path(self):
-        d = self.run_bintahoe(["--version-and-path"])
-        def _cb(res):
-            from allmydata import normalized_version
-
-            out, err, rc_or_sig = res
-            self.failUnlessEqual(rc_or_sig, 0, str(res))
-
-            # Fail unless the __appname__ package is *this* version *and*
-            # was loaded from *this* source directory.
-
-            required_verstr = str(allmydata.__version__)
-
-            self.failIfEqual(required_verstr, "unknown",
-                             "We don't know our version, because this distribution didn't come "
-                             "with a _version.py and 'setup.py update_version' hasn't been run.")
-
-            srcdir = os.path.dirname(os.path.dirname(os.path.normcase(os.path.realpath(srcfile))))
-            info = repr((res, allmydata.__appname__, required_verstr, srcdir))
-
-            appverpath = out.split(')')[0]
-            (appverfull, path) = appverpath.split('] (')
-            (appver, comment) = appverfull.split(' [')
-            (branch, full_version) = comment.split(': ')
-            (app, ver) = appver.split(': ')
-
-            self.failUnlessEqual(app, allmydata.__appname__, info)
-            norm_ver = normalized_version(ver)
-            norm_required = normalized_version(required_verstr)
-            self.failUnlessEqual(norm_ver, norm_required, info)
-            self.failUnlessEqual(path, srcdir, info)
-            self.failUnlessEqual(branch, allmydata.branch)
-            self.failUnlessEqual(full_version, allmydata.full_version)
-        d.addCallback(_cb)
-        return d
-
     def test_unicode_arguments_and_output(self):
         self.skip_if_cannot_run_bintahoe()
 
