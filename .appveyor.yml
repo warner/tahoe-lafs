@@ -13,9 +13,10 @@ environment:
 
 install:
   - |
-    #%PYTHON%\python.exe -m pip install tox
-    # tox-2.3.1 has a windows bug (#314), fixed in hg but not yet released
-    %PYTHON%\python.exe -m pip install hg+https://bitbucket.org/hpk42/tox#egg=tox
+    %PYTHON%\python.exe -m pip install "hg+https://bitbucket.org/hpk42/tox#egg=tox"
+
+#%PYTHON%\python.exe -m pip install tox
+# tox-2.3.1 has a windows bug (#314), fixed in hg but not yet released
 
 build: off
 
