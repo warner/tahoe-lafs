@@ -23,6 +23,9 @@ test_script:
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python evrsion you want to use on PATH.
   - |
+    dir .
+    dir %PYTHON%\Scripts
+    dir .tox\py\bin
     %PYTHON%\Scripts\tox.exe -e py
 
 after_test:
