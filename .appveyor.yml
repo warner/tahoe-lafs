@@ -11,14 +11,18 @@ environment:
     #  DISTUTILS_USE_SDK: "1"
     #  TOX_TESTENV_PASSENV: "DISTUTILS_USE_SDK INCLUDE LIB"
 
+# tox-2.3.1 has a windows bug (#314), fixed in hg but not yet released. When
+# the next release comes out, replace this with just:
+#   %PYTHON%\python.exe -m pip install wheel tox
+
 install:
   - |
-    %PYTHON%\python.exe -m pip install "hg+https://bitbucket.org/hpk42/tox#egg=tox"
+    %PYTHON%\python.exe -m pip install wheel "hg+https://bitbucket.org/hpk42/tox#egg=tox"
 
-#%PYTHON%\python.exe -m pip install tox
-# tox-2.3.1 has a windows bug (#314), fixed in hg but not yet released
 
 build: off
+
+# we run from C:\projects\tahoe-lafs
 
 test_script:
   # Put your test command here.
@@ -26,7 +30,7 @@ test_script:
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python evrsion you want to use on PATH.
   - |
-    dir .
+    dir %PYTHON%
     dir %PYTHON%\Scripts
     %PYTHON%\Scripts\tox.exe -e py
 
