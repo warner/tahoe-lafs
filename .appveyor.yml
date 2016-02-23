@@ -17,7 +17,12 @@ environment:
 
 install:
   - |
+    %PYTHON%\python.exe -m pip install -U pip
     %PYTHON%\python.exe -m pip install wheel "hg+https://bitbucket.org/hpk42/tox#egg=tox"
+
+# note:
+# %PYTHON% has: python.exe
+# %PYTHON%\Scripts has: pip.exe, tox.exe (and others installed by bare pip)
 
 
 build: off
@@ -30,8 +35,6 @@ test_script:
   # the interpreter you're using - Appveyor does not do anything special
   # to put the Python evrsion you want to use on PATH.
   - |
-    dir %PYTHON%
-    dir %PYTHON%\Scripts
     %PYTHON%\Scripts\tox.exe -e py
 
 after_test:
