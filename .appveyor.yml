@@ -47,6 +47,6 @@ artifacts:
 
 on_failure:
   - appveyor AddMessage "hello from on_failure"
-  - appveyor PushArtifact .tox\py27\log\py27-0.log
   - dir .
+  - appveyor PushArtifact .tox\py27\log\py27-0.log
   
