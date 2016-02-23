@@ -8,6 +8,7 @@ environment:
     # http://www.appveyor.com/docs/installed-software#python
     #- PYTHON: "C:\\Python27"
     - PYTHON: "C:\\Python27-x64"
+      USERPROFILE: "C:\\projects"
     #  DISTUTILS_USE_SDK: "1"
     #  TOX_TESTENV_PASSENV: "DISTUTILS_USE_SDK INCLUDE LIB"
 
