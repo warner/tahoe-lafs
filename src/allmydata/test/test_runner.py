@@ -36,14 +36,24 @@ if hasattr(sys, 'frozen'):
     bintahoe = os.path.join(rootdir, 'tahoe')
 else:
     bintahoe = os.path.join(rootdir, 'bin', 'tahoe')
-
+print "-+251=51=51"
+print "want", bintahoe
+rootbindir = os.path.join(rootdir, "bin")
+if os.path.isdir(rootbindir):
+    print "rootdir has:", os.listdir(rootbindir)
+else:
+    print "rootdir doesn't exist", rootbindir
+print " trying", bintahoe
 if sys.platform == "win32" and not os.path.exists(bintahoe):
     scriptsdir = os.path.join(rootdir, 'Scripts')
+    print " scriptsdir", scriptsdir
     for alt_bintahoe in (bintahoe + '.pyscript',
                          bintahoe + '-script.py',
                          os.path.join(scriptsdir, 'tahoe.pyscript'),
                          os.path.join(scriptsdir, 'tahoe-script.py'),):
+        print " trying", alt_bintahoe
         if os.path.exists(alt_bintahoe):
+            print " found", alt_bintahoe
             bintahoe = alt_bintahoe
             break
 
