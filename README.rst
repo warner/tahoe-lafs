@@ -33,6 +33,10 @@ pre-release code), you should create a virtualenv and install into that:
 * `source tahoe-ve/bin/activate`
 * `pip install --editable .`
 
+To run the unit test suite:
+
+* `tox`
+
 For more details, see the docs directory.
 
 Once `tahoe --version` works, see `docs/running.rst`_ to learn how to set up
