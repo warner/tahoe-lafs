@@ -20,7 +20,7 @@ Pre-packaged versions are available for several operating systems:
 If you don't use an OS package, you'll need python2.7 and `pip`. You may also
 need a C compiler, and the development headers for python, libffi, and
 OpenSSL. On a Debian-like system, use `apt-get install build-essential
-python-dev libffi-dev libssl-dev`.
+python-dev libffi-dev libssl-dev python-virtualenv`.
 
 Then, to install the most recent release, just run:
 
