@@ -33,8 +33,8 @@ https://virtualenv.pypa.io/en/latest/ .
 
 Then, to install the latest version, create a virtualenv and use `pip`::
 
-    virtualenv tahoe-venv
-    source tahoe-venv/bin/activate
+    virtualenv tahoe
+    source tahoe/bin/activate
     pip install tahoe-lafs
     tahoe --version
 
@@ -44,12 +44,12 @@ install --editable .` from the git tree::
 
     git clone https://github.com/tahoe-lafs/tahoe-lafs.git
     cd tahoe-lafs
-    virtualenv tahoe-venv
-    source tahoe-venv/bin/activate
+    virtualenv tahoe
+    source tahoe/bin/activate
     pip install --editable .
     tahoe --version
 
-The `pip install` will download and install all necessary python
+The `pip install` will download and install all necessary Python
 dependencies. Some dependencies require a C compiler and system libraries to
 build: on Debian/Ubuntu-like systems, use `apt-get install build-essential
 python-dev libffi-dev libssl-dev`. On Windows and OS-X platforms,

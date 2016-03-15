@@ -17,10 +17,11 @@ Pre-packaged versions are available for several operating systems:
   available, see `OSPackages`_ for details
 * Mac and Windows installers are in development.
 
-If you don't use an OS package, you'll need python2.7 and `pip`. You may also
+If you don't use an OS package, you'll need Python 2.7 and `pip`. You may also
 need a C compiler, and the development headers for python, libffi, and
 OpenSSL. On a Debian-like system, use `apt-get install build-essential
-python-dev libffi-dev libssl-dev python-virtualenv`.
+python-dev libffi-dev libssl-dev python-virtualenv`. On Windows, see
+`WindowsInstall`_.
 
 Then, to install the most recent release, just run:
 
@@ -29,8 +30,8 @@ Then, to install the most recent release, just run:
 To install from source (either so you can hack on it, or just to run
 pre-release code), you should create a virtualenv and install into that:
 
-* `virtualenv tahoe-ve`
-* `source tahoe-ve/bin/activate`
+* `virtualenv tahoe`
+* `source tahoe/bin/activate`
 * `pip install --editable .`
 
 To run the unit test suite:
@@ -58,6 +59,7 @@ the Transitive Grace Period Public Licence, version 1.0.
 See `TGPPL.PDF`_ for why the TGPPL exists, graphically illustrated on three slides.
 
 .. _OSPackages: https://tahoe-lafs.org/trac/tahoe-lafs/wiki/OSPackages
+.. _WindowsInstall: docs/windows.rst
 .. _docs/running.rst: docs/running.rst
 .. _quickstart.rst: https://github.com/tahoe-lafs/tahoe-lafs/blob/master/docs/quickstart.rst
 .. _COPYING.GPL: https://github.com/tahoe-lafs/tahoe-lafs/blob/master/COPYING.GPL
