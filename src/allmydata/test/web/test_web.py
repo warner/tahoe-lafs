@@ -1319,7 +1319,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d = self.PUT("/uri?format=sdmf",
                      contents)
         d.addCallback(lambda filecap: self.GET("/uri/%s?t=json" % filecap))
-        d.addCallback(lambda json: self.failUnlessIn("SDMF", json))
+        d.addCallback(lambda json_data: self.failUnlessIn("SDMF", json_data))
         return d
 
     def test_PUT_NEWFILEURL_unlinked_bad_format(self):
@@ -1465,8 +1465,8 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d = self.PUT("/uri?format=mdmf",
                      self.NEWFILE_CONTENTS * 300000)
         d.addCallback(lambda filecap: self.GET("/uri/%s?t=json" % filecap))
-        def _got_json(json, version):
-            data = json.loads(json)
+        def _got_json(json_data, version):
+            data = json.loads(json_data)
             assert "filenode" == data[0]
             data = data[1]
             assert isinstance(data, dict)
@@ -1680,8 +1680,8 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         # its JSON, we should see their encodings.
         d.addCallback(lambda ignored:
             self.GET(self.public_url + "/foo?t=json"))
-        def _got_json(json):
-            data = json.loads(json)
+        def _got_json(json_data):
+            data = json.loads(json_data)
             assert data[0] == "dirnode"
 
             data = data[1]
