@@ -248,7 +248,7 @@ class IntroducerClient(service.Service, Referenceable):
                      % (service_name,), level=log.UNUSUAL, umid="dIpGNA")
             self._debug_counts["wrong_service"] += 1
             return
-        # for ASCII values, simplejson might give us unicode *or* bytes
+        # for ASCII values, json might give us unicode *or* bytes
         if "nickname" in ann and isinstance(ann["nickname"], str):
             ann["nickname"] = unicode(ann["nickname"])
         nick_s = ann.get("nickname",u"").encode("utf-8")

@@ -1,7 +1,6 @@
 
-import os, re, itertools
+import os, re, itertools, json
 from base64 import b32decode
-import simplejson
 
 from twisted.trial import unittest
 from twisted.internet import defer, address
@@ -835,7 +834,7 @@ class ClientSeqnums(unittest.TestCase):
         self.failUnlessEqual(outbound["sA"]["seqnum"], 1)
         nonce1 = outbound["sA"]["nonce"]
         self.failUnless(isinstance(nonce1, str))
-        self.failUnlessEqual(simplejson.loads(published["sA"][0]),
+        self.failUnlessEqual(json.loads(published["sA"][0]),
                              outbound["sA"])
         # [1] is the signature, [2] is the pubkey
 
@@ -850,9 +849,9 @@ class ClientSeqnums(unittest.TestCase):
         nonce2 = outbound["sA"]["nonce"]
         self.failUnless(isinstance(nonce2, str))
         self.failIfEqual(nonce1, nonce2)
-        self.failUnlessEqual(simplejson.loads(published["sA"][0]),
+        self.failUnlessEqual(json.loads(published["sA"][0]),
                              outbound["sA"])
-        self.failUnlessEqual(simplejson.loads(published["sB"][0]),
+        self.failUnlessEqual(json.loads(published["sB"][0]),
                              outbound["sB"])
 
 
@@ -923,7 +922,7 @@ class Signatures(unittest.TestCase):
         ann_t = sign_to_foolscap(ann, sk)
         (msg, sig, key) = ann_t
         self.failUnlessEqual(type(msg), type("".encode("utf-8"))) # bytes
-        self.failUnlessEqual(simplejson.loads(msg.decode("utf-8")), ann)
+        self.failUnlessEqual(json.loads(msg.decode("utf-8")), ann)
         self.failUnless(sig.startswith("v0-"))
         self.failUnless(key.startswith("v0-"))
         (ann2,key2) = unsign_from_foolscap(ann_t)
@@ -937,7 +936,7 @@ class Signatures(unittest.TestCase):
                               unsign_from_foolscap, (msg, sig, None))
         # bad signature
         bad_ann = {"key1": "value2"}
-        bad_msg = simplejson.dumps(bad_ann).encode("utf-8")
+        bad_msg = json.dumps(bad_ann).encode("utf-8")
         self.failUnlessRaises(keyutil.BadSignatureError,
                               unsign_from_foolscap, (bad_msg,sig,key))
 

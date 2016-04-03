@@ -1,4 +1,4 @@
-import os.path, simplejson
+import os.path, json
 from twisted.trial import unittest
 from twisted.python import usage
 from twisted.internet import defer
@@ -253,7 +253,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.do_cli("ls", "--json", "tahoe:test/test.txt"))
         def _get_test_txt_uris((rc, out, err)):
             self.failUnlessEqual(rc, 0)
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
 
             self.failUnlessEqual(filetype, "filenode")
             self.failUnless(data['mutable'])
@@ -286,7 +286,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.do_cli("ls", "--json", "tahoe:test/test.txt"))
         def _check_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
 
             self.failUnlessEqual(filetype, "filenode")
             self.failUnless(data['mutable'])
@@ -346,7 +346,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
         def _process_directory_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
 
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
             self.failUnlessEqual(filetype, "dirnode")
             self.failUnless(data['mutable'])
             self.failUnlessIn("children", data)
@@ -388,7 +388,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
         # so they'll retain their URIs but have different content.
         def _process_file_json((rc, out, err), fn):
             self.failUnlessEqual(rc, 0)
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
             self.failUnlessEqual(filetype, "filenode")
 
             if "mutable" in fn:
@@ -435,7 +435,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.do_cli("ls", "--json", "tahoe:test2/imm2"))
         def _process_imm2_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
             self.failUnlessEqual(filetype, "filenode")
             self.failIf(data['mutable'])
             self.failUnlessIn("ro_uri", data)
@@ -473,7 +473,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
             self.do_cli("ls", "--json", self._test_write_uri))
         def _process_test_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
 
             self.failUnlessEqual(filetype, "filenode")
             self.failUnless(data['mutable'])
@@ -491,7 +491,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
         def _process_tahoe_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
 
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
             self.failUnlessEqual(filetype, "dirnode")
             self.failUnlessIn("children", data)
             kiddata = data['children']
@@ -556,7 +556,7 @@ class Cp(GridTestMixin, CLITestMixin, unittest.TestCase):
         def _got_testdir_json((rc, out, err)):
             self.failUnlessEqual(rc, 0)
 
-            filetype, data = simplejson.loads(out)
+            filetype, data = json.loads(out)
             self.failUnlessEqual(filetype, "dirnode")
 
             self.failUnlessIn("children", data)

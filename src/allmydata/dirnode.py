@@ -1,10 +1,9 @@
 
-import time, math, unicodedata
+import time, math, unicodedata, json
 
 from zope.interface import implements
 from twisted.internet import defer
 from foolscap.api import fireEventually
-import simplejson
 from allmydata.mutable.common import NotWriteableError
 from allmydata.mutable.filenode import MutableFileNode
 from allmydata.unknown import UnknownNode, strip_prefix_for_ro
@@ -249,7 +248,7 @@ def _pack_normalized_children(children, writekey, deep_immutable=False):
             entry = "".join([netstring(name.encode("utf-8")),
                              netstring(strip_prefix_for_ro(ro_uri, deep_immutable)),
                              writecap,
-                             netstring(simplejson.dumps(metadata))])
+                             netstring(json.dumps(metadata))])
         entries.append(netstring(entry))
     return "".join(entries)
 
@@ -358,7 +357,7 @@ class DirectoryNode:
             try:
                 child = self._create_and_validate_node(rw_uri, ro_uri, name)
                 if mutable or child.is_allowed_in_immutable_directory():
-                    metadata = simplejson.loads(metadata_s)
+                    metadata = json.loads(metadata_s)
                     assert isinstance(metadata, dict)
                     children[name] = (child, metadata)
                     children.set_with_aux(name, (child, metadata), auxilliary=entry)
