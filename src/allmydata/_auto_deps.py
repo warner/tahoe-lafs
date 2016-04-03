@@ -49,11 +49,6 @@ install_requires = [
     # pycryptopp-0.6.0 includes ed25519
     "pycryptopp >= 0.6.0",
 
-    "service-identity",         # this is needed to suppress complaints about being unable to verify certs
-    "characteristic >= 14.0.0", # latest service-identity depends on this version
-    "pyasn1 >= 0.1.8",          # latest pyasn1-modules depends on this version
-    "pyasn1-modules >= 0.0.5",  # service-identity depends on this
-
     # * On Linux we need at least Twisted 10.1.0 for inotify support
     #   used by the drop-upload frontend.
     # * We also need Twisted 10.1.0 for the FTP frontend in order for
@@ -106,10 +101,6 @@ package_imports = [
     ('OpenSSL',          None),
     ('simplejson',       'simplejson'),
     ('pycrypto',         'Crypto'),
-    ('pyasn1',           'pyasn1'),
-    ('service-identity', 'service_identity'),
-    ('characteristic',   'characteristic'),
-    ('pyasn1-modules',   'pyasn1_modules'),
     ('cryptography',     'cryptography'),
     ('cffi',             'cffi'),
     ('six',              'six'),
