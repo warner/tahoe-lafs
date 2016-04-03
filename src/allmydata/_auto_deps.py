@@ -72,10 +72,6 @@ install_requires = [
     # We need Nevow >= 0.11.1 which can be installed using pip.
     "Nevow >= 0.11.1",
 
-    # * pyOpenSSL is required in order for foolscap to provide secure connections.
-    #   Since foolscap doesn't reliably declare this dependency in a machine-readable
-    #   way, we need to declare a dependency on pyOpenSSL ourselves. Tahoe-LAFS does
-    #   not *directly* depend on pyOpenSSL.
     # * pyOpenSSL >= 0.13 is needed in order to avoid
     #   <https://tahoe-lafs.org/trac/tahoe-lafs/ticket/2005>, and also to check the
     #   version of OpenSSL that pyOpenSSL is using.
