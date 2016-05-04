@@ -1,12 +1,10 @@
-
 import os, sys
-
+from twisted.python import usage
 from allmydata.scripts.common import BasedirOptions, NoDefaultBasedirOptions
 from allmydata.scripts.default_nodedir import _default_nodedir
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, argv_to_unicode, quote_local_unicode_path
-from allmydata.util import fileutil
-
+from allmydata.util import fileutil, iputil
 
 dummy_tac = """
 import sys
@@ -42,20 +40,39 @@ class CreateClientOptions(_CreateBaseOptions):
     synopsis = "[options] [NODEDIR]"
     description = "Create a client-only Tahoe-LAFS node (no storage server)."
 
-class CreateServerOptions(_CreateBaseOptions):
-    synopsis = "[options] [NODEDIR]"
-    description = "Create a server-only Tahoe-LAFS node (no client access)."
+location_parameters = [
+    ("hostname", None, None, "Hostname of this machine, used to build location"),
+    ("location", None, None, "FURL connection hints, e.g. 'tcp:HOSTNAME:PORT'"),
+    ("port", None, None, "listening endpoint, e.g. 'tcp:PORT'"),
+    ]
+def check_location_parameters(cfg):
+    if (cfg["hostname"] and not cfg["location"] and not cfg["port"]):
+        portnum = iputil.allocate_tcp_port()
+        cfg["location"] = "tcp:%s:%d" % (cfg["hostname"], portnum)
+        cfg["port"] = "tcp:%d" % portnum
+    elif (not cfg["hostname"] and cfg["location"] and cfg["port"]):
+        pass
+    else:
+        raise usage.UsageError("You must provide --hostname, or --location and --port.")
+    # once this returns, cfg["location"] and cfg["port"] are ready to use
 
-class CreateNodeOptions(CreateClientOptions):
-    optFlags = [
-        ("no-storage", None, "Do not offer storage service to other nodes."),
-        ]
+class CreateServerOptions(_CreateBaseOptions):
+    synopsis = "[options] NODEDIR"
+    description = "Create a server-only Tahoe-LAFS node (no client access)."
+    optParameters = location_parameters
+    def postOptions(self):
+        check_location_parameters(self)
+
+class CreateNodeOptions(CreateServerOptions):
     synopsis = "[options] [NODEDIR]"
     description = "Create a full Tahoe-LAFS node (client+server)."
 
 class CreateIntroducerOptions(NoDefaultBasedirOptions):
     subcommand_name = "create-introducer"
     description = "Create a Tahoe-LAFS introducer."
+    optParameters = location_parameters
+    def postOptions(self):
+        check_location_parameters(self)
 
 
 def write_node_config(c, config):
@@ -79,8 +96,8 @@ def write_node_config(c, config):
         webport = ""
     c.write("web.port = %s\n" % (webport.encode('utf-8'),))
     c.write("web.static = public_html\n")
-    c.write("#tub.port =\n")
-    c.write("#tub.location = \n")
+    c.write("tub.port = %s\n" % config["port"])
+    c.write("tub.location = %s\n" % config["location"])
     c.write("#log_gatherer.furl =\n")
     c.write("#timeout.keepalive =\n")
     c.write("#timeout.disconnect =\n")
@@ -89,7 +106,7 @@ def write_node_config(c, config):
     c.write("\n")
 
 
-def create_node(config, out=sys.stdout, err=sys.stderr):
+def make_node(config, client, server, out=sys.stdout, err=sys.stderr):
     basedir = config['basedir']
     # This should always be called with an absolute Unicode basedir.
     precondition(isinstance(basedir, unicode), basedir)
@@ -103,7 +120,7 @@ def create_node(config, out=sys.stdout, err=sys.stderr):
         # we're willing to use an empty directory
     else:
         os.mkdir(basedir)
-    write_tac(basedir, "client")
+    write_tac(basedir, "client") # clients/servers both use the Client class
 
     c = open(os.path.join(basedir, "tahoe.cfg"), "w")
 
@@ -127,8 +144,7 @@ def create_node(config, out=sys.stdout, err=sys.stderr):
     boolstr = {True:"true", False:"false"}
     c.write("[storage]\n")
     c.write("# Shall this node provide storage service?\n")
-    storage_enabled = not config.get("no-storage", None)
-    c.write("enabled = %s\n" % boolstr[storage_enabled])
+    c.write("enabled = %s\n" % boolstr[server])
     c.write("#readonly =\n")
     c.write("reserved_space = 1G\n")
     c.write("#expire.enabled =\n")
@@ -161,11 +177,13 @@ def create_node(config, out=sys.stdout, err=sys.stderr):
     return 0
 
 def create_client(config, out=sys.stdout, err=sys.stderr):
-    config['no-storage'] = True
-    return create_node(config, out=out, err=err)
+    return make_node(config, client=True, server=False, out=out, err=err)
 
 def create_server(config, out=sys.stdout, err=sys.stderr):
-    return create_node(config, out=out, err=err)
+    return make_node(config, client=False, server=True, out=out, err=err)
+
+def create_node(config, out=sys.stdout, err=sys.stderr):
+    return make_node(config, client=True, server=True, out=out, err=err)
 
 
 def create_introducer(config, out=sys.stdout, err=sys.stderr):
