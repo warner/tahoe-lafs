@@ -69,7 +69,8 @@ The item descriptions below use the following types:
 Node Types
 ==========
 
-A node can be a client/server, an introducer, or a statistics gatherer.
+A node can be a client, or a server, or both, or an introducer, or a
+statistics gatherer.
 
 Client/server nodes provide one or more of the following services:
 
@@ -78,7 +79,7 @@ Client/server nodes provide one or more of the following services:
 * FTP service
 * drop-upload service
 * helper service
-* storage service.
+* storage service
 
 A client/server that provides storage service (i.e. storing shares for
 clients) is called a "storage server". If it provides any of the other

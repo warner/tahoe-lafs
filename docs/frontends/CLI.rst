@@ -83,12 +83,18 @@ the command line.
 Node Management
 ===============
 
-"``tahoe create-node [NODEDIR]``" is the basic make-a-new-node command. It
-creates a new directory and populates it with files that will allow the
-"``tahoe start``" command to use it later on. This command creates nodes that
-have client functionality (upload/download files), web API services
-(controlled by the '[node]web.port' configuration), and storage services
-(unless ``--no-storage`` is specified).
+"``tahoe create-client [NODEDIR]`` creates a client-only node (no storage
+service). It creates a new directory and populates it with files that will
+allow the "``tahoe start``" command to use it later on. This command creates
+nodes that have client functionality (upload/download files) and web API
+services (controlled by the '[node]web.port' configuration).
+
+"``tahoe create-server NODEDIR`` creates a server-only node (in fact these
+nodes also currently provide client functionality, but this may be removed in
+the future, and server-only nodes do not usually expose their web.ports, so
+it typically goes unused).
+
+"``tahoe create-node [NODEDIR]`` creates a client+server node.
 
 NODEDIR defaults to ``~/.tahoe/`` , and newly-created nodes default to
 publishing a web server on port 3456 (limited to the loopback interface, at
@@ -96,16 +102,16 @@ publishing a web server on port 3456 (limited to the loopback interface, at
 other "``tahoe``" subcommands use corresponding defaults (with the exception
 that "``tahoe run``" defaults to running a node in the current directory).
 
-"``tahoe create-client [NODEDIR]``" creates a node with no storage service.
-That is, it behaves like "``tahoe create-node --no-storage [NODEDIR]``".
-(This is a change from versions prior to v1.6.0.)
-
 "``tahoe create-introducer [NODEDIR]``" is used to create the Introducer node.
 This node provides introduction services and nothing else. When started, this
 node will produce a ``private/introducer.furl`` file, which should be
 published to all clients.
 
-"``tahoe run [NODEDIR]``" will start a previously-created node in the foreground.
+"``tahoe run [NODEDIR]``" will start a previously-created node in the
+foreground (no daemonization). This is most useful when running under
+startstopd or systemd, or as a LaunchAgent, or in other environments where
+some parent process takes responsibility for watching the child process and
+restarting it when it exits.
 
 "``tahoe start [NODEDIR]``" will launch a previously-created node. It will
 launch the node into the background, using the standard Twisted "``twistd``"
