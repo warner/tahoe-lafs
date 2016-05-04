@@ -42,6 +42,10 @@ class CreateClientOptions(_CreateBaseOptions):
     synopsis = "[options] [NODEDIR]"
     description = "Create a client-only Tahoe-LAFS node (no storage server)."
 
+class CreateServerOptions(_CreateBaseOptions):
+    synopsis = "[options] [NODEDIR]"
+    description = "Create a server-only Tahoe-LAFS node (no client access)."
+
 class CreateNodeOptions(CreateClientOptions):
     optFlags = [
         ("no-storage", None, "Do not offer storage service to other nodes."),
@@ -160,6 +164,9 @@ def create_client(config, out=sys.stdout, err=sys.stderr):
     config['no-storage'] = True
     return create_node(config, out=out, err=err)
 
+def create_server(config, out=sys.stdout, err=sys.stderr):
+    return create_node(config, out=out, err=err)
+
 
 def create_introducer(config, out=sys.stdout, err=sys.stderr):
     basedir = config['basedir']
@@ -186,13 +193,15 @@ def create_introducer(config, out=sys.stdout, err=sys.stderr):
 
 
 subCommands = [
-    ["create-node", None, CreateNodeOptions, "Create a node that acts as a client, server or both."],
     ["create-client", None, CreateClientOptions, "Create a client node (with storage initially disabled)."],
+    ["create-server", None, CreateServerOptions, "Create a server node."],
+    ["create-node", None, CreateNodeOptions, "Create a node that acts as both client and server."],
     ["create-introducer", None, CreateIntroducerOptions, "Create an introducer node."],
 ]
 
 dispatch = {
     "create-node": create_node,
     "create-client": create_client,
+    "create-server": create_server,
     "create-introducer": create_introducer,
     }

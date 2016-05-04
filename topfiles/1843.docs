@@ -1,0 +1,33 @@
+Over the years, Tahoe has been somewhat confused about whether it is a
+client-server system, or a peer-to-peer system. This release makes it more of
+a client-server system, by settling upon three commands with which nodes can
+be constructed:
+
+* tahoe create-client
+* tahoe create-server
+* tahoe create-node (these are both client and server)
+
+Clients do not offer storage service, and do not announce themselves to the
+Introducer. They may or may not listen on a socket (the "logport" is still a
+useful local service), but they definitely listen less than servers do.
+
+Servers will (eventually) not offer client frontend gateway APIs like the
+webapi and WUI interface, SFTP, etc.
+
+It's useful to draw a distinction between client-ish facilities and
+server-ish facilities, because servers need something that clients don't:
+reachability by other clients. In particular, servers must be told a hostname
+(with --hostname= or --location=), so they can tell clients how to reach
+them. Clients do not need this knowledge, and can be set up with fewer
+command-line arguments. Previously, Tahoe tried to guess the
+hostname/location, but could only be successful in a very limited set of
+environments, and the result was more confusing than just asking server
+admins to supply an externally-reachable hostname.
+
+It remains quite easy and useful to provide both client and server
+functionality in a single process, as long as the admin can provide the
+hostname as they would for a dedicated server node.
+
+If we manage to add proper P2P automatic setup in the future, we can
+encourage users to run "tahoe create-node" with arguments that enable
+automatic hostname-equivalent determination.
