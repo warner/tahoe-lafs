@@ -432,6 +432,6 @@ class TokenOnlyWebApi(resource.Resource):
             except Exception:
                 message, code = humanize_failure(Failure())
                 req.setResponseCode(code)
-                return simplejson.dumps({"error": message})
+                return json.dumps({"error": message})
         else:
             raise WebError("'%s' invalid type for 't' arg" % (t,), http.BAD_REQUEST)

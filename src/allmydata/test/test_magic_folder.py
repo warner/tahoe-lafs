@@ -1,6 +1,6 @@
 
 import os, sys, time
-import shutil, simplejson
+import shutil, json
 
 if False:
     from twisted.internet.base import DelayedCall
@@ -1414,7 +1414,7 @@ class MockTest(SingleMagicFolderTestMixin, unittest.TestCase):
         d.addCallback(_got_stats)
         d.addCallback(lambda res: self.GET("statistics?t=json"))
         def _got_stats_json(res):
-            data = simplejson.loads(res)
+            data = json.loads(res)
             self.failUnlessEqual(data["counters"]["magic_folder.uploader.dirs_monitored"], 1)
             self.failUnlessEqual(data["counters"]["magic_folder.uploader.objects_succeeded"], 1)
             self.failUnlessEqual(data["counters"]["magic_folder.uploader.files_uploaded"], 1)
