@@ -1,5 +1,6 @@
 import os
 from twisted.python.usage import UsageError
+from twisted.internet import defer
 from allmydata.scripts.common import BasedirOptions, NoDefaultBasedirOptions
 from allmydata.scripts.default_nodedir import _default_nodedir
 from allmydata.util.assertutil import precondition
@@ -27,6 +28,15 @@ WHERE_OPTS = [
      "Hostname to automatically set --location/--port when --listen=tcp"),
     ("listen", None, "tcp",
      "Comma-separated list of listener types (tcp,tor,i2p,none)."),
+]
+
+TOR_OPTS = [
+    ("tor-control-port", None, None,
+     "Tor's control port endpoint descriptor string (e.g. tcp:127.0.0.1:9051 or unix:/var/run/tor/control)"),
+]
+
+TOR_FLAG = [
+    ("launch-tor", None, "Launch a tor instead of connecting to a tor control port."),
 ]
 
 def validate_where_options(o):
@@ -80,6 +90,7 @@ class CreateClientOptions(_CreateBaseOptions):
         # we provide 'create-node'-time options for the most common
         # configuration knobs. The rest can be controlled by editing
         # tahoe.cfg before node startup.
+
         ("nickname", "n", None, "Specify the nickname for this node."),
         ("introducer", "i", None, "Specify the introducer FURL to use."),
         ("webport", "p", "tcp:3456:interface=127.0.0.1",
@@ -96,10 +107,11 @@ class CreateClientOptions(_CreateBaseOptions):
 class CreateNodeOptions(CreateClientOptions):
     optFlags = [
         ("no-storage", None, "Do not offer storage service to other nodes."),
-        ]
+        ] + TOR_FLAG
+
     synopsis = "[options] [NODEDIR]"
     description = "Create a full Tahoe-LAFS node (client+server)."
-    optParameters = CreateClientOptions.optParameters + WHERE_OPTS
+    optParameters = CreateClientOptions.optParameters + WHERE_OPTS + TOR_OPTS
 
     def parseArgs(self, basedir=None):
         CreateClientOptions.parseArgs(self, basedir)
@@ -110,13 +122,14 @@ class CreateIntroducerOptions(NoDefaultBasedirOptions):
     description = "Create a Tahoe-LAFS introducer."
     optFlags = [
         ("hide-ip", None, "prohibit any configuration that would reveal the node's IP address"),
-    ]
-    optParameters = NoDefaultBasedirOptions.optParameters + WHERE_OPTS
+    ] + TOR_FLAG
+    optParameters = NoDefaultBasedirOptions.optParameters + WHERE_OPTS + TOR_OPTS
     def parseArgs(self, basedir=None):
         NoDefaultBasedirOptions.parseArgs(self, basedir)
         validate_where_options(self)
 
 def write_node_config(c, config):
+    d = defer.succeed(None)
     # this is shared between clients and introducers
     c.write("# -*- mode: conf; coding: utf-8 -*-\n")
     c.write("\n")
@@ -147,13 +160,27 @@ def write_node_config(c, config):
     c.write("web.static = public_html\n")
 
     listeners = config['listen'].split(",")
+
+    c.write("#log_gatherer.furl =\n")
+    c.write("#timeout.keepalive =\n")
+    c.write("#timeout.disconnect =\n")
+    c.write("#ssh.port = 8022\n")
+    c.write("#ssh.authorized_keys_file = ~/.ssh/authorized_keys\n")
+
     if listeners == ["none"]:
         c.write("tub.port = disabled\n")
         c.write("tub.location = disabled\n")
     else:
         if "tor" in listeners:
-            raise NotImplementedError("--listen=tor is under development, "
-                                      "see ticket #2490 for details")
+            key_file = "default.onion_key"
+            onion_port = 3456
+            c.write("[tor]\n")
+            c.write("onion.external_port = %s\n" % onion_port)
+            c.write("onion.private_key_file = %s\n" % key_file)
+            #tor_provider = TorProvider(tor_binary = )
+            # XXX fix me
+            tor_provider = TorProvider()
+            d = CreateOnion(tor_provider,key_file, onion_port)
         if "i2p" in listeners:
             raise NotImplementedError("--listen=i2p is under development, "
                                       "see ticket #2490 for details")
@@ -168,12 +195,8 @@ def write_node_config(c, config):
                 c.write("tub.port = tcp:%s\n" % new_port)
                 c.write("tub.location = tcp:%s:%s\n" % (hostname.encode('utf-8'), new_port))
 
-    c.write("#log_gatherer.furl =\n")
-    c.write("#timeout.keepalive =\n")
-    c.write("#timeout.disconnect =\n")
-    c.write("#ssh.port = 8022\n")
-    c.write("#ssh.authorized_keys_file = ~/.ssh/authorized_keys\n")
     c.write("\n")
+    return d
 
 def write_client_config(c, config):
     c.write("[client]\n")
@@ -226,7 +249,7 @@ def create_node(config):
     write_tac(basedir, "client")
 
     with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
-        write_node_config(c, config)
+        d = write_node_config(c, config)
         write_client_config(c, config)
 
     from allmydata.util import fileutil
@@ -237,7 +260,8 @@ def create_node(config):
         print >>out, " The node cannot connect to a grid without it."
     if not config.get("nickname", ""):
         print >>out, " Please set [node]nickname= in tahoe.cfg"
-    return 0
+    d.addCallback(lambda x: 0)
+    return d
 
 def create_client(config):
     config['no-storage'] = True
@@ -264,11 +288,12 @@ def create_introducer(config):
     write_tac(basedir, "introducer")
 
     c = open(os.path.join(basedir, "tahoe.cfg"), "w")
-    write_node_config(c, config)
+    d = write_node_config(c, config)
     c.close()
 
     print >>out, "Introducer created in %s" % quote_local_unicode_path(basedir)
-    return 0
+    d.addCallback(lambda x: 0)
+    return d
 
 
 subCommands = [
