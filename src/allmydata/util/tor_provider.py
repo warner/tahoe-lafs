@@ -12,6 +12,133 @@ import txtorcon
 from txtorcon import torconfig
 from txtorcon import torcontrolprotocol
 
+def create(reactor, config):
+    private_dir = os.path.join(config["basedir"], "private")
+    data_directory = os.path.join(private_dir, "tor")
+    tor_config = {} # written into tahoe.cfg:[tor]
+    if config["tor-launch"]:
+        tor_config["launch"] = "true"
+        control_ep = yield launch(config["tor-executable"], data_directory)
+        # now tor is launched and ready to be spoken to
+        # TODO: how/when to shut down?
+    else:
+        control_ep = yield txtorcon.SOMETHING()
+        # we assume tor is already running
+
+    # from what I can tell, txtorcon ignores local_port, and always
+    # assigns its own. We could fix this if/when there's a txtorcon
+    # version that doesn't do that, or we could just always let txtorcon
+    # allocate for us.
+    #local_port = allocate_tcp_port()
+    local_port = None
+    onion_port = 3457
+
+    # this allocates the onion service and waits for it to be published
+    hs_ep = txtorcon.TCPHiddenServiceEndpoint.system_tor(
+        reactor, control_ep, public_port, hs_dir, local_port)
+    lp = yield hs_ep.listen(EMPTY_FACTORY)
+
+    privkey = hs_ep.onion_private_key
+    assert privkey is not None
+    addr = lp.getHost()
+    location = "tor:%s:%d" % (addr.onion_uri, addr.onion_port)
+
+    tor_config["onion.external_port"] = str(external_port)
+    tor_config["onion.local_port"] = str(local_port)
+    tor_config["onion.private_key_file"] = "private/tor_onion.privkey"
+    privkeyfile = os.path.join(private_dir, "tor_onion.privkey")
+    with open(privkeyfile, "wb") as f:
+        f.write(privkey)
+
+    # * tor_config is a dictionary of keys/values to add to the "[tor]"
+    #   section of tahoe.cfg, which tells the new node how to launch Tor
+    #   in the right way.
+    # * privkey is a string, which will be written into a file, and then
+    #   passed back into the new (tahoe-start) -time onion endpoint
+    # * external_port is an integer, which we record and pass back in
+    # * local_port is a server endpoint string, which is added to
+    #   tub.port=, and also parsed to tell Tor where it should send
+    #   inbound connections. It will probably start as tcp:%d, but could
+    #   usefully be a unix-domain socket in BASEDIR/private/
+    # * location is a foolscap connection hint, "tor:ONION:EXTERNAL_PORT"
+
+    config = {"launch": "True"}
+    if self._tor_binary:
+        # TODO: it might be a good idea to find exactly which Tor we
+        # used, and record it's absolute path into tahoe.cfg . This would
+        # protect us against one Tor being on $PATH at create-node time,
+        # but then a different Tor being present at node startup. OTOH,
+        # maybe we don't need to worry about it.
+        config["tor.executable"] = os.path.abspath(self._tor_binary)
+    # We assume/require that the Node gives us the same data_directory=
+    # at both create-node and startup time. The data directory is not
+    # recorded in tahoe.cfg
+
+    returnValue(tor_config, tor_port, tor_location)
+
+def _import_tor():
+    # this exists to be overridden by unit tests
+    try:
+        from foolscap.connections import tor
+        return tor
+    except ImportError: # pragma: no cover
+        return None
+
+def _import_txtorcon():
+    try:
+        import txtorcon
+        return txtorcon
+    except ImportError: # pragma: no cover
+        return None
+
+class Provider(service.MultiService):
+    def __init__(self, tor_config):
+        service.MultiService.__init__(self)
+        self._tor_config = tor_config
+
+    def get_tor_handler(self):
+        enabled = get_config("tor", "enabled", True, boolean=True)
+        if not enabled:
+            return None
+        tor = _import_tor()
+        if not tor:
+            return None
+
+        # this changes, to share the launched Tor with an onion listener
+        if get_config("tor", "launch", False, boolean=True):
+            executable = get_config("tor", "tor.executable", None)
+            datadir = os.path.join(self.basedir, "private", "tor-statedir")
+            self._tor_provider = tor_provider.launch(tor_binary=executable,
+                                                     data_directory=datadir)
+            self._tor_provider.setServiceParent(self)
+            return self._tor_provider.get_foolscap_handler()
+
+        # this stays the same
+        socks_endpoint_desc = get_config("tor", "socks.port", None)
+        if socks_endpoint_desc:
+            socks_ep = endpoints.clientFromString(reactor, socks_endpoint_desc)
+            return tor.socks_endpoint(socks_ep)
+
+        # this stays the same
+        controlport = get_config("tor", "control.port", None)
+        if controlport:
+            ep = endpoints.clientFromString(reactor, controlport)
+            self._tor_provider = tor_provider.control_endpoint(ep)
+            self._tor_provider.setServiceParent(self)
+            return self._tor_provider.get_foolscap_handler()
+
+        return tor.default_socks()
+
+    def startService(self):
+        # launch tor, if necessary
+        # start onion service, if necessary
+        pass
+    def stopService(self):
+        # stop tor??
+        pass
+
+##### ignore past here
+
 @defer.inlineCallbacks
 def CreateOnion(tor_provider, key_file, onion_port):
     local_port = yield txtorcon.util.available_tcp_port(reactor)
@@ -59,41 +186,6 @@ class _Common(service.MultiService):
     # subclass must implement _connect() and get_foolscap_handler() and
     # get_tub_listener()
 
-    @inlineCallbacks
-    def allocate_onion(self, hs_dir):
-        control_ep = yield self.get_control_endpoint() # launches Tor
-
-        # from what I can tell, txtorcon ignores local_port, and always
-        # assigns its own. We could fix this if/when there's a txtorcon
-        # version that doesn't do that, or we could just always let txtorcon
-        # allocate for us.
-        #local_port = allocate_tcp_port()
-        local_port = None
-
-        # this allocates the onion service and waits for it to be published
-        hs_ep = txtorcon.TCPHiddenServiceEndpoint.system_tor(
-            reactor, control_ep, public_port, hs_dir, local_port)
-        lp = yield hs_ep.listen(EMPTY_FACTORY)
-
-        privkey = hs_ep.onion_private_key
-        assert privkey is not None
-        addr = lp.getHost()
-        location = "tor:%s:%d" % (addr.onion_uri, addr.onion_port)
-
-        # * tor_config is a dictionary of keys/values to add to the "[tor]"
-        #   section of tahoe.cfg, which tells the new node how to launch Tor
-        #   in the right way.
-        # * privkey is a string, which will be written into a file, and then
-        #   passed back into the new (tahoe-start) -time onion endpoint
-        # * external_port is an integer, which we record and pass back in
-        # * local_port is a server endpoint string, which is added to
-        #   tub.port=, and also parsed to tell Tor where it should send
-        #   inbound connections. It will probably start as tcp:%d, but could
-        #   usefully be a unix-domain socket in BASEDIR/private/
-        # * location is a foolscap connection hint, "tor:ONION:EXTERNAL_PORT"
-
-        return (self._tor_config(), privkey, external_port, local_port, location)
-
 class _Launch(_Common):
     def __init__(self, tor_binary=None, data_directory=None):
         _Common.__init__(self)
@@ -101,20 +193,6 @@ class _Launch(_Common):
         self._tor_binary = tor_binary
         self.tor_control_protocol = None
         self._when_launched = None
-
-    def _tor_config(self):
-        config = {"launch": "True"}
-        if self._tor_binary:
-            # TODO: it might be a good idea to find exactly which Tor we
-            # used, and record it's absolute path into tahoe.cfg . This would
-            # protect us against one Tor being on $PATH at create-node time,
-            # but then a different Tor being present at node startup. OTOH,
-            # maybe we don't need to worry about it.
-            config["tor.executable"] = os.path.abspath(self._tor_binary)
-        # We assume/require that the Node gives us the same data_directory=
-        # at both create-node and startup time. The data directory is not
-        # recorded in tahoe.cfg
-        return config
 
     def _maybe_launch(self):
         if not self._when_launched:

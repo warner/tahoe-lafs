@@ -167,6 +167,7 @@ def write_node_config(c, config):
     c.write("#ssh.port = 8022\n")
     c.write("#ssh.authorized_keys_file = ~/.ssh/authorized_keys\n")
 
+    tor_config = {}
     tub_ports = []
     tub_locations = []
     if listeners == ["none"]:
@@ -174,21 +175,8 @@ def write_node_config(c, config):
         c.write("tub.location = disabled\n")
     else:
         if "tor" in listeners:
-
-            onion_port = 3457
-
-            data_directory = os.path.join(basedir, "private", "tor")
-            tor_provider = tor_provider.launch(tor_binary,
-                                               data_directory)
-            (startup_config, privkey, external_port, local_port, location) = \
-                             yield tor_provider.allocate_onion()
-            tor_config = startup_config.copy()
-            tor_config["onion.external_port"] = str(external_port)
-            tor_config["onion.local_port"] = str(local_port)
-            tor_config["onion.private_key_file"] = "private/tor_onion.privkey"
-            privkeyfile = os.path.join(basedir, "private", "tor_onion.privkey")
-            with open(privkeyfile, "wb") as f:
-                f.write(privkey)
+            (tor_config, tor_port, tor_location) = \
+                         yield tor_provider.create(reactor, config)
             tub_ports.append(local_port)
             tub_locations.append(location)
         if "i2p" in listeners:

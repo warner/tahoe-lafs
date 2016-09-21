@@ -15,14 +15,6 @@ from allmydata.util.encodingutil import get_filesystem_encoding, quote_output
 from allmydata.util import configutil
 from allmydata.util import tor_provider
 
-def _import_tor():
-    # this exists to be overridden by unit tests
-    try:
-        from foolscap.connections import tor
-        return tor
-    except ImportError: # pragma: no cover
-        return None
-
 def _import_i2p():
     try:
         from foolscap.connections import i2p
@@ -139,6 +131,7 @@ class Node(service.MultiService):
 
         self.init_tempdir()
         self.check_privacy()
+        self.create_tor_provider()
         self.init_connections()
         self.set_tub_options()
         self.create_main_tub()
@@ -223,6 +216,9 @@ class Node(service.MultiService):
     def check_privacy(self):
         self._reveal_ip = self.get_config("node", "reveal-IP-address", True,
                                           boolean=True)
+    def create_tor_provider(self):
+        self._tor_provider = tor_provider.Provider(TOR_CONFIG)
+        self._tor_provider.setServiceParent(self)
 
     def _make_tcp_handler(self):
         # this is always available
@@ -230,35 +226,7 @@ class Node(service.MultiService):
         return default()
 
     def _make_tor_handler(self):
-        self._tor_provider = None
-        enabled = self.get_config("tor", "enabled", True, boolean=True)
-        if not enabled:
-            return None
-        tor = _import_tor()
-        if not tor:
-            return None
-
-        if self.get_config("tor", "launch", False, boolean=True):
-            executable = self.get_config("tor", "tor.executable", None)
-            datadir = os.path.join(self.basedir, "private", "tor-statedir")
-            self._tor_provider = tor_provider.launch(tor_binary=executable,
-                                                     data_directory=datadir)
-            self._tor_provider.setServiceParent(self)
-            return self._tor_provider.get_foolscap_handler()
-
-        socks_endpoint_desc = self.get_config("tor", "socks.port", None)
-        if socks_endpoint_desc:
-            socks_ep = endpoints.clientFromString(reactor, socks_endpoint_desc)
-            return tor.socks_endpoint(socks_ep)
-
-        controlport = self.get_config("tor", "control.port", None)
-        if controlport:
-            ep = endpoints.clientFromString(reactor, controlport)
-            self._tor_provider = tor_provider.control_endpoint(ep)
-            self._tor_provider.setServiceParent(self)
-            return self._tor_provider.get_foolscap_handler()
-
-        return tor.default_socks()
+        return self._tor_provider.get_tor_handler()
 
     def _make_i2p_handler(self):
         enabled = self.get_config("i2p", "enabled", True, boolean=True)
@@ -443,7 +411,6 @@ class Node(service.MultiService):
         cfg_tubport = self.get_config("node", "tub.port", None)
         cfg_location = self.get_config("node", "tub.location", None)
         portlocation = self.get_tub_portlocation(cfg_tubport, cfg_location)
-        self._tub_is_listening = False
         if portlocation:
             tubport, location = portlocation
             if tubport in ("0", "tcp:0"):
@@ -453,17 +420,8 @@ class Node(service.MultiService):
             self._tub_is_listening = True
             self.log("Tub location set to %s" % (location,))
             # the Tub is now ready for tub.registerReference()
-        if self.get_config("tor", "LISTENSOMETHING", None):
-            if not self._tor_provider:
-                raise ERROR("onion listener requested, but no tor provider")
-            # the TorProvider gives us this listening endpoint synchronously,
-            # but will launch Tor later, when startService is called.
-            ep = self._tor_provider.get_tub_listener()
-            self.tub.listenOn(ep)
-            self._tub_is_listening = True
-            self.log("Tub listening on onion service, local port is %s" % ep)
-
-        if not self._tub_is_listening:
+        else:
+            self._tub_is_listening = False
             self.log("Tub is not listening")
 
         self.tub.setServiceParent(self)
