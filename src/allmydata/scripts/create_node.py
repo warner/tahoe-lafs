@@ -128,8 +128,8 @@ class CreateIntroducerOptions(NoDefaultBasedirOptions):
         NoDefaultBasedirOptions.parseArgs(self, basedir)
         validate_where_options(self)
 
+@defer.inlineCallbacks
 def write_node_config(c, config):
-    d = defer.succeed(None)
     # this is shared between clients and introducers
     c.write("# -*- mode: conf; coding: utf-8 -*-\n")
     c.write("\n")
@@ -167,36 +167,55 @@ def write_node_config(c, config):
     c.write("#ssh.port = 8022\n")
     c.write("#ssh.authorized_keys_file = ~/.ssh/authorized_keys\n")
 
+    tub_ports = []
+    tub_locations = []
     if listeners == ["none"]:
         c.write("tub.port = disabled\n")
         c.write("tub.location = disabled\n")
     else:
         if "tor" in listeners:
-            key_file = "default.onion_key"
-            onion_port = 3456
-            c.write("[tor]\n")
-            c.write("onion.external_port = %s\n" % onion_port)
-            c.write("onion.private_key_file = %s\n" % key_file)
-            #tor_provider = TorProvider(tor_binary = )
-            # XXX fix me
-            tor_provider = TorProvider()
-            d = CreateOnion(tor_provider,key_file, onion_port)
+
+            onion_port = 3457
+
+            data_directory = os.path.join(basedir, "private", "tor")
+            tor_provider = tor_provider.launch(tor_binary,
+                                               data_directory)
+            (startup_config, privkey, external_port, local_port, location) = \
+                             yield tor_provider.allocate_onion()
+            tor_config = startup_config.copy()
+            tor_config["onion.external_port"] = str(external_port)
+            tor_config["onion.local_port"] = str(local_port)
+            tor_config["onion.private_key_file"] = "private/tor_onion.privkey"
+            privkeyfile = os.path.join(basedir, "private", "tor_onion.privkey")
+            with open(privkeyfile, "wb") as f:
+                f.write(privkey)
+            tub_ports.append(local_port)
+            tub_locations.append(location)
         if "i2p" in listeners:
             raise NotImplementedError("--listen=i2p is under development, "
                                       "see ticket #2490 for details")
         if "tcp" in listeners:
             if config["port"]: # --port/--location are a pair
-                c.write("tub.port = %s\n" % config["port"].encode('utf-8'))
-                c.write("tub.location = %s\n" % config["location"].encode('utf-8'))
+                tub_ports.append(config["port"].encode('utf-8'))
+                tub_locations.append(config["location"].encode('utf-8'))
             else:
                 assert "hostname" in config
                 hostname = config["hostname"]
                 new_port = iputil.allocate_tcp_port()
-                c.write("tub.port = tcp:%s\n" % new_port)
-                c.write("tub.location = tcp:%s:%s\n" % (hostname.encode('utf-8'), new_port))
+                tub_ports.append("tcp:%s" % new_port)
+                tub_locations.append("tcp:%s:%s" % (hostname.encode('utf-8'),
+                                                    new_port))
+        c.write("tub.port = %s\n" % ",".join(tub_ports))
+        c.write("tub.location = %s\n" % ",".join(tub_locations))
+    c.write("\n")
+
+    if tor_config:
+        c.write("[tor]\n")
+        for key, value in tor_config.items():
+            c.write("%s = %s\n" % (key, value))
 
     c.write("\n")
-    return d
+
 
 def write_client_config(c, config):
     c.write("[client]\n")
@@ -248,12 +267,13 @@ def create_node(config):
         os.mkdir(basedir)
     write_tac(basedir, "client")
 
+    from allmydata.util import fileutil
+    fileutil.make_dirs(os.path.join(basedir, "private"), 0700)
+
     with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
         d = write_node_config(c, config)
         write_client_config(c, config)
 
-    from allmydata.util import fileutil
-    fileutil.make_dirs(os.path.join(basedir, "private"), 0700)
     print >>out, "Node created in %s" % quote_local_unicode_path(basedir)
     if not config.get("introducer", ""):
         print >>out, " Please set [client]introducer.furl= in tahoe.cfg!"
