@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, with_statement
 import os
-from twisted.internet import reactor, service
+from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.endpoints import clientFromString
 from twisted.internet.error import ConnectionRefusedError, ConnectError
+from twisted.application import service
 from .observer import OneShotObserverList
 from .iputil import allocate_tcp_port
 
@@ -203,8 +204,8 @@ class Provider(service.MultiService):
         if not self._tor_launched:
             self._tor_launched = OneShotObserverList()
             d = self._launch_tor(reactor)
-            d.addBoth(self._tor_launched)
-        return self._tor_launched.whenFired()
+            d.addBoth(self._tor_launched.fire)
+        return self._tor_launched.when_fired()
 
     @inlineCallbacks
     def _launch_tor(self, reactor):

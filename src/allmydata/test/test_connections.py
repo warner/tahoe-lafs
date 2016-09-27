@@ -6,6 +6,7 @@ from twisted.internet import reactor, endpoints
 from twisted.internet.interfaces import IStreamClientEndpoint
 from ConfigParser import SafeConfigParser
 from foolscap.connections import tcp
+from txtorcon import TorConfig
 from ..node import Node, PrivacyError
 
 class FakeNode(Node):
@@ -13,6 +14,9 @@ class FakeNode(Node):
         self.config = SafeConfigParser()
         self.config.readfp(BytesIO(config_str))
         self._reveal_ip = True
+        self.basedir = "BASEDIR"
+        self.services = []
+        self.create_tor_provider()
 
 BASECONFIG = ("[client]\n"
               "introducer.furl = \n"
@@ -32,69 +36,82 @@ class Tor(unittest.TestCase):
         self.assertEqual(h, None)
 
     def test_unimportable(self):
-        n = FakeNode(BASECONFIG)
-        with mock.patch("allmydata.node._import_tor", return_value=None):
+        with mock.patch("allmydata.util.tor_provider._import_tor",
+                        return_value=None):
+            n = FakeNode(BASECONFIG)
             h = n._make_tor_handler()
         self.assertEqual(h, None)
 
     def test_default(self):
-        n = FakeNode(BASECONFIG)
         h1 = mock.Mock()
         with mock.patch("foolscap.connections.tor.default_socks",
                         return_value=h1) as f:
+            n = FakeNode(BASECONFIG)
             h = n._make_tor_handler()
             self.assertEqual(f.mock_calls, [mock.call()])
             self.assertIdentical(h, h1)
 
-    def test_launch(self):
-        n = FakeNode(BASECONFIG+"[tor]\nlaunch = true\n")
-        n.basedir = "BASEDIR"
+    def _do_test_launch(self, executable):
+        config = BASECONFIG+"[tor]\nlaunch = true\n"
+        if executable:
+            config += "tor.executable = %s\n" % executable
         h1 = mock.Mock()
-        with mock.patch("foolscap.connections.tor.launch",
+        with mock.patch("foolscap.connections.tor.control_endpoint_maker",
                         return_value=h1) as f:
+            n = FakeNode(config)
             h = n._make_tor_handler()
             data_directory = os.path.join(n.basedir, "private", "tor-statedir")
-            exp = mock.call(data_directory=data_directory,
-                            tor_binary=None)
+            exp = mock.call(n._tor_provider._make_control_endpoint)
             self.assertEqual(f.mock_calls, [exp])
             self.assertIdentical(h, h1)
+        tp = n._tor_provider
+        tpp = mock.Mock()
+        reactor = "reactor"
+        tpp.tor_protocol = object()
+        launch_tor = mock.Mock(return_value=tpp)
+        with mock.patch("txtorcon.launch_tor", launch_tor):
+            cep = self.successResultOf(tp._make_control_endpoint(reactor))
+            self.assertEqual(cep, "unix:BASEDIR/private/tor.control")
+            self.assertEqual(len(launch_tor.mock_calls), 1)
+            lt_call = launch_tor.mock_calls[0]
+            self.assertEqual(len(lt_call[1]), 2) # posargs
+            tc = lt_call[1][0]
+            self.assertIsInstance(tc, TorConfig)
+            self.assertEqual(tc.DataDirectory, data_directory)
+            self.assertEqual(tc.ControlPort,
+                             os.path.join("BASEDIR", "private", "tor.control"))
+            self.assertIdentical(lt_call[1][1], reactor)
+            self.assertEqual(lt_call[2], {"tor_binary": executable})
+
+    def test_launch(self):
+        self._do_test_launch(None)
 
     def test_launch_executable(self):
-        n = FakeNode(BASECONFIG+"[tor]\nlaunch = true\ntor.executable = tor")
-        n.basedir = "BASEDIR"
-        h1 = mock.Mock()
-        with mock.patch("foolscap.connections.tor.launch",
-                        return_value=h1) as f:
-            h = n._make_tor_handler()
-            data_directory = os.path.join(n.basedir, "private", "tor-statedir")
-            exp = mock.call(data_directory=data_directory,
-                            tor_binary="tor")
-            self.assertEqual(f.mock_calls, [exp])
-            self.assertIdentical(h, h1)
+        self._do_test_launch("/special/tor")
 
     def test_socksport_unix_endpoint(self):
-        n = FakeNode(BASECONFIG+"[tor]\nsocks.port = unix:/var/lib/fw-daemon/tor_socks.socket\n")
         h1 = mock.Mock()
         with mock.patch("foolscap.connections.tor.socks_endpoint",
                         return_value=h1) as f:
+            n = FakeNode(BASECONFIG+"[tor]\nsocks.port = unix:/var/lib/fw-daemon/tor_socks.socket\n")
             h = n._make_tor_handler()
             self.assertTrue(IStreamClientEndpoint.providedBy(f.mock_calls[0]))
             self.assertIdentical(h, h1)
 
     def test_socksport_endpoint(self):
-        n = FakeNode(BASECONFIG+"[tor]\nsocks.port = tcp:127.0.0.1:1234\n")
         h1 = mock.Mock()
         with mock.patch("foolscap.connections.tor.socks_endpoint",
                         return_value=h1) as f:
+            n = FakeNode(BASECONFIG+"[tor]\nsocks.port = tcp:127.0.0.1:1234\n")
             h = n._make_tor_handler()
             self.assertTrue(IStreamClientEndpoint.providedBy(f.mock_calls[0]))
             self.assertIdentical(h, h1)
 
     def test_socksport_endpoint_otherhost(self):
-        n = FakeNode(BASECONFIG+"[tor]\nsocks.port = tcp:otherhost:1234\n")
         h1 = mock.Mock()
         with mock.patch("foolscap.connections.tor.socks_endpoint",
                         return_value=h1) as f:
+            n = FakeNode(BASECONFIG+"[tor]\nsocks.port = tcp:otherhost:1234\n")
             h = n._make_tor_handler()
             self.assertTrue(IStreamClientEndpoint.providedBy(f.mock_calls[0]))
             self.assertIdentical(h, h1)
@@ -110,10 +127,10 @@ class Tor(unittest.TestCase):
         self.assertIn("invalid literal for int() with base 10: 'kumquat'", str(e))
 
     def test_controlport(self):
-        n = FakeNode(BASECONFIG+"[tor]\ncontrol.port = tcp:localhost:1234\n")
         h1 = mock.Mock()
         with mock.patch("foolscap.connections.tor.control_endpoint",
                         return_value=h1) as f:
+            n = FakeNode(BASECONFIG+"[tor]\ncontrol.port = tcp:localhost:1234\n")
             h = n._make_tor_handler()
             self.assertEqual(len(f.mock_calls), 1)
             ep = f.mock_calls[0][1][0]
@@ -231,7 +248,8 @@ class Connections(unittest.TestCase):
 
     def test_tor_unimportable(self):
         n = FakeNode(BASECONFIG+"[connections]\ntcp = tor\n")
-        with mock.patch("allmydata.node._import_tor", return_value=None):
+        with mock.patch("allmydata.util.tor_provider._import_tor",
+                        return_value=None):
             e = self.assertRaises(ValueError, n.init_connections)
         self.assertEqual(str(e),
                          "'tahoe.cfg [connections] tcp='"
