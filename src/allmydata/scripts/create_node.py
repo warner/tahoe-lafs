@@ -1,11 +1,11 @@
 import os
 from twisted.python.usage import UsageError
-from twisted.internet import defer
+from twisted.internet import reactor, defer
 from allmydata.scripts.common import BasedirOptions, NoDefaultBasedirOptions
 from allmydata.scripts.default_nodedir import _default_nodedir
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, argv_to_unicode, quote_local_unicode_path
-from allmydata.util import fileutil, iputil
+from allmydata.util import fileutil, iputil, tor_provider
 
 
 dummy_tac = """
@@ -176,9 +176,9 @@ def write_node_config(c, config):
     else:
         if "tor" in listeners:
             (tor_config, tor_port, tor_location) = \
-                         yield tor_provider.create(reactor, config)
-            tub_ports.append(local_port)
-            tub_locations.append(location)
+                         yield tor_provider.create_onion(reactor, config)
+            tub_ports.append(tor_port)
+            tub_locations.append(tor_location)
         if "i2p" in listeners:
             raise NotImplementedError("--listen=i2p is under development, "
                                       "see ticket #2490 for details")

@@ -217,7 +217,8 @@ class Node(service.MultiService):
         self._reveal_ip = self.get_config("node", "reveal-IP-address", True,
                                           boolean=True)
     def create_tor_provider(self):
-        self._tor_provider = tor_provider.Provider(TOR_CONFIG)
+        self._tor_provider = tor_provider.Provider(self.basedir, self)
+        self._tor_provider.check_onion_config()
         self._tor_provider.setServiceParent(self)
 
     def _make_tcp_handler(self):
