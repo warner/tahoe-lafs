@@ -7,11 +7,24 @@ from twisted.internet.endpoints import clientFromString
 from twisted.internet.error import ConnectionRefusedError, ConnectError
 from .observer import OneShotObserverList
 from .iputil import allocate_tcp_port
-import txtorcon
+
+def _import_tor():
+    # this exists to be overridden by unit tests
+    try:
+        from foolscap.connections import tor
+        return tor
+    except ImportError: # pragma: no cover
+        return None
+
+def _import_txtorcon():
+    try:
+        import txtorcon
+        return txtorcon
+    except ImportError: # pragma: no cover
+        return None
 
 def data_directory(private_dir):
     return os.path.join(private_dir, "tor-statedir")
-
 
 # different ways we might approach this:
 
@@ -22,6 +35,7 @@ def data_directory(private_dir):
 def _try_to_connect(reactor, endpoint_desc, stdout):
     # yields a TorState, or None
     ep = clientFromString(reactor, endpoint_desc)
+    txtorcon = _import_txtorcon()
     d = txtorcon.build_tor_connection(ep)
     def _failed(f):
         # depending upon what's listening at that endpoint, we might get
@@ -48,6 +62,10 @@ def _try_to_connect(reactor, endpoint_desc, stdout):
 
 @inlineCallbacks
 def create_onion(reactor, cli_config):
+    txtorcon = _import_txtorcon()
+    if not txtorcon:
+        raise ValueError("Cannot create onion without txtorcon. "
+                         "Please 'pip install tahoe-lafs[tor]' to fix this.")
     private_dir = os.path.join(cli_config["basedir"], "private")
     tahoe_config_tor = {} # written into tahoe.cfg:[tor]
     if cli_config["tor-launch"]:
@@ -136,21 +154,6 @@ def create_onion(reactor, cli_config):
 
     returnValue(tahoe_config_tor, tor_port, tor_location)
 
-def _import_tor():
-    # this exists to be overridden by unit tests
-    try:
-        from foolscap.connections import tor
-        return tor
-    except ImportError: # pragma: no cover
-        return None
-
-def _import_txtorcon():
-    try:
-        import txtorcon
-        return txtorcon
-    except ImportError: # pragma: no cover
-        return None
-
 class Provider(service.MultiService):
     def __init__(self, basedir, node_for_config):
         service.MultiService.__init__(self)
@@ -172,6 +175,9 @@ class Provider(service.MultiService):
             return None
 
         if self._get_tor_config("launch", False, boolean=True):
+            txtorcon = _import_txtorcon()
+            if not txtorcon:
+                return None
             return tor.control_endpoint_maker(self._make_control_endpoint)
 
         socks_endpoint_desc = self._get_tor_config("socks.port", None)
@@ -202,6 +208,7 @@ class Provider(service.MultiService):
 
     @inlineCallbacks
     def _launch_tor(self, reactor):
+        txtorcon = _import_txtorcon()
         private_dir = os.path.join(self._basedir, "private")
         tor_binary = self._get_tor_config("tor.executable", None)
         tor_config = txtorcon.TorConfig()
@@ -224,6 +231,10 @@ class Provider(service.MultiService):
 
     def check_onion_config(self):
         if self._get_tor_config("onion", False, boolean=True):
+            if not _import_txtorcon():
+                raise ValueError("Cannot create onion without txtorcon. "
+                                 "Please 'pip install tahoe-lafs[tor]' to fix.")
+
             # to start an onion server, we either need a Tor control port, or
             # we need to launch tor
             launch = self._get_tor_config("launch", False, boolean=True)
@@ -243,6 +254,7 @@ class Provider(service.MultiService):
     @inlineCallbacks
     def _start_onion(self):
         # launch tor, if necessary
+        txtorcon = _import_txtorcon()
         if self._get_tor_config("launch", False, boolean=True):
             (_, tor_control_proto) = yield self._get_launched_tor(reactor)
         else:
