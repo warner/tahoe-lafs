@@ -77,6 +77,16 @@ def validate_where_options(o):
             if 'tcp' not in listeners and o['hostname']:
                 raise UsageError("--listen= must be tcp to use --hostname")
 
+def validate_tor_options(o):
+    use_tor = "tor" in o["listen"].split(",")
+    if not use_tor:
+        if o["launch-tor"]:
+            raise UsageError("--launch-tor requires --listen=tor")
+        if o["tor-control-port"]:
+            raise UsageError("--tor-control-port= requires --listen=tor")
+    if o["launch-tor"] and o["tor-control-port"]:
+        raise UsageError("use either --launch-tor or --tor-control-port=, not both")
+
 class _CreateBaseOptions(BasedirOptions):
     optFlags = [
         ("hide-ip", None, "prohibit any configuration that would reveal the node's IP address"),
@@ -116,6 +126,7 @@ class CreateNodeOptions(CreateClientOptions):
     def parseArgs(self, basedir=None):
         CreateClientOptions.parseArgs(self, basedir)
         validate_where_options(self)
+        validate_tor_options(self)
 
 class CreateIntroducerOptions(NoDefaultBasedirOptions):
     subcommand_name = "create-introducer"
@@ -127,6 +138,7 @@ class CreateIntroducerOptions(NoDefaultBasedirOptions):
     def parseArgs(self, basedir=None):
         NoDefaultBasedirOptions.parseArgs(self, basedir)
         validate_where_options(self)
+        validate_tor_options(self)
 
 @defer.inlineCallbacks
 def write_node_config(c, config):
