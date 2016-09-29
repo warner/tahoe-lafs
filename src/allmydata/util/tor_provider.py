@@ -153,7 +153,7 @@ def create_onion(reactor, cli_config):
     # at both create-node and startup time. The data directory is not
     # recorded in tahoe.cfg
 
-    returnValue(tahoe_config_tor, tor_port, tor_location)
+    returnValue((tahoe_config_tor, tor_port, tor_location))
 
 class Provider(service.MultiService):
     def __init__(self, basedir, node_for_config):
