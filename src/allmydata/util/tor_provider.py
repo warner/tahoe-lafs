@@ -33,10 +33,9 @@ def data_directory(private_dir):
 # txtorcon.EphemeralHiddenService(ports), yield ehs.add_to_tor(tcp), store
 # ehs.hostname and ehs.private_key, yield ehs.remove_from_tor(tcp)
 
-def _try_to_connect(reactor, endpoint_desc, stdout):
+def _try_to_connect(reactor, endpoint_desc, stdout, txtorcon):
     # yields a TorState, or None
     ep = clientFromString(reactor, endpoint_desc)
-    txtorcon = _import_txtorcon()
     d = txtorcon.build_tor_connection(ep)
     def _failed(f):
         # depending upon what's listening at that endpoint, we might get
@@ -62,54 +61,70 @@ def _try_to_connect(reactor, endpoint_desc, stdout):
     return d
 
 @inlineCallbacks
+def _launch_tor(reactor, cli_config, private_dir, txtorcon):
+    # TODO: handle default tor-executable
+    tahoe_config_tor = {} # written into tahoe.cfg:[tor]
+    tahoe_config_tor["launch"] = "true"
+    control_port = allocate_tcp_port()
+    tor_binary = cli_config["tor-executable"]
+    if cli_config["tor-executable"]:
+        tahoe_config_tor["tor.executable"] = cli_config["tor-executable"]
+    # TODO: it might be a good idea to find exactly which Tor we used,
+    # and record it's absolute path into tahoe.cfg . This would protect
+    # us against one Tor being on $PATH at create-node time, but then a
+    # different Tor being present at node startup. OTOH, maybe we don't
+    # need to worry about it.
+    tor_config = txtorcon.TorConfig()
+    tor_config.DataDirectory = data_directory(private_dir)
+    tor_config.ControlPort = control_port
+    tpp = yield txtorcon.launch_tor(tor_config, reactor,
+                                    tor_binary=tor_binary)
+    # now tor is launched and ready to be spoken to
+    # as a side effect, we've got an ITorControlProtocol ready to go
+    tor_control_proto = tpp.tor_protocol
+
+    # How/when to shut down the new process? for normal usage, the child
+    # tor will exit when it notices its parent (us) quit. Unit tests will
+    # mock out txtorcon.launch_tor(), so there will never be a real Tor
+    # process. So I guess we don't need to track the process.
+
+    returnValue((tahoe_config_tor, tor_control_proto))
+
+@inlineCallbacks
+def _connect_to_tor(reactor, cli_config):
+    # we assume tor is already running
+    tahoe_config_tor = {} # written into tahoe.cfg:[tor]
+    ports_to_try = ["unix:/var/run/tor/control",
+                    "tcp:127.0.0.1:9051",
+                    "tcp:127.0.0.1:9151", # TorBrowserBundle
+                    ]
+    if cli_config["tor-control-endpoint"]:
+        ports_to_try = [cli_config["tor-control-endpoint"]]
+    for port in ports_to_try:
+        tor_state = yield _try_to_connect(reactor, port, cli_config.stdout)
+        if tor_state:
+            tahoe_config_tor["control.port"] = port
+            break
+    else:
+        raise ValueError("unable to reach any default Tor control port")
+    tor_control_proto = tor_state.protocol
+
+    returnValue((tahoe_config_tor, tor_control_proto))
+
+@inlineCallbacks
 def create_onion(reactor, cli_config):
     txtorcon = _import_txtorcon()
     if not txtorcon:
         raise ValueError("Cannot create onion without txtorcon. "
                          "Please 'pip install tahoe-lafs[tor]' to fix this.")
     private_dir = os.path.join(cli_config["basedir"], "private")
-    tahoe_config_tor = {} # written into tahoe.cfg:[tor]
     if cli_config["tor-launch"]:
-        # TODO: handle default tor-executable
-        tahoe_config_tor["launch"] = "true"
-        control_port = allocate_tcp_port()
-        tor_binary = cli_config["tor-executable"]
-        if cli_config["tor-executable"]:
-            tahoe_config_tor["tor.executable"] = cli_config["tor-executable"]
-        # TODO: it might be a good idea to find exactly which Tor we used,
-        # and record it's absolute path into tahoe.cfg . This would protect
-        # us against one Tor being on $PATH at create-node time, but then a
-        # different Tor being present at node startup. OTOH, maybe we don't
-        # need to worry about it.
-        tor_config = txtorcon.TorConfig()
-        tor_config.DataDirectory = data_directory(private_dir)
-        tor_config.ControlPort = control_port
-        tpp = yield txtorcon.launch_tor(tor_config, reactor,
-                                        tor_binary=tor_binary)
-        # now tor is launched and ready to be spoken to
-        # as a side effect, we've got an ITorControlProtocol ready to go
-        tor_control_proto = tpp.tor_protocol
-
-        # How/when to shut down the new process? for normal usage, the child
-        # tor will exit when it notices its parent (us) quit. Unit tests will
-        # mock out txtorcon.launch_tor(), so there will never be a real Tor
-        # process. So I guess we don't need to track the process.
+        (tahoe_config_tor, tor_control_proto) = \
+                           yield _launch_tor(reactor, cli_config, private_dir,
+                                             txtorcon)
     else:
-        # we assume tor is already running
-        ports_to_try = ["unix:/var/run/tor/control",
-                        "tcp:127.0.0.1:9051",
-                        "tcp:127.0.0.1:9151", # TorBrowserBundle
-                        ]
-        if cli_config["tor-control-endpoint"]:
-            ports_to_try = cli_config["tor-control-endpoint"]
-        for port in ports_to_try:
-            tor_state = yield _try_to_connect(reactor, port, cli_config.stdout)
-            if tor_state:
-                tahoe_config_tor["control.port"] = port
-                break
-        else:
-            raise ValueError("unable to reach any default Tor control port")
-        tor_control_proto = tor_state.protocol
+        (tahoe_config_tor, tor_control_proto) = \
+                           yield _connect_to_tor(reactor, cli_config)
 
     external_port = 3457 # TODO: pick this randomly? there's no contention.
 
