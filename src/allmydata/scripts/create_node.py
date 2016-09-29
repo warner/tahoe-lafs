@@ -38,7 +38,7 @@ TOR_OPTS = [
 ]
 
 TOR_FLAGS = [
-    ("launch-tor", None, "Launch a tor instead of connecting to a tor control port."),
+    ("tor-launch", None, "Launch a tor instead of connecting to a tor control port."),
 ]
 
 def validate_where_options(o):
@@ -82,12 +82,12 @@ def validate_where_options(o):
 def validate_tor_options(o):
     use_tor = "tor" in o["listen"].split(",")
     if not use_tor:
-        if o["launch-tor"]:
-            raise UsageError("--launch-tor requires --listen=tor")
+        if o["tor-launch"]:
+            raise UsageError("--tor-launch requires --listen=tor")
         if o["tor-control-port"]:
             raise UsageError("--tor-control-port= requires --listen=tor")
-    if o["launch-tor"] and o["tor-control-port"]:
-        raise UsageError("use either --launch-tor or --tor-control-port=, not both")
+    if o["tor-launch"] and o["tor-control-port"]:
+        raise UsageError("use either --tor-launch or --tor-control-port=, not both")
 
 class _CreateBaseOptions(BasedirOptions):
     optFlags = [

@@ -254,11 +254,11 @@ class Tor(unittest.TestCase):
         with mock.patch("allmydata.util.tor_provider.create_onion",
                         return_value=onion_d) as co:
             rc, out, err = self.successResultOf(
-                run_cli("create-node", "--listen=tor", "--launch-tor",
+                run_cli("create-node", "--listen=tor", "--tor-launch",
                         basedir))
         args = co.mock_calls[0][1]
         self.assertEqual(args[1]["listen"], "tor")
-        self.assertEqual(args[1]["launch-tor"], True)
+        self.assertEqual(args[1]["tor-launch"], True)
         self.assertEqual(args[1]["tor-control-port"], None)
 
     def test_control_port(self):
@@ -274,22 +274,22 @@ class Tor(unittest.TestCase):
                         basedir))
         args = co.mock_calls[0][1]
         self.assertEqual(args[1]["listen"], "tor")
-        self.assertEqual(args[1]["launch-tor"], False)
+        self.assertEqual(args[1]["tor-launch"], False)
         self.assertEqual(args[1]["tor-control-port"], "mno")
 
     def test_not_both(self):
         e = self.assertRaises(usage.UsageError,
                               parse_cli,
                               "create-node", "--listen=tor",
-                              "--launch-tor", "--tor-control-port=foo")
-        self.assertEqual(str(e), "use either --launch-tor or"
+                              "--tor-launch", "--tor-control-port=foo")
+        self.assertEqual(str(e), "use either --tor-launch or"
                          " --tor-control-port=, not both")
 
     def test_launch_without_listen(self):
         e = self.assertRaises(usage.UsageError,
                               parse_cli,
-                              "create-node", "--listen=none", "--launch-tor")
-        self.assertEqual(str(e), "--launch-tor requires --listen=tor")
+                              "create-node", "--listen=none", "--tor-launch")
+        self.assertEqual(str(e), "--tor-launch requires --listen=tor")
 
     def test_control_port_without_listen(self):
         e = self.assertRaises(usage.UsageError,
