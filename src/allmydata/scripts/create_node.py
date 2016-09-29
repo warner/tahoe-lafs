@@ -33,9 +33,11 @@ WHERE_OPTS = [
 TOR_OPTS = [
     ("tor-control-port", None, None,
      "Tor's control port endpoint descriptor string (e.g. tcp:127.0.0.1:9051 or unix:/var/run/tor/control)"),
+    ("tor-executable", None, None,
+     "The 'tor' executable to run (default is to search $PATH)."),
 ]
 
-TOR_FLAG = [
+TOR_FLAGS = [
     ("launch-tor", None, "Launch a tor instead of connecting to a tor control port."),
 ]
 
@@ -117,7 +119,7 @@ class CreateClientOptions(_CreateBaseOptions):
 class CreateNodeOptions(CreateClientOptions):
     optFlags = [
         ("no-storage", None, "Do not offer storage service to other nodes."),
-        ] + TOR_FLAG
+        ] + TOR_FLAGS
 
     synopsis = "[options] [NODEDIR]"
     description = "Create a full Tahoe-LAFS node (client+server)."
@@ -133,7 +135,7 @@ class CreateIntroducerOptions(NoDefaultBasedirOptions):
     description = "Create a Tahoe-LAFS introducer."
     optFlags = [
         ("hide-ip", None, "prohibit any configuration that would reveal the node's IP address"),
-    ] + TOR_FLAG
+    ] + TOR_FLAGS
     optParameters = NoDefaultBasedirOptions.optParameters + WHERE_OPTS + TOR_OPTS
     def parseArgs(self, basedir=None):
         NoDefaultBasedirOptions.parseArgs(self, basedir)
