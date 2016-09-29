@@ -2,11 +2,10 @@ import os
 import mock
 from io import BytesIO
 from twisted.trial import unittest
-from twisted.internet import reactor, endpoints
+from twisted.internet import reactor, endpoints, defer
 from twisted.internet.interfaces import IStreamClientEndpoint
 from ConfigParser import SafeConfigParser
 from foolscap.connections import tcp
-from txtorcon import TorConfig
 from ..node import Node, PrivacyError
 
 class FakeNode(Node):
@@ -52,6 +51,7 @@ class Tor(unittest.TestCase):
             self.assertIdentical(h, h1)
 
     def _do_test_launch(self, executable):
+        # the handler is created right away
         config = BASECONFIG+"[tor]\nlaunch = true\n"
         if executable:
             config += "tor.executable = %s\n" % executable
@@ -60,28 +60,25 @@ class Tor(unittest.TestCase):
                         return_value=h1) as f:
             n = FakeNode(config)
             h = n._make_tor_handler()
-            data_directory = os.path.join(n.basedir, "private", "tor-statedir")
+            private_dir = os.path.join(n.basedir, "private")
             exp = mock.call(n._tor_provider._make_control_endpoint)
             self.assertEqual(f.mock_calls, [exp])
             self.assertIdentical(h, h1)
+
+        # later, when Foolscap first connects, Tor should be launched
         tp = n._tor_provider
-        tpp = mock.Mock()
         reactor = "reactor"
-        tpp.tor_protocol = object()
-        launch_tor = mock.Mock(return_value=tpp)
-        with mock.patch("txtorcon.launch_tor", launch_tor):
-            cep = self.successResultOf(tp._make_control_endpoint(reactor))
-            self.assertEqual(cep, "unix:BASEDIR/private/tor.control")
-            self.assertEqual(len(launch_tor.mock_calls), 1)
-            lt_call = launch_tor.mock_calls[0]
-            self.assertEqual(len(lt_call[1]), 2) # posargs
-            tc = lt_call[1][0]
-            self.assertIsInstance(tc, TorConfig)
-            self.assertEqual(tc.DataDirectory, data_directory)
-            self.assertEqual(tc.ControlPort,
-                             os.path.join("BASEDIR", "private", "tor.control"))
-            self.assertIdentical(lt_call[1][1], reactor)
-            self.assertEqual(lt_call[2], {"tor_binary": executable})
+        tcp = object()
+        tcep = object()
+        launch_tor = mock.Mock(return_value=defer.succeed(("ep_desc", tcp)))
+        cfs = mock.Mock(return_value=tcep)
+        with mock.patch("allmydata.util.tor_provider._launch_tor", launch_tor):
+            with mock.patch("allmydata.util.tor_provider.clientFromString", cfs):
+                cep = self.successResultOf(tp._make_control_endpoint(reactor))
+        launch_tor.assert_called_with(reactor, executable, private_dir,
+                                      tp._txtorcon)
+        cfs.assert_called_with(reactor, "ep_desc")
+        self.assertIs(cep, tcep)
 
     def test_launch(self):
         self._do_test_launch(None)
@@ -247,10 +244,10 @@ class Connections(unittest.TestCase):
         self.assertEqual(n._default_connection_handlers["i2p"], "i2p")
 
     def test_tor_unimportable(self):
-        n = FakeNode(BASECONFIG+"[connections]\ntcp = tor\n")
         with mock.patch("allmydata.util.tor_provider._import_tor",
                         return_value=None):
-            e = self.assertRaises(ValueError, n.init_connections)
+            n = FakeNode(BASECONFIG+"[connections]\ntcp = tor\n")
+        e = self.assertRaises(ValueError, n.init_connections)
         self.assertEqual(str(e),
                          "'tahoe.cfg [connections] tcp='"
                          " uses unavailable/unimportable handler type 'tor'."

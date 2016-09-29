@@ -227,7 +227,7 @@ class Node(service.MultiService):
         return default()
 
     def _make_tor_handler(self):
-        return self._tor_provider.get_tor_handler()
+        return self._tor_provider.get_tor_handler(reactor)
 
     def _make_i2p_handler(self):
         enabled = self.get_config("i2p", "enabled", True, boolean=True)
