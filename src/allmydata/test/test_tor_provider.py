@@ -10,6 +10,10 @@ def mock_txtorcon(txtorcon):
     return mock.patch("allmydata.util.tor_provider._import_txtorcon",
                       return_value=txtorcon)
 
+def mock_tor(tor):
+    return mock.patch("allmydata.util.tor_provider._import_tor",
+                      return_value=tor)
+
 class Connect(unittest.TestCase):
     def test_try(self):
         reactor = object()
@@ -290,4 +294,33 @@ class Create(unittest.TestCase):
         with open(fn, "rb") as f:
             privkey = f.read()
         self.assertEqual(privkey, "privkey")
+
+_None = object()
+class FakeConfig(dict):
+    def get_config(self, section, option, default=_None, boolean=False):
+        if section != "tor":
+            raise ValueError(section)
+        value = self.get(option, default)
+        if value is _None:
+            raise KeyError
+        return value
+
+class Provider(unittest.TestCase):
+    def test_build(self):
+        p = tor_provider.Provider("basedir", FakeConfig())
+
+    def test_handler_disabled(self):
+        p = tor_provider.Provider("basedir", FakeConfig(enabled=False))
+        self.assertEqual(p.get_tor_handler(), None)
+
+    def test_handler_no_tor(self):
+        p = tor_provider.Provider("basedir", FakeConfig())
+        with mock_tor(None):
+            self.assertEqual(p.get_tor_handler(), None)
+
+    def test_handler_launch_no_txtorcon(self):
+        p = tor_provider.Provider("basedir", FakeConfig(launch=True))
+        with mock_txtorcon(None):
+            self.assertEqual(p.get_tor_handler(), None)
+
 
