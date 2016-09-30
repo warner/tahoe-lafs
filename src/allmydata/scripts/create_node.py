@@ -291,6 +291,7 @@ def create_client(config):
     return create_node(config)
 
 
+@defer.inlineCallbacks
 def create_introducer(config):
     out = config.stdout
     err = config.stderr
@@ -303,19 +304,17 @@ def create_introducer(config):
             print >>err, "The base directory %s is not empty." % quote_local_unicode_path(basedir)
             print >>err, "To avoid clobbering anything, I am going to quit now."
             print >>err, "Please use a different directory, or empty this one."
-            return -1
+            defer.returnValue(-1)
         # we're willing to use an empty directory
     else:
         os.mkdir(basedir)
     write_tac(basedir, "introducer")
 
-    c = open(os.path.join(basedir, "tahoe.cfg"), "w")
-    d = write_node_config(c, config)
-    c.close()
+    with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
+        yield write_node_config(c, config)
 
     print >>out, "Introducer created in %s" % quote_local_unicode_path(basedir)
-    d.addCallback(lambda x: 0)
-    return d
+    defer.returnValue(0)
 
 
 subCommands = [
