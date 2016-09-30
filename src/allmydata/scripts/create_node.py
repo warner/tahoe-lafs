@@ -270,9 +270,7 @@ def create_node(config):
         os.mkdir(basedir)
     write_tac(basedir, "client")
 
-    from allmydata.util import fileutil
     fileutil.make_dirs(os.path.join(basedir, "private"), 0700)
-
     with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
         yield write_node_config(c, config)
         write_client_config(c, config)
@@ -310,6 +308,7 @@ def create_introducer(config):
         os.mkdir(basedir)
     write_tac(basedir, "introducer")
 
+    fileutil.make_dirs(os.path.join(basedir, "private"), 0700)
     with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
         yield write_node_config(c, config)
 
