@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import, print_function, with_statement
 import os
-from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.endpoints import clientFromString
 from twisted.internet.error import ConnectionRefusedError, ConnectError
@@ -153,7 +152,8 @@ def create_onion(reactor, cli_config):
     tahoe_config_tor["onion.local_port"] = str(local_port)
     tahoe_config_tor["onion.external_port"] = str(external_port)
     assert privkey
-    tahoe_config_tor["onion.private_key_file"] = "private/tor_onion.privkey"
+    tahoe_config_tor["onion.private_key_file"] = os.path.join("private",
+                                                              "tor_onion.privkey")
     privkeyfile = os.path.join(private_dir, "tor_onion.privkey")
     with open(privkeyfile, "wb") as f:
         f.write(privkey)
@@ -178,7 +178,7 @@ def create_onion(reactor, cli_config):
 # nice error, and startService will throw an ugly error.
 
 class Provider(service.MultiService):
-    def __init__(self, basedir, node_for_config):
+    def __init__(self, basedir, node_for_config, reactor):
         service.MultiService.__init__(self)
         self._basedir = basedir
         self._node_for_config = node_for_config
@@ -187,11 +187,12 @@ class Provider(service.MultiService):
         self._onion_tor_control_proto = None
         self._tor = _import_tor()
         self._txtorcon = _import_txtorcon()
+        self._reactor = reactor
 
     def _get_tor_config(self, *args, **kwargs):
         return self._node_for_config.get_config("tor", *args, **kwargs)
 
-    def get_tor_handler(self, reactor):
+    def get_tor_handler(self):
         enabled = self._get_tor_config("enabled", True, boolean=True)
         if not enabled:
             return None
@@ -205,12 +206,12 @@ class Provider(service.MultiService):
 
         socks_endpoint_desc = self._get_tor_config("socks.port", None)
         if socks_endpoint_desc:
-            socks_ep = clientFromString(reactor, socks_endpoint_desc)
+            socks_ep = clientFromString(self._reactor, socks_endpoint_desc)
             return self._tor.socks_endpoint(socks_ep)
 
         controlport = self._get_tor_config("control.port", None)
         if controlport:
-            ep = clientFromString(reactor, controlport)
+            ep = clientFromString(self._reactor, controlport)
             return self._tor.control_endpoint(ep)
 
         return self._tor.default_socks()
@@ -255,7 +256,7 @@ class Provider(service.MultiService):
             require("private_key_file")
 
     @inlineCallbacks
-    def _start_onion(self):
+    def _start_onion(self, reactor):
         # launch tor, if necessary
         if self._get_tor_config("launch", False, boolean=True):
             (_, tor_control_proto) = yield self._get_launched_tor(reactor)
@@ -267,10 +268,9 @@ class Provider(service.MultiService):
 
         local_port = int(self._get_tor_config("onion.local_port"))
         external_port = int(self._get_tor_config("onion.external_port"))
-        private_dir = os.path.join(self._basedir, "private")
 
         fn = self._get_tor_config("onion.private_key_file")
-        privkeyfile = os.path.join(private_dir, fn)
+        privkeyfile = os.path.join(self._basedir, fn)
         with open(privkeyfile, "rb") as f:
             privkey = f.read()
         ehs = self._txtorcon.EphemeralHiddenService(
@@ -284,7 +284,7 @@ class Provider(service.MultiService):
         service.MultiService.startService(self)
         # if we need to start an onion service, now is the time
         if self._get_tor_config("onion", False, boolean=True):
-            self._start_onion(reactor)
+            return self._start_onion(self._reactor) # so tests can synchronize
 
     @inlineCallbacks
     def stopService(self):

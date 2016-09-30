@@ -217,7 +217,7 @@ class Node(service.MultiService):
         self._reveal_ip = self.get_config("node", "reveal-IP-address", True,
                                           boolean=True)
     def create_tor_provider(self):
-        self._tor_provider = tor_provider.Provider(self.basedir, self)
+        self._tor_provider = tor_provider.Provider(self.basedir, self, reactor)
         self._tor_provider.check_onion_config()
         self._tor_provider.setServiceParent(self)
 
@@ -227,7 +227,7 @@ class Node(service.MultiService):
         return default()
 
     def _make_tor_handler(self):
-        return self._tor_provider.get_tor_handler(reactor)
+        return self._tor_provider.get_tor_handler()
 
     def _make_i2p_handler(self):
         enabled = self.get_config("i2p", "enabled", True, boolean=True)
