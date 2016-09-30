@@ -202,7 +202,7 @@ class CreateOnion(unittest.TestCase):
         if executable:
             expected["tor.executable"] = executable
         self.assertEqual(tahoe_config_tor, expected)
-        self.assertEqual(tor_port, "tcp:127.0.0.1:999999")
+        self.assertEqual(tor_port, "tcp:999999:interface=127.0.0.1")
         self.assertEqual(tor_location, "tor:ONION.onion:3457")
         fn = os.path.join(basedir, tahoe_config_tor["onion.private_key_file"])
         with open(fn, "rb") as f:
@@ -252,7 +252,7 @@ class CreateOnion(unittest.TestCase):
                     "onion.private_key_file": "private/tor_onion.privkey",
                     }
         self.assertEqual(tahoe_config_tor, expected)
-        self.assertEqual(tor_port, "tcp:127.0.0.1:999999")
+        self.assertEqual(tor_port, "tcp:999999:interface=127.0.0.1")
         self.assertEqual(tor_location, "tor:ONION.onion:3457")
         fn = os.path.join(basedir, tahoe_config_tor["onion.private_key_file"])
         with open(fn, "rb") as f:

@@ -142,7 +142,7 @@ def create_onion(reactor, cli_config):
     print("allocating .onion address (takes ~40s)..", file=stdout)
     yield ehs.add_to_tor(tor_control_proto)
     print(".onion address allocated", file=stdout)
-    tor_port = "tcp:127.0.0.1:%d" % local_port
+    tor_port = "tcp:%d:interface=127.0.0.1" % local_port
     tor_location = "tor:%s:%d" % (ehs.hostname, external_port)
     privkey = ehs.private_key
     yield ehs.remove_from_tor(tor_control_proto)
