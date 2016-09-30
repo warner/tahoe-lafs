@@ -135,15 +135,17 @@ class Node(service.MultiService):
 
         self.init_tempdir()
         self.check_privacy()
+
+        self.create_log_tub()
+        self.logSource="Node"
+        self.setup_logging()
+
         self.create_tor_provider()
         self.init_connections()
         self.set_tub_options()
         self.create_main_tub()
         self.create_control_tub()
-        self.create_log_tub()
-        self.logSource="Node"
 
-        self.setup_logging()
         self.log("Node constructed. " + get_package_versions_string())
         iputil.increase_rlimits()
 
@@ -269,7 +271,7 @@ class Node(service.MultiService):
             "tor": self._make_tor_handler(),
             "i2p": self._make_i2p_handler(),
             }
-        self.log("built Foolscap connection handlers for: %(known_handlers)s",
+        self.log(format="built Foolscap connection handlers for: %(known_handlers)s",
                  known_handlers=sorted([k for k,v in handlers.items() if v]),
                  facility="tahoe.node", umid="PuLh8g")
 
