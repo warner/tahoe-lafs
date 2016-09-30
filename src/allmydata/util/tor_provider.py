@@ -98,8 +98,8 @@ def _connect_to_tor(reactor, cli_config):
                     "tcp:127.0.0.1:9051",
                     "tcp:127.0.0.1:9151", # TorBrowserBundle
                     ]
-    if cli_config["tor-control-endpoint"]:
-        ports_to_try = [cli_config["tor-control-endpoint"]]
+    if cli_config["tor-control-port"]:
+        ports_to_try = [cli_config["tor-control-port"]]
     for port in ports_to_try:
         tor_state = yield _try_to_connect(reactor, port, cli_config.stdout)
         if tor_state:

@@ -100,10 +100,11 @@ class LaunchTor(unittest.TestCase):
 class ConnectToTor(unittest.TestCase):
     def _do_test_connect(self, endpoint, reachable):
         reactor = object()
-        cli_config = create_node.CreateNodeOptions()
-        #cli_config["tor-launch"] = False
-        cli_config["tor-control-endpoint"] = endpoint
-        cli_config.stdout = stdout = StringIO()
+        args = []
+        if endpoint:
+            args = ["--tor-control-port=%s" % endpoint]
+        cli_config = make_cli_config("basedir", "--listen=tor", *args)
+        stdout = cli_config.stdout
         expected_port = "tcp:127.0.0.1:9151"
         if endpoint:
             expected_port = endpoint
