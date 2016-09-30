@@ -117,16 +117,21 @@ def create_onion(reactor, cli_config):
                          "Please 'pip install tahoe-lafs[tor]' to fix this.")
     tahoe_config_tor = {} # written into tahoe.cfg:[tor]
     private_dir = os.path.join(cli_config["basedir"], "private")
+    stdout = cli_config.stdout
     if cli_config["tor-launch"]:
         tahoe_config_tor["launch"] = "true"
         tor_executable = cli_config["tor-executable"]
         if tor_executable:
             tahoe_config_tor["tor.executable"] = tor_executable
+        print("launching Tor (to allocate .onion address)..", file=stdout)
         (_, tor_control_proto) = yield _launch_tor(
             reactor, tor_executable, private_dir, txtorcon)
+        print("Tor launched", file=stdout)
     else:
+        print("connecting to Tor (to allocate .onion address)..", file=stdout)
         (port, tor_control_proto) = yield _connect_to_tor(
             reactor, cli_config, txtorcon)
+        print("Tor connection established", file=stdout)
         tahoe_config_tor["control.port"] = port
 
     external_port = 3457 # TODO: pick this randomly? there's no contention.
@@ -134,7 +139,9 @@ def create_onion(reactor, cli_config):
     local_port = allocate_tcp_port()
     ehs = txtorcon.EphemeralHiddenService("%d 127.0.0.1:%d" %
                                           (local_port, external_port))
+    print("allocating .onion address (takes ~40s)..", file=stdout)
     yield ehs.add_to_tor(tor_control_proto)
+    print(".onion address allocated", file=stdout)
     tor_port = "tcp:127.0.0.1:%d" % local_port
     tor_location = "tor:%s:%d" % (ehs.hostname, external_port)
     privkey = ehs.private_key
