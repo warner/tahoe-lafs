@@ -100,6 +100,7 @@ class LaunchTor(unittest.TestCase):
 class ConnectToTor(unittest.TestCase):
     def _do_test_connect(self, endpoint, reachable):
         reactor = object()
+        txtorcon = object()
         args = []
         if endpoint:
             args = ["--tor-control-port=%s" % endpoint]
@@ -111,8 +112,8 @@ class ConnectToTor(unittest.TestCase):
         tor_state = mock.Mock
         tor_state.protocol = object()
         tried = []
-        def _try_to_connect(reactor, port, stdout):
-            tried.append( (reactor, port, stdout) )
+        def _try_to_connect(reactor, port, stdout, txtorcon):
+            tried.append( (reactor, port, stdout, txtorcon) )
             if not reachable:
                 return defer.succeed(None)
             if port == expected_port: # second one on the list
@@ -121,7 +122,7 @@ class ConnectToTor(unittest.TestCase):
 
         with mock.patch("allmydata.util.tor_provider._try_to_connect",
                         _try_to_connect):
-            d = tor_provider._connect_to_tor(reactor, cli_config)
+            d = tor_provider._connect_to_tor(reactor, cli_config, txtorcon)
         if not reachable:
             f = self.failureResultOf(d)
             self.assertIsInstance(f.value, ValueError)
@@ -131,12 +132,12 @@ class ConnectToTor(unittest.TestCase):
         successful_port, tor_control_proto = self.successResultOf(d)
         self.assertEqual(successful_port, expected_port)
         self.assertIs(tor_control_proto, tor_state.protocol)
-        expected = [(reactor, "unix:/var/run/tor/control", stdout),
-                    (reactor, "tcp:127.0.0.1:9051", stdout),
-                    (reactor, "tcp:127.0.0.1:9151", stdout),
+        expected = [(reactor, "unix:/var/run/tor/control", stdout, txtorcon),
+                    (reactor, "tcp:127.0.0.1:9051", stdout, txtorcon),
+                    (reactor, "tcp:127.0.0.1:9151", stdout, txtorcon),
                     ]
         if endpoint:
-            expected = [(reactor, endpoint, stdout)]
+            expected = [(reactor, endpoint, stdout, txtorcon)]
         self.assertEqual(tried, expected)
 
     def test_connect(self):
@@ -239,7 +240,7 @@ class CreateOnion(unittest.TestCase):
                     d = tor_provider.create_onion(reactor, cli_config)
         tahoe_config_tor, tor_port, tor_location = self.successResultOf(d)
 
-        connect_to_tor.assert_called_with(reactor, cli_config)
+        connect_to_tor.assert_called_with(reactor, cli_config, txtorcon)
         txtorcon.EphemeralHiddenService.assert_called_with("999999 127.0.0.1:3457")
         ehs.add_to_tor.assert_called_with(protocol)
         ehs.remove_from_tor.assert_called_with(protocol)

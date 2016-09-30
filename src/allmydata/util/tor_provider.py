@@ -92,7 +92,7 @@ def _launch_tor(reactor, tor_executable, private_dir, txtorcon):
     returnValue((tor_control_endpoint_desc, tor_control_proto))
 
 @inlineCallbacks
-def _connect_to_tor(reactor, cli_config):
+def _connect_to_tor(reactor, cli_config, txtorcon):
     # we assume tor is already running
     ports_to_try = ["unix:/var/run/tor/control",
                     "tcp:127.0.0.1:9051",
@@ -101,7 +101,8 @@ def _connect_to_tor(reactor, cli_config):
     if cli_config["tor-control-port"]:
         ports_to_try = [cli_config["tor-control-port"]]
     for port in ports_to_try:
-        tor_state = yield _try_to_connect(reactor, port, cli_config.stdout)
+        tor_state = yield _try_to_connect(reactor, port, cli_config.stdout,
+                                          txtorcon)
         if tor_state:
             tor_control_proto = tor_state.protocol
             returnValue((port, tor_control_proto)) ; break # helps editor
@@ -124,7 +125,8 @@ def create_onion(reactor, cli_config):
         (_, tor_control_proto) = yield _launch_tor(
             reactor, tor_executable, private_dir, txtorcon)
     else:
-        (port, tor_control_proto) = yield _connect_to_tor(reactor, cli_config)
+        (port, tor_control_proto) = yield _connect_to_tor(
+            reactor, cli_config, txtorcon)
         tahoe_config_tor["control.port"] = port
 
     external_port = 3457 # TODO: pick this randomly? there's no contention.
