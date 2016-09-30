@@ -52,6 +52,10 @@ def _common_config_sections():
             "launch",
             "socks.port",
             "tor.executable",
+            "onion",
+            "onion.local_port",
+            "onion.external_port",
+            "onion.private_key_file",
         ),
     }
 
