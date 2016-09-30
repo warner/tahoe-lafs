@@ -188,6 +188,19 @@ class Config(unittest.TestCase):
         self.assertIn("is not empty", err)
         self.assertIn("To avoid clobbering anything, I am going to quit now", err)
 
+    @defer.inlineCallbacks
+    def test_node_slow_tor(self):
+        basedir = self.mktemp()
+        d = defer.Deferred()
+        with mock.patch("allmydata.util.tor_provider.create_onion",
+                        return_value=d):
+            d2 = run_cli("create-node", "--listen=tor", basedir)
+            d.callback(({}, "port", "location"))
+            rc, out, err = yield d2
+        self.assertEqual(rc, 0)
+        self.assertIn("Node created", out)
+        self.assertEqual(err, "")
+
     def test_introducer_no_hostname(self):
         basedir = self.mktemp()
         e = self.assertRaises(usage.UsageError, parse_cli,
@@ -304,4 +317,3 @@ class Tor(unittest.TestCase):
                               "create-node", "--listen=tor",
                               "--hostname=foo")
         self.assertEqual(str(e), "--listen= must be tcp to use --hostname")
-

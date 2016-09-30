@@ -251,6 +251,7 @@ def write_client_config(c, config):
     c.write("enabled = false\n")
     c.write("\n")
 
+@defer.inlineCallbacks
 def create_node(config):
     out = config.stdout
     err = config.stderr
@@ -263,7 +264,7 @@ def create_node(config):
             print >>err, "The base directory %s is not empty." % quote_local_unicode_path(basedir)
             print >>err, "To avoid clobbering anything, I am going to quit now."
             print >>err, "Please use a different directory, or empty this one."
-            return -1
+            defer.returnValue(-1)
         # we're willing to use an empty directory
     else:
         os.mkdir(basedir)
@@ -273,7 +274,7 @@ def create_node(config):
     fileutil.make_dirs(os.path.join(basedir, "private"), 0700)
 
     with open(os.path.join(basedir, "tahoe.cfg"), "w") as c:
-        d = write_node_config(c, config)
+        yield write_node_config(c, config)
         write_client_config(c, config)
 
     print >>out, "Node created in %s" % quote_local_unicode_path(basedir)
@@ -282,8 +283,7 @@ def create_node(config):
         print >>out, " The node cannot connect to a grid without it."
     if not config.get("nickname", ""):
         print >>out, " Please set [node]nickname= in tahoe.cfg"
-    d.addCallback(lambda x: 0)
-    return d
+    defer.returnValue(0)
 
 def create_client(config):
     config['no-storage'] = True
