@@ -291,8 +291,8 @@ class Basic(unittest.TestCase, StallMixin, pollmixin.PollMixin):
                 # continue to be true.
                 self.failUnlessEqual(int(pct), 76)
                 left = p["remaining-sleep-time"]
-                self.failUnless(isinstance(left, float), left)
-                self.failUnless(left > 0.0, left)
+                self.failUnless(isinstance(left, float), left) # here
+                self.failUnless(left > 0.0, left) # or here
             except Exception, e:
                 did_check_progress[0] = e
             else:
@@ -306,7 +306,7 @@ class Basic(unittest.TestCase, StallMixin, pollmixin.PollMixin):
         d = c.finished_d
         def _check(ignored):
             if did_check_progress[0] is not True:
-                raise did_check_progress[0]
+                raise did_check_progress[0] # this raised FailTest(False is not true)
             self.failUnless(did_check_progress[0])
             self.failUnlessEqual(sorted(sis), sorted(c.all_buckets))
             # at this point, the crawler should be sitting in the inter-cycle
